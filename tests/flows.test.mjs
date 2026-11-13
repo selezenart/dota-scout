@@ -451,3 +451,28 @@ test('signing out restores the home page sign-in controls',async()=>{
   assert.equal(h.q('welcome-register').hidden,false);
  }finally{h.w.close();}
 });
+
+test('Open my team keeps a signed-in invitee on the pending invitation',async()=>{
+ let navigated=0;
+ const h=await harness({query:'#invite='+inviteCode,backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>{navigated++;return [];}})});
+ try{
+  assert.ok(h.q('team-invite-heading'),'invitation shown');
+  await h.click(h.q('welcome-signin'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.ok(h.q('team-invite-heading'),'invitation still shown');
+  assert.equal(h.q('team-view').hidden,true);
+  assert.equal(navigated,0);
+ }finally{h.w.close();}
+});
+
+test('Open my team resumes required profile setup instead of Team home',async()=>{
+ const h=await harness({query:'',backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,loadRoster:async()=>[]})});
+ try{
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+  h.q('profile-dialog').close();
+  await h.click(h.q('home-button'));
+  await h.click(h.q('welcome-signin'));
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+  assert.equal(h.q('profile-dialog').open,true);
+ }finally{h.w.close();}
+});

@@ -167,7 +167,12 @@ const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnable
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
-},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:()=>navigateTeam()});
+},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:async()=>{
+ // Same gates as sign-in: a pending invitation and required profile setup come first.
+ if(showTeamInvitation())return;
+ const account=user?.id;await accountReady;if(!account||user?.id!==account||showTeamInvitation())return;
+ if(profileSetupRequired)startProfileSetup(()=>navigateTeam());else navigateTeam();
+}});
 
 function showTeamInvitation(force=false){
  const invitation=teamInvitation;if(!invitation||welcome.recovery)return false;
