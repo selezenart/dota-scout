@@ -371,7 +371,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 function renderRoster(){
  const root=$('team-roster');root.replaceChildren();
  const homeActive=!$('team-view').hidden&&user;
- const allies=homeActive?(homeTeamId?homeRoster:[{...profile,userId:user.id}]).map(item=>normalizeProfile({...item,id:item.userId,name:item.displayName||'Teammate'})):roster();
+ const allies=homeActive?(homeTeamId?homeRoster:[{...profile,userId:user.id}]).map(item=>normalizeProfile({...item,id:item.userId,name:item.displayName||'Teammate'},item)):roster();
  for(const [label,players] of [['Our team',allies],['Enemy scouting',opponents()]]){
   if(!players.length)continue;
   const heading=el('h2',label,'roster-group-heading');root.append(heading);
