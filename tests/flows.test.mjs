@@ -424,3 +424,30 @@ test('captain can remove a teammate from Team home after confirming',async()=>{
   assert.match(root.textContent,/Lee was removed/);
  }finally{h.w.close();}
 });
+
+test('signed-in home page offers the team instead of sign in and keeps the session',async()=>{
+ let signIns=0;
+ const h=await harness({query:'',backend:accountBackend({signIn:async()=>{signIns++;return {session:{user:{id:'owner'}}};},loadRoster:async()=>[]})});
+ try{
+  assert.equal(h.w.document.body.dataset.view,'board');
+  await h.click(h.q('home-button'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('welcome-signin').textContent.trim(),'Open my team');
+  assert.equal(h.q('welcome-register').hidden,true);
+  await h.click(h.q('welcome-signin'));
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('welcome-auth').querySelector('form'),null);
+  assert.equal(h.q('signout-button').hidden,false);
+  assert.equal(signIns,0);
+ }finally{h.w.close();}
+});
+
+test('signing out restores the home page sign-in controls',async()=>{
+ const h=await harness({query:'',backend:accountBackend({signOut:async()=>{}})});
+ try{
+  await h.click(h.q('signout-button'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('welcome-signin').textContent.trim(),'Sign in');
+  assert.equal(h.q('welcome-register').hidden,false);
+ }finally{h.w.close();}
+});

@@ -167,7 +167,7 @@ const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnable
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
-},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code});
+},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:()=>navigateTeam()});
 
 function showTeamInvitation(force=false){
  const invitation=teamInvitation;if(!invitation||welcome.recovery)return false;
@@ -945,7 +945,7 @@ async function authChanged(session,event){
  const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation)welcome.signedIn();return;}
 
  stopLiveWatch();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
- const gen=++generation;user=session?.user||null;shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
+ const gen=++generation;user=session?.user||null;welcome.setAccount(!!user);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
  ++cupAccountVersion;cup.sync();
  const inviteOnEntry=!!teamInvitation;
 
