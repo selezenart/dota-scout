@@ -1,0 +1,18 @@
+{
+  "name": "captains-draft-board",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/safety.mjs",
+    "test": "node --test tests/*.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.80.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.1",
+    "jsdom": "^26.1.0"
+  }
+}

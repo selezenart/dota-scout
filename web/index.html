@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#08070b" />
+    <title>Captain’s Draft Board</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body data-view="welcome">
+    <section
+      id="welcome-view"
+      class="welcome-view"
+      aria-labelledby="welcome-title"
+    >
+      <header class="welcome-nav">
+        <a class="brand" href="./" aria-label="Captain’s Draft Board home">
+          <svg
+            class="compass"
+            viewBox="0 0 40 40"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M20 2v5M38 20h-5M20 38v-5M2 20h5" stroke="currentColor" />
+            <path
+              d="M20 7 30 30 20 25 10 30Z"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path d="m20 7 0 18-10 5Z" fill="currentColor" />
+          </svg>
+          <span>CAPTAIN’S <strong>DRAFT BOARD</strong></span>
+        </a>
+        <nav aria-label="Welcome navigation">
+          <a href="#welcome-approach">How it works</a>
+          <button
+            id="welcome-signin"
+            type="button"
+            aria-controls="welcome-auth"
+          >
+            Sign in
+          </button>
+        </nav>
+      </header>
+      <div id="welcome-auth" class="welcome-auth" hidden></div>
+      <div class="welcome-hero">
+        <div class="welcome-copy">
+          <p class="eyebrow">Dota 2 · Captain’s mode</p>
+          <h1 id="welcome-title">Your team.<br /><em>Your draft.</em></h1>
+          <p class="welcome-lede">Pick with your team in mind.</p>
+          <p class="welcome-description">
+            Bring player profiles, signature heroes and role comfort into every
+            decision. Weigh what your team wants to play against the opponents
+            in front of you, one pick and ban at a time.
+          </p>
+          <div class="welcome-actions">
+            <button
+              id="welcome-register"
+              class="primary"
+              type="button"
+              aria-controls="welcome-auth"
+            >
+              Create an account <span aria-hidden="true">↗</span>
+            </button>
+            <a class="welcome-cup-link" href="?cup">Battle Cup signup · Saturday 20:00 Kyiv</a>
+            <button id="welcome-practice" type="button">
+              Practice locally
+            </button>
+          </div>
+          <p class="welcome-paths">
+            Start with local practice, no account needed.<br />Or
+            <a href="?demo"
+              >explore a sample draft <span aria-hidden="true">→</span></a
+            >
+            with sample data.<br /><a href="?demo&amp;player">Watch a draft as a player →</a>
+            <br /><a href="?onboarding-demo">Try the friend onboarding demo →</a>
+          </p>
+        </div>
+        <figure class="sample-draft" aria-labelledby="sample-caption">
+          <figcaption id="sample-caption">
+            <span class="eyebrow">Sample draft</span
+            ><span>Illustration · not a live session</span>
+          </figcaption>
+          <div class="sample-cards">
+            <article class="sample-hero sample-carry">
+              <img
+                src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/juggernaut.png"
+                width="256"
+                height="144"
+                alt="Juggernaut"
+                fetchpriority="high"
+              />
+              <div>
+                <span class="sample-role">Carry · physical damage</span>
+                <h2>Juggernaut</h2>
+                <p>Build around your carry.</p>
+              </div>
+            </article>
+            <article class="sample-hero sample-mid">
+              <img
+                src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/invoker.png"
+                width="256"
+                height="144"
+                alt="Invoker"
+              />
+              <div>
+                <span class="sample-role">Mid · spell versatility</span>
+                <h2>Invoker</h2>
+                <p>Consider the opposing mid.</p>
+              </div>
+            </article>
+            <article class="sample-hero sample-support">
+              <img
+                src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/crystal_maiden.png"
+                width="256"
+                height="144"
+                alt="Crystal Maiden"
+              />
+              <div>
+                <span class="sample-role">Support · control</span>
+                <h2>Crystal Maiden</h2>
+                <p>Make room for support.</p>
+              </div>
+            </article>
+          </div>
+          <div class="sample-sequence">
+            <div class="sample-sequence-heading">
+              <h3>Opening bans</h3>
+              <span>Illustrative opening bans</span>
+            </div>
+            <ol aria-label="Sample opening ban sequence">
+              <li>
+                <span class="sample-turn">01</span
+                ><span><small>Our ban</small><strong>Axe</strong></span
+                ><span class="sample-ban" aria-hidden="true">⊘</span>
+              </li>
+              <li>
+                <span class="sample-turn">02</span
+                ><span><small>Our ban</small><strong>Lion</strong></span
+                ><span class="sample-ban" aria-hidden="true">⊘</span>
+              </li>
+              <li class="sample-next">
+                <span class="sample-turn">03</span
+                ><span
+                  ><small>Enemy next ban</small
+                  ><strong>Watch their priorities</strong></span
+                ><span aria-hidden="true">→</span>
+              </li>
+            </ol>
+          </div>
+        </figure>
+      </div>
+      <section
+        id="welcome-approach"
+        class="welcome-approach"
+        aria-label="How the draft comes together"
+      >
+        <div>
+          <span class="eyebrow">Know your players</span>
+          <h2>Set your hero pool.</h2>
+          <p>
+            Keep role preferences, signature heroes and today’s choices
+            together.
+          </p>
+        </div>
+        <div>
+          <span class="eyebrow">Read the opposition</span>
+          <h2>Scout the opponents.</h2>
+          <p>
+            Consider the current opponents and available history. Missing
+            evidence stays missing.
+          </p>
+        </div>
+        <div>
+          <span class="eyebrow">Stay in the draft</span>
+          <h2>Follow all 24 turns.</h2>
+          <p>
+            Follow the pick and ban sequence, compare options and make the final
+            call.
+          </p>
+        </div>
+      </section>
+      <footer class="welcome-footer">
+        <span>Captain’s Draft Board</span
+        ><span>Independent project. Hero artwork © Valve.</span>
+      </footer>
+    </section>
+    <main id="identity-download" class="team-identity" hidden></main>
+    <div id="app-shell" hidden>
+      <a class="skip-link" href="#hero-search">Skip to hero search</a>
+      <header class="app-header">
+        <a
+          id="home-button"
+          class="brand"
+          href="#draft-view"
+          aria-label="Captain’s Draft Board"
+        >
+          <svg
+            class="compass"
+            viewBox="0 0 40 40"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M20 2v5M38 20h-5M20 38v-5M2 20h5" stroke="currentColor" />
+            <path
+              d="M20 7 30 30 20 25 10 30Z"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path d="m20 7 0 18-10 5Z" fill="currentColor" />
+            <path
+              d="M10 10a14 14 0 0 0-3 16m23-16a14 14 0 0 1 3 16"
+              stroke="currentColor"
+              opacity=".45"
+            />
+          </svg>
+          <span>CAPTAIN’S <strong>DRAFT BOARD</strong></span>
+        </a>
+        <nav class="primary-nav" aria-label="Main navigation">
+          <button
+            id="draft-button"
+            type="button"
+            aria-current="page"
+            aria-controls="draft-view"
+          >
+            Draft
+          </button>
+          <button id="team-button" type="button" aria-controls="team-view">
+            Team
+          </button>
+        <button id="cup-button" type="button" aria-controls="cup-view">Battle Cup</button>
+        </nav>
+        <div class="header-tools">
+          <button id="drafter-seat" class="primary" type="button">
+            Drafter seat
+          </button>
+          <button
+            id="connection-status"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="session-dialog"
+          >
+            Source &amp; connection
+          </button>
+          <div class="session-code-wrap">
+            <span id="session-code" aria-label="Session code"></span
+            ><button id="copy-session" type="button" disabled>Copy link</button>
+          </div>
+          <button
+            id="setup-button"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="session-dialog"
+          >
+            Setup
+          </button>
+          <button
+            id="profile-button"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="profile-dialog"
+          >
+            Profile
+          </button>
+          <button id="signout-button" type="button" hidden>Sign out</button>
+        </div>
+      </header>
+
+      <main id="main-content">
+        <section id="cup-view" tabindex="-1" aria-label="Battle Cup signup" hidden></section>
+        <section id="draft-view" aria-label="Draft board">
+          <div class="seat-strip" aria-label="Drafter seat">
+            <span class="seat-mark" aria-hidden="true">◆</span
+            ><strong>Drafter seat</strong>
+            <span id="draft-owner" aria-live="polite"
+              >Available in session</span
+            >
+            <button id="claim-drafter" type="button" disabled>
+              Become drafter
+            </button>
+            <button id="release-drafter" type="button" hidden>
+              Release seat
+            </button>
+          </div>
+          <section class="match-strip" aria-label="Lineups and current turn">
+            <div class="team-lineup ally-side">
+              <h2>
+                <span class="side-mark" aria-hidden="true"></span>Our team
+                <span class="team-count">5 picks</span>
+              </h2>
+              <ol id="our-lineup" class="lineup" aria-label="Our lineup">
+                <li class="lineup-slot" aria-label="Our slot 1, empty">
+                  <span class="slot-portrait" aria-hidden="true">01</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Our slot 2, empty">
+                  <span class="slot-portrait" aria-hidden="true">02</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Our slot 3, empty">
+                  <span class="slot-portrait" aria-hidden="true">03</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Our slot 4, empty">
+                  <span class="slot-portrait" aria-hidden="true">04</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Our slot 5, empty">
+                  <span class="slot-portrait" aria-hidden="true">05</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+              </ol>
+            </div>
+            <div class="turn-heading">
+              <span class="eyebrow">Captain’s mode</span>
+              <h1 id="turn-label">Draft board</h1>
+              <p id="turn-progress" aria-live="polite" aria-atomic="true">
+                Awaiting draft state
+              </p>
+              <button id="undo" type="button" disabled>
+                <span aria-hidden="true">↶</span> Undo <kbd>Ctrl Z</kbd>
+              </button>
+            </div>
+            <div class="team-lineup enemy-side">
+              <h2>
+                <span class="side-mark" aria-hidden="true"></span>Enemy team
+                <span class="team-count">5 picks</span>
+              </h2>
+              <ol id="enemy-lineup" class="lineup" aria-label="Enemy lineup">
+                <li class="lineup-slot" aria-label="Enemy slot 1, empty">
+                  <span class="slot-portrait" aria-hidden="true">01</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Enemy slot 2, empty">
+                  <span class="slot-portrait" aria-hidden="true">02</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Enemy slot 3, empty">
+                  <span class="slot-portrait" aria-hidden="true">03</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Enemy slot 4, empty">
+                  <span class="slot-portrait" aria-hidden="true">04</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+                <li class="lineup-slot" aria-label="Enemy slot 5, empty">
+                  <span class="slot-portrait" aria-hidden="true">05</span
+                  ><span class="slot-name">Empty</span>
+                </li>
+              </ol>
+            </div>
+          </section>
+
+          <fieldset class="mobile-switch">
+            <legend class="sr-only">Draft surface</legend>
+            <input
+              type="radio"
+              name="draft-surface"
+              id="surface-heroes"
+              value="heroes"
+              checked
+            /><label for="surface-heroes">Heroes</label>
+            <input
+              type="radio"
+              name="draft-surface"
+              id="surface-tree"
+              value="tree"
+            /><label for="surface-tree">Draft tree</label>
+            <input
+              type="radio"
+              name="draft-surface"
+              id="surface-players"
+              value="players"
+            /><label for="surface-players">Players</label>
+          </fieldset>
+
+          <div class="draft-layout">
+            <aside class="history-panel panel" aria-labelledby="history-title">
+              <div class="panel-heading">
+                <h2 id="history-title">Captain’s Mode</h2>
+                <span class="secondary">24 turns</span>
+              </div>
+              <div class="tree-key">
+                <span class="ally-text">Our team</span
+                ><span class="enemy-text">Enemy team</span>
+              </div>
+              <div id="timeline" aria-label="Draft actions"></div><div id="history-inspect" class="history-inspect" role="status">Select a recorded hero to inspect the action.</div>
+              <div class="history-legend">
+                <span><b aria-hidden="true">+</b> Pick</span
+                ><span><b aria-hidden="true">⊘</b> Ban</span>
+              </div>
+            </aside>
+
+            <section
+              id="hero-workspace"
+              class="hero-workspace panel"
+              aria-label="Hero selection"
+            >
+              <div class="hero-board-heading">
+                <h2>Hero pool</h2>
+                <span>Most played first <small>OpenDota public picks</small></span>
+              </div>
+              <div class="search-bar">
+                <label class="sr-only" for="hero-search">Search heroes</label>
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input
+                  id="hero-search"
+                  type="search"
+                  placeholder="Search heroes"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-controls="hero-groups"
+                  aria-describedby="search-help"
+                />
+                <kbd aria-hidden="true">/</kbd>
+              </div>
+              <p id="search-help" class="search-help">
+                ↑ ↓ Select <span>Enter Select hero</span><span>Esc Clear</span>
+              </p>
+              <div class="hero-filters" role="group" aria-label="Filter heroes">
+                <button type="button" data-hero-filter="all" aria-pressed="true">All heroes</button>
+                <button type="button" data-hero-filter="recommended" aria-pressed="false">Recommended</button>
+                <button type="button" data-hero-filter="str" aria-pressed="false">Strength</button>
+                <button type="button" data-hero-filter="agi" aria-pressed="false">Agility</button>
+                <button type="button" data-hero-filter="int" aria-pressed="false">Intelligence</button>
+                <button type="button" data-hero-filter="all-attr" aria-pressed="false">Universal</button>
+                <button type="button" id="clear-hero-search">Clear search</button>
+              </div>
+              <div id="hero-groups"></div>
+            </section>
+
+            <aside
+              class="decision-panel panel"
+              aria-labelledby="decision-title"
+            >
+              <div class="panel-heading">
+                <h2 id="decision-title">Next decision</h2>
+                
+              </div>
+              <div id="suggestions" aria-label="Recommended actions"></div>
+            </aside>
+
+            <section
+              id="analysis"
+              class="analysis panel"
+              aria-label="Final draft analysis"
+              hidden
+            ></section>
+          </div>
+        </section>
+
+        <section
+          id="team-view"
+          class="team-view"
+          aria-labelledby="team-title"
+          hidden
+        >
+          <div id="team-home" class="team-home"></div>
+          <details class="team-roster-details"><summary>Player preferences and scouting</summary>
+          <div class="view-heading">
+            <div>
+              <span class="eyebrow">Players &amp; preferences</span>
+              <h1 id="team-roster-title">Your team</h1>
+            </div>
+            <p>
+              Role preferences, signature heroes and heroes players want to
+              play.
+            </p>
+          </div>
+          <div id="team-roster" class="team-roster"></div></details>
+          <section id="team-identity" class="team-identity" aria-label="Team identity"></section>
+        </section>
+        <p
+          id="notice"
+          class="notice"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        ></p>
+      </main>
+
+      <dialog id="session-dialog" aria-labelledby="session-title">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">Draft setup</span>
+            <h2 id="session-title">Session lobby</h2>
+          </div>
+          <button type="button" data-close="session-dialog">Close</button>
+        </div>
+        <div class="dialog-body">
+          <section
+            class="dialog-section"
+            aria-labelledby="session-access-title"
+          >
+            <h3 id="session-access-title">Draft together</h3>
+            <button id="create-session" class="primary" type="button">
+              Create session
+            </button>
+            <div class="join-session">
+              <label for="session-input">Session ID or link</label>
+              <div class="input-action">
+                <input
+                  id="session-input"
+                  type="text"
+                  placeholder="Paste a session ID or link"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                /><button id="join-session" type="button">Join session</button>
+              </div>
+            </div>
+            <p
+              id="session-status"
+              class="secondary"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </section>
+          <section class="dialog-section lobby-workspace" aria-label="Team and scouting">
+            <div data-manual-entry></div>
+            <details class="lobby-connection">
+              <summary>Source &amp; connection</summary>
+              <div data-connection-details></div>
+            </details>
+          </section>
+          <section
+            class="dialog-section"
+            aria-labelledby="draft-settings-title"
+          >
+            <h3 id="draft-settings-title">Draft settings</h3>
+            <label class="check-label" for="first-pick"
+              ><input id="first-pick" type="checkbox" disabled />Our team has
+              first pick</label
+            >
+            <button id="reset-draft" class="danger" type="button" disabled>
+              Reset draft
+            </button>
+          </section>
+        </div>
+      </dialog>
+
+      <dialog id="profile-dialog" aria-labelledby="profile-title">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">Player preferences</span>
+            <h2 id="profile-title">Your profile</h2>
+          </div>
+          <button type="button" data-close="profile-dialog">Close</button>
+        </div>
+        <div id="profile-content" class="dialog-body"></div>
+      </dialog>
+    </div>
+  </body>
+</html>

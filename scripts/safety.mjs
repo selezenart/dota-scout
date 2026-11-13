@@ -1,0 +1,5 @@
+import {readdir,readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+async function walk(dir){return (await Promise.all((await readdir(dir,{withFileTypes:true})).map(async e=>e.isDirectory()?walk(dir+'/'+e.name):[dir+'/'+e.name]))).flat();}
+for(const path of await walk('dist')){assert(/^dist\/(index\.html|assets\/[\w.-]+\.(js|css|json|woff2?|svg|png))$/.test(path),'Unexpected output: '+path);const s=await readFile(path,'utf8');assert(!/sb_secret_[A-Za-z0-9_-]{16,}|"role"\s*:\s*"service_role"|steam_api_key|SUPABASE_SERVICE_ROLE_KEY/.test(s),'Forbidden content: '+path);}
+const rules=(await readFile('.vercelignore','utf8').catch(error => { if (error.code === 'ENOENT' && process.env.VERCEL === '1') return '*'; throw error; })).split(/\r?\n/);assert.equal(rules[0],'*');for(const rule of rules.filter(r=>r.startsWith('!'))){assert(/^!(web|api|scripts|package(?:-lock)?\.json|vite\.config\.js|vercel\.json)(?:$|\/)/.test(rule),'Unsafe upload rule');assert(!rule.includes('*'),'No wildcard includes');}console.log('Build and upload allowlist safety checks passed');

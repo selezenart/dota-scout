@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createBackend} from '../web/backend.js';
+
+test('Supabase signup redirects to Battle Cup without the invite token and team join sends the chosen account session',async t=>{
+ const code='a'.repeat(64);
+ const requests=[];
+ const fixtureSession={access_token:'fixture-access-token',refresh_token:'fixture-refresh-token',expires_in:3600,user:{id:'guest'}};
+ t.mock.method(globalThis,'fetch',async(input,options)=>{
+  const url=new URL(input);
+  requests.push({url,method:options.method,headers:new Headers(options.headers),body:JSON.parse(options.body)});
+  const data=url.pathname.endsWith('/token')?fixtureSession:url.pathname.endsWith('/signup')?{user:{id:'new-user'}}:{id:'fixture-team'};
+  return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
+ });
+ globalThis.location=new URL('https://board.example/#invite='+code);
+ t.after(()=>{delete globalThis.location;});
+ const backend=createBackend({supabaseUrl:'https://supabase.example',supabaseAnonKey:'fixture-publishable-key'});
+ await backend.signUp('guest@example.com','fixture-password','Guest','/?cup');
+ assert.equal(requests[0].url.pathname,'/auth/v1/signup');
+ assert.equal(requests[0].url.searchParams.get('redirect_to'),'https://board.example/?cup');
+ assert.equal(requests[0].url.href.includes(code),false);
+ assert.equal(JSON.stringify(requests[0].body).includes(code),false);
+
+ await backend.signIn('guest@example.com','fixture-password');
+ await assert.rejects(backend.joinTeam(code,'another-account'),/active account changed/);
+ assert.equal(requests.length,2);
+ assert.deepEqual(await backend.joinTeam(code,'guest'),{id:'fixture-team'});
+ const join=requests[2];
+ assert.equal(join.url.pathname,'/rest/v1/rpc/join_scout_team');
+ assert.equal(join.url.href.includes(code),false);
+ assert.equal(join.method,'POST');
+ assert.equal(join.headers.get('Authorization'),'Bearer fixture-access-token');
+ assert.deepEqual(join.body,{invite_token:code});
+ await backend.listBattleCup('');
+ assert.equal(requests.at(-1).url.pathname,'/rest/v1/rpc/get_open_battle_cup');
+ assert.deepEqual(requests.at(-1).body,{});
+ const event='2026-11-14T18:00:00Z';
+ await backend.saveBattleCup('',event,2,[1,2],'guest');
+ assert.equal(requests.at(-1).url.pathname,'/rest/v1/rpc/save_open_battle_cup');
+ assert.deepEqual(requests.at(-1).body,{event_time:event,target_slot:2,chosen_positions:[1,2]});
+ await backend.cancelBattleCup('',event,'guest');
+ assert.equal(requests.at(-1).url.pathname,'/rest/v1/rpc/cancel_open_battle_cup');
+ await backend.listBattleCup('team-a');
+ assert.equal(requests.at(-1).url.pathname,'/rest/v1/rpc/get_battle_cup');
+ assert.deepEqual(requests.at(-1).body,{target_team:'team-a'});
+ const oauth=await backend.signInGoogle();const url=new URL(oauth.url);
+ assert.equal(url.searchParams.get('provider'),'google');
+ assert.equal(url.searchParams.get('redirect_to'),'https://board.example/');
+ assert.equal(url.href.includes(code),false);
+});
