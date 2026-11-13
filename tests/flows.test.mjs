@@ -476,3 +476,130 @@ test('Open my team resumes required profile setup instead of Team home',async()=
   assert.equal(h.q('profile-dialog').open,true);
  }finally{h.w.close();}
 });
+
+for(const setup of [false,true])test('Open my team during sign-in keeps the shared draft link'+(setup?' through profile setup':''),async()=>{
+ let finishProfile;const drafts=[];
+ const backend=accountBackend({getSession:async()=>null,signIn:async()=>({session:guestSession}),loadProfile:()=>new Promise(r=>{finishProfile=r;}),
+  getDraft:async id=>{drafts.push(id);return {id,team_id:'team',revision:0,state:{actions:[],roster:[]}};},loadRoster:async()=>[],saveProfile:async p=>p});
+ const h=await harness({query:'?draft='+draftId,backend});
+ try{
+  const form=h.q('welcome-auth').querySelector('form');
+  form.querySelector('[type=email]').value='captain@example.com';form.querySelector('[type=password]').value='example-password';
+  form.requestSubmit();await flush();
+  assert.equal(h.q('welcome-signin').textContent.trim(),'Open my team');
+  await h.click(h.q('welcome-signin'));
+  finishProfile(setup?null:{displayName:'Captain',preferredRoles:[1]});await flush();
+  if(setup){
+   const dialog=h.q('profile-dialog');dialog.querySelector('input').value='Captain';h.q('profile-role-1').click();
+   await h.click(h.button('Save profile',dialog));
+  }
+  assert.deepEqual(drafts,[draftId]);
+  assert.equal(h.q('team-view').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('double clicking Open my team navigates once',async()=>{
+ let rosters=0;
+ const h=await harness({query:'',backend:accountBackend({listTeams:async()=>[invitedTeam],loadRoster:async()=>{rosters++;return [];}})});
+ try{
+  await h.click(h.q('home-button'));
+  rosters=0;
+  h.q('welcome-signin').click();h.q('welcome-signin').click();
+  await flush();
+  assert.equal(rosters,1);
+ }finally{h.w.close();}
+});
+
+test('signing out while Open my team waits for the account never opens the team',async()=>{
+ let callback,finishProfile,rosters=0;
+ const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{callback=fn;},loadProfile:()=>new Promise(r=>{finishProfile=r;}),listTeams:async()=>[invitedTeam],loadRoster:async()=>{rosters++;return [];},signOut:async()=>{}});
+ const h=await harness({query:'',backend});
+ try{
+  callback(guestSession,'SIGNED_IN');await flush();
+  await h.click(h.q('welcome-signin'));
+  await h.click(h.q('signout-button'));
+  finishProfile({displayName:'Captain',preferredRoles:[1]});await flush();
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('team-view').hidden,true);
+  assert.equal(rosters,0);
+ }finally{h.w.close();}
+});
+
+test('Open my team cannot replace the password recovery form or open the board',async()=>{
+ let callback,rosters=0;
+ const h=await harness({query:'',backend:accountBackend({onAuthChange:fn=>{callback=fn;},listTeams:async()=>[invitedTeam],loadRoster:async()=>{rosters++;return [];}})});
+ try{
+  await h.click(h.q('home-button'));rosters=0;
+  callback({user:{id:'owner'}},'PASSWORD_RECOVERY');await flush();
+  const heading=()=>h.q('welcome-auth').querySelector('h2')?.textContent;
+  assert.equal(heading(),'Choose a new password');
+  await h.click(h.q('welcome-signin'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(heading(),'Choose a new password');
+  assert.equal(rosters,0);
+ }finally{h.w.close();}
+});
+
+test('Home during sign-in still loads the account so Open my team requires profile setup',async()=>{
+ let callback,finishProfile;
+ const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{callback=fn;},loadProfile:()=>new Promise(r=>{finishProfile=r;}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[]});
+ const h=await harness({query:'',backend});
+ try{
+  callback(guestSession,'SIGNED_IN');await flush();
+  await h.click(h.q('home-button'));
+  finishProfile(null);await flush();
+  await h.click(h.q('welcome-signin'));await flush();
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('password recovery keeps a visible way back to the new-password form',async()=>{
+ let callback;
+ const h=await harness({query:'',backend:accountBackend({onAuthChange:fn=>{callback=fn;}})});
+ try{
+  await h.click(h.q('home-button'));
+  callback({user:{id:'owner'}},'PASSWORD_RECOVERY');await flush();
+  await h.click(h.button('Back to welcome',h.q('welcome-auth')));
+  const control=h.q('welcome-signin');
+  assert.equal(control.hidden,false);
+  await h.click(control);
+  assert.equal(h.q('welcome-auth').querySelector('h2')?.textContent,'Choose a new password');
+ }finally{h.w.close();}
+});
+
+test('Home during sign-in does not leave the board hidden behind the pending setup marker',async()=>{
+ let callback,finishProfile;
+ const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{callback=fn;},loadProfile:()=>new Promise(r=>{finishProfile=r;}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[]});
+ const h=await harness({query:'',backend});
+ try{
+  callback(guestSession,'SIGNED_IN');await flush();
+  await h.click(h.q('home-button'));
+  finishProfile({displayName:'Guest',preferredRoles:[1]});await flush();
+  await h.click(h.q('welcome-signin'));await flush();
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('app-shell').dataset.profileSetup,undefined);
+ }finally{h.w.close();}
+});
+
+test('password recovery does not carry over to another account',async()=>{
+ let callback;
+ const h=await harness({query:'',backend:accountBackend({onAuthChange:fn=>{callback=fn;}})});
+ try{
+  await h.click(h.q('home-button'));
+  callback({user:{id:'owner'}},'PASSWORD_RECOVERY');await flush();
+  callback(null,'SIGNED_OUT');await flush();
+  callback(guestSession,'SIGNED_IN');await flush();
+  assert.notEqual(h.q('welcome-signin').textContent.trim(),'Choose new password');
+  assert.equal(h.w.document.body.dataset.view,'board');
+ }finally{h.w.close();}
+});
+
+test('home sign-in button drops aria-controls while it opens the team and restores it after sign-out',async()=>{
+ const h=await harness({query:'',backend:accountBackend({signOut:async()=>{}})});
+ try{
+  assert.equal(h.q('welcome-signin').hasAttribute('aria-controls'),false);
+  await h.click(h.q('signout-button'));
+  assert.equal(h.q('welcome-signin').getAttribute('aria-controls'),'welcome-auth');
+ }finally{h.w.close();}
+});

@@ -31,7 +31,7 @@ const entryDraft=new URLSearchParams(location.search).get('draft');
 if(validDraftId(entryDraft)&&!demo){try{sessionStorage.setItem(draftIntentKey,entryDraft);}catch{}}
 
 const teamInviteKey='captain-team-invite-v1',teamInviteCode=/^[a-f0-9]{64}$/;
-let teamInvitation=null,invitationView=null,accountReady=Promise.resolve(),observedAuthUser,authEvent=0;
+let teamInvitation=null,invitationView=null,accountReady=Promise.resolve(),accountGen=0,observedAuthUser,authEvent=0;
 
 function saveInvitation(code){
  // Storage is shared by same-origin tabs so the confirmation email can open a new tab.
@@ -167,12 +167,19 @@ const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnable
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
-},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:async()=>{
- // Same gates as sign-in: a pending invitation and required profile setup come first.
- if(showTeamInvitation())return;
- const account=user?.id;await accountReady;if(!account||user?.id!==account||showTeamInvitation())return;
- if(profileSetupRequired)startProfileSetup(()=>navigateTeam());else navigateTeam();
-}});
+},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:safe(async()=>{
+ // Same gates as sign-in. While sign-in is still finishing, authChanged resumes the
+ // draft, Battle Cup or team itself, so a click must not race it.
+ if(openingTeam||resumingAccount===generation||welcome.recovery||showTeamInvitation())return;
+ const gen=generation,account=user?.id,ready=accountReady;if(!account)return;
+ openingTeam=true;
+ try{
+  await ready;
+  if(gen!==generation||user?.id!==account||welcome.recovery||showTeamInvitation())return;
+  if(profileSetupRequired)startProfileSetup(()=>navigateTeam());else navigateTeam();
+ }finally{openingTeam=false;}
+})});
+let openingTeam=false,resumingAccount=null;
 
 function showTeamInvitation(force=false){
  const invitation=teamInvitation;if(!invitation||welcome.recovery)return false;
@@ -950,7 +957,7 @@ async function authChanged(session,event){
  const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation)welcome.signedIn();return;}
 
  stopLiveWatch();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
- const gen=++generation;user=session?.user||null;welcome.setAccount(!!user);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
+ const gen=++generation,acct=++accountGen;user=session?.user||null;welcome.setAccount(!!user,recovery);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
  ++cupAccountVersion;cup.sync();
  const inviteOnEntry=!!teamInvitation;
 
@@ -966,12 +973,14 @@ async function authChanged(session,event){
  }else{
   const activeUser=user;
   accountReady=Promise.allSettled([backend.loadProfile(),backend.listTeams()]).then(([p,t])=>{
-   if(gen!==generation)return;
+   // Account data belongs to the account, not the workspace: Home or Practice mid-load
+   // must not leave profile setup and teams unloaded.
+   if(acct!==accountGen)return;
    profileSaved=p.status==='fulfilled'&&!!p.value;
    profile=(p.status==='fulfilled'&&p.value)||{displayName:activeUser.user_metadata?.display_name||activeUser.user_metadata?.full_name||activeUser.user_metadata?.name||'',steamAccountId:activeUser.user_metadata?.steam_account_id||''};
    profileSetupRequired=p.status==='fulfilled'&&(!p.value||!!activeUser.user_metadata?.steam_account_id&&!p.value.preferredRoles?.length);
    if(t.status==='fulfilled')teams=t.value;
-   restorePractice();refreshScouting();
+   if(gen===generation){restorePractice();refreshScouting();}
    if(p.status==='rejected'||t.status==='rejected')notice('Some team account information could not be loaded. Reload the page to try again.');
   });
   if(!recovery&&!showTeamInvitation()){
@@ -981,8 +990,13 @@ async function authChanged(session,event){
  }
  render();
  if(user){
-  await accountReady;if(gen!==generation)return;
-  if($('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
+  resumingAccount=gen;
+  try{
+  await accountReady;
+  // Clear the loading marker even if Home/Practice changed the workspace meanwhile;
+  // left set, it hides the whole board.
+  if(acct===accountGen&&$('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
+  if(gen!==generation)return;
   if(!inviteOnEntry&&!teamInvitation&&!recovery&&!welcome.recovery){
    const resume=async()=>{
     const params=new URLSearchParams(location.search);
@@ -995,6 +1009,7 @@ async function authChanged(session,event){
    if(profileSetupRequired)startProfileSetup(resume);
    else await resume();
   }
+  }finally{if(resumingAccount===gen)resumingAccount=null;}
  }
  render();
 
