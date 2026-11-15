@@ -482,20 +482,30 @@ function readLocalSightings(){try{const rows=JSON.parse(localStorage.getItem(loc
 function writeLocalSightings(){try{localStorage.setItem(localSightingKey(),JSON.stringify(sightings.slice(-2000)));}catch{}}
 function syncSightings(){
  const teamId=sightingTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===sightingScope)return;
- sightingScope=scope;sightingRemote=false;const load=++sightingLoad;
- if(!teamId){sightingState='ready';sightings=readLocalSightings();return;}
- sightingState='loading';sightings=[];
+ sightingScope=scope;sightingRemote=false;
+ if(!teamId){++sightingLoad;sightingState='ready';sightings=readLocalSightings();return;}
+ sightingState='loading';sightings=[];listSightings(teamId);
+}
+// Re-reads the team list; current rows stay visible until the new ones arrive.
+function listSightings(teamId){
+ const load=++sightingLoad;
  void Promise.resolve().then(()=>backend.listEnemySightings(teamId)).then(rows=>{
   if(load!==sightingLoad)return;sightingRemote=true;sightingState='ready';sightingLoadedAt=Date.now();
   sightings=(Array.isArray(rows)?rows:[]).map(r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}));render();
  }).catch(error=>{
   if(load!==sightingLoad)return;
   if(missingRpc(error)){sightingState='ready';sightings=readLocalSightings();render();}
-  else{sightingState='failed';notice('Could not load the team scouting list: '+(error.message||'try again later.'));}
+  else if(sightingState==='loading'){sightingState='failed';notice('Could not load the team scouting list: '+(error.message||'try again later.'));}
  });
 }
-// One key per game: Reset keeps the draft id, so the actions are part of the key.
-function draftFingerprint(){let h=0x811c9dc5;for(const ch of state.actions.map(a=>a.mode[0]+a.heroId).join(',')){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+// Called from the draft poll so idle teammates also see a newly saved assignment.
+function refreshSightings(){
+ const teamId=sightingTeam();
+ if(teamId&&sightingRemote&&sightingState==='ready'&&state.actions.length>=24&&Date.now()-sightingLoadedAt>15000){sightingLoadedAt=Date.now();listSightings(teamId);}
+}
+// One key per game. Reset keeps the draft id, so the key also uses the opening bans
+// and the enemy accounts; a later Undo and re-pick stays the same game.
+function draftFingerprint(){let h=0x811c9dc5;const text=state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(state.enemyIds||[])].map(String).sort().join(',');for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
 const sightingGameKey=()=>(shared?.id?'draft:'+shared.id:'draft:practice')+':'+draftFingerprint();
 async function saveSightings(entries){
  if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
@@ -506,6 +516,8 @@ async function saveSightings(entries){
  const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey();
  if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
  if(scope!==sightingScope)return false;
+ // A list request started before this save must not drop the new rows.
+ if(teamId)++sightingLoad;
  sightings=[...sightings.filter(r=>r.sourceKey!==key),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
  // Invented demo opponents never reach the real list.
  if(!teamId&&!demo)writeLocalSightings();render();return true;
@@ -517,10 +529,9 @@ function seenAgainstUs(p){
 function renderEnemyAssignment(root){
  const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
  if(!picks.length||!enemies.length)return;
- // Teammates see the drafter's saved assignment without reloading.
- if(sightingRemote&&sightingState==='ready'&&Date.now()-sightingLoadedAt>30000)sightingScope=null;
- syncSightings();const key=sightingScope+'|'+sightingGameKey();
- if(assignment.key!==key){
+ syncSightings();const key=sightingScope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
+ // Read-only teammates always see the saved assignment, refreshed by the poll.
+ if(assignment.key!==key||readOnly){
   const saved=sightings.filter(r=>r.sourceKey===sightingGameKey());
   assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
  }
@@ -530,12 +541,12 @@ function renderEnemyAssignment(root){
   const row=el('label',null,'enemy-assignment-row'),select=el('select');select.dataset.hero=String(a.heroId);
   select.setAttribute('aria-label','Enemy player for '+heroName(a.heroId));select.append(new Option('Unknown',''));
   for(const p of enemies)select.append(new Option(p.name,String(p.id)));
-  select.value=assignment.map[a.heroId]||'';select.onchange=()=>{assignment.map[a.heroId]=select.value;};
+  select.value=assignment.map[a.heroId]||'';select.disabled=readOnly;select.onchange=()=>{assignment.map[a.heroId]=select.value;};
   row.append(el('span',heroName(a.heroId)),select);box.append(row);
  }
  const resultLabel=el('label',null,'enemy-assignment-row'),result=el('select');result.setAttribute('aria-label','Our result');
  for(const [value,label] of [['','Result unknown'],['won','We won'],['lost','We lost']])result.append(new Option(label,value));
- result.value=assignment.result;result.onchange=()=>{assignment.result=result.value;};resultLabel.append(el('span','Our result'),result);box.append(resultLabel);
+ result.value=assignment.result;result.disabled=readOnly;result.onchange=()=>{assignment.result=result.value;};resultLabel.append(el('span','Our result'),result);box.append(resultLabel);
  const saveButton=button('Save who played what',async()=>{
   assignment.result=result.value;
   for(const select of box.querySelectorAll('select[data-hero]'))assignment.map[select.dataset.hero]=select.value;
@@ -543,7 +554,7 @@ function renderEnemyAssignment(root){
   const entries=picks.filter(a=>assignment.map[a.heroId]).map(a=>({accountId:assignment.map[a.heroId],heroId:a.heroId,enemyWon}));
   if(await saveSightings(entries))notice('Saved who played what.');
  },box,'primary');
- if(shared&&!canWrite()){saveButton.disabled=true;box.append(el('p','Only the current drafter can save this.','secondary'));}
+ if(readOnly){saveButton.disabled=true;box.append(el('p','Only the current drafter can save this.','secondary'));}
  root.append(box);
 }
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
@@ -1424,7 +1435,7 @@ function openLinkInvitation(){
 }
 window.addEventListener('hashchange',openLinkInvitation);
 window.addEventListener('popstate',()=>void safe(async()=>{if(openLinkInvitation())return;const params=new URLSearchParams(location.search);if(params.has('cup')){openCup();return;}if(params.has('team')&&(user||demo)){navigateTeam();return;}showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await openDraft(draft,{navigate:false});else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
-setInterval(()=>void poll(),3000);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
+setInterval(()=>{void poll();refreshSightings();},3000);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
 
 if(imageId!==null){
  $('welcome-view').hidden=true;

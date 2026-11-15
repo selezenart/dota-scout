@@ -119,3 +119,17 @@ test('the result selector has a visible label',async()=>{
   assert.ok(select.closest('label'),'wrapped in a label');assert.match(select.closest('label').textContent,/Our result/);
  }finally{w.close();}
 });
+
+test('Undo and a different last pick in the same game replace the saved entries',async()=>{
+ const w=await boot();
+ try{
+  await pick(w,"Enemy player for Nature's Prophet",'111');await pick(w,'Enemy player for Axe','222');await save(w);
+  const saved=Object.fromEntries(Object.keys(w.localStorage).map(k=>[k,w.localStorage.getItem(k)]));w.close();
+  // Same game, last action undone and re-picked with another hero.
+  const fixed=draft();fixed[23]={...fixed[23],heroId:138};
+  saved['captain-practice-v1']=JSON.stringify({state:{actions:fixed,firstPick:true,enemyIds:['111','222']},profile:{}});
+  const w2=await boot(saved);
+  try{await pick(w2,'Enemy player for Axe','111');await pick(w2,"Enemy player for Nature's Prophet",'222');await save(w2);assert.equal(count(w2),2);}
+  finally{w2.close();}
+ }finally{w.close();}
+});

@@ -31,10 +31,18 @@ begin
   if game_key is null or game_key !~ '^(draft:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}|match:[1-9][0-9]{0,10})$' then
     raise exception 'Invalid game key' using errcode = '22023';
   end if;
-  -- A draft key must name one of this team's drafts.
-  if game_key like 'draft:%' and not exists (
-    select 1 from public.team_drafts d where d.id = substring(game_key from 7 for 36)::uuid and d.team_id = target_team) then
-    raise exception 'Unknown draft for this team' using errcode = '22023';
+  -- A draft key must name one of this team's drafts, and only its current drafter
+  -- (or the team owner) records who played what for it.
+  if game_key like 'draft:%' then
+    if not exists (select 1 from public.team_drafts d where d.id = substring(game_key from 7 for 36)::uuid and d.team_id = target_team) then
+      raise exception 'Unknown draft for this team' using errcode = '22023';
+    end if;
+    if not exists (
+      select 1 from public.team_drafts d join public.teams t on t.id = d.team_id
+      where d.id = substring(game_key from 7 for 36)::uuid
+        and (d.drafter_user_id = auth.uid() or t.owner_user_id = auth.uid())) then
+      raise exception 'Only the current drafter can record this draft' using errcode = '42501';
+    end if;
   end if;
   if entries is null or jsonb_typeof(entries) <> 'array' or jsonb_array_length(entries) > 5 then
     raise exception 'Invalid sightings' using errcode = '22023';
