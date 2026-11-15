@@ -156,6 +156,11 @@ export function steamFetcher(key, fetchImpl = fetch) {
 }
 
 async function main() {
+  if (Number(process.versions.node.split('.')[0]) < 20) {
+    console.error(`Node.js 20 or newer is required (found ${process.version}). Install the LTS version from https://nodejs.org.`);
+    process.exitCode = 1;
+    return;
+  }
   const keyFile = fileURLToPath(new URL('./steam-key.txt', import.meta.url));
   const key = steamKeyFrom(process.env.STEAM_WEB_API_KEY, await readText(keyFile));
   if (!key) {
