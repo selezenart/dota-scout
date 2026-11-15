@@ -32,7 +32,7 @@ export class PublicQueue {
 export const publicData=new PublicQueue();
 export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
  const player={id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]};
- const sources=[['profile','',1],['recent','/recentMatches',2],['heroes','/heroes?date=180',3],['matches','/matches?date=180&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type',4]];
+ const sources=[['profile','',1],['recent','/recentMatches',2],['heroes','/heroes?date=180',3],['matches','/matches?date=180&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id',4]];
  await Promise.all(sources.map(async([key,suffix,priority])=>{
   player.sources[key]={status:'fetching'};
   onUpdate(player);

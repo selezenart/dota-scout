@@ -6,7 +6,7 @@ import {createWelcome} from './welcome.js';
 
 import snapshot from './heroes.json';
 
-import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile} from './draft-engine.js';
+import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary} from './draft-engine.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 
@@ -288,7 +288,7 @@ function renderView(){
 
  for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<5;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
 
- renderRecommendations(turn,write);renderHeroes();renderRoster();const poolOrder=document.querySelector('.hero-board-heading>span');if(poolOrder)poolOrder.textContent=turn?.mode==='ourPick'?'Team wants first · then popularity':'Most played first · OpenDota';
+ renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();const poolOrder=document.querySelector('.hero-board-heading>span');if(poolOrder)poolOrder.textContent=turn?.mode==='ourPick'?'Team wants first · then popularity':'Most played first · OpenDota';
 
  $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick');n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);}n.append(el('p','Traits: '+[...new Set(picks.flatMap(a=>heroes[a.heroId]?.roles||[]))].join(', ')));}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
 
@@ -380,6 +380,40 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
 }
 
+// Public OpenDota history for one enemy: what to ban against them.
+function enemyDetails(card,p){
+ const s=enemySummary(p,{now:Math.floor(Date.now()/1000),heroes:Object.values(heroes)});
+ if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
+ card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
+ const strip=(title,cls,rows,label,empty)=>{
+  card.append(el('h4',title));const root=el('div',null,'roster-hero-strip '+cls);
+  for(const h of rows){const item=el('div');item.append(portrait(h.heroId),el('small',heroName(h.heroId)),el('small',label(h)));root.append(item);}
+  if(!rows.length)root.append(el('span',empty,'secondary'));card.append(root);
+ };
+ strip('Most played · 180 days','enemy-top-heroes',s.topHeroes,h=>h.winRate==null?`${h.games} games`:`${h.games} games · ${h.winRate}%`,'No hero data');
+ const total=s.recent.wins+s.recent.losses;
+ card.append(el('h4','Recent'),el('p',total?`${s.recent.wins}W ${s.recent.losses}L (last ${total})`:'No recent matches','enemy-recent'));
+ strip('Battle Cup','enemy-cup',s.cup,h=>`${h.games} games · ${h.wins}W`,'No Battle Cup games found');
+}
+// Compact enemy scouting in the Next decision panel, so it is visible while drafting.
+function renderDraftEnemies(){
+ const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
+ const enemies=opponents();section.hidden=!enemies.length;list.replaceChildren();
+ const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
+ for(const p of enemies){
+  const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');
+  const meta={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'}[s.state]
+   ||(s.positions.length?s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown');
+  row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
+  if(s.state==='ready'){
+   const heroesRow=el('div',null,'draft-enemy-heroes');
+   for(const h of s.topHeroes.slice(0,3)){const item=el('span',null,'draft-enemy-hero'),img=portrait(h.heroId);img.alt='';item.append(img,el('small',`${heroName(h.heroId)} ${h.winRate==null?h.games+' games':`${h.winRate}% · ${h.games}`}`));heroesRow.append(item);}
+   row.append(heroesRow);
+   if(s.cup.length)row.append(el('p','Battle Cup: '+s.cup.slice(0,3).map(h=>heroName(h.heroId)).join(', '),'draft-enemy-cup'));
+  }
+  list.append(row);
+ }
+}
 function renderRoster(){
  const root=$('team-roster');root.replaceChildren();
  const homeActive=!$('team-view').hidden&&user;
@@ -389,8 +423,10 @@ function renderRoster(){
   const heading=el('h2',label,'roster-group-heading');root.append(heading);
   for(const p of players){
    const card=el('article',null,'player-card');
-   card.append(el('h3',p.name),el('p',p.selfReport.preferredRoles.map(role=>roleNames[role-1]||role).join(' · ')||'Role preferences not set','player-role-summary'));
-   for(const [title,ids] of [['Signatures',p.selfReport.signatureHeroes],['Wants',p.selfReport.desiredHeroes]]){
+   card.append(el('h3',p.name));
+   if(label==='Enemy scouting')enemyDetails(card,p);
+   else card.append(el('p',p.selfReport.preferredRoles.map(role=>roleNames[role-1]||role).join(' · ')||'Role preferences not set','player-role-summary'));
+   if(label!=='Enemy scouting')for(const [title,ids] of [['Signatures',p.selfReport.signatureHeroes],['Wants',p.selfReport.desiredHeroes]]){
     card.append(el('h4',title));const strip=el('div',null,'roster-hero-strip');
     for(const id of ids){const item=el('div');item.append(portrait(id),el('small',heroName(id)));strip.append(item);}
     if(!ids.length)strip.append(el('span','Not set','secondary'));card.append(strip);

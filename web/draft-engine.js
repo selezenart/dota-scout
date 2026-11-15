@@ -27,6 +27,52 @@ export function normalizeProfile(raw = {}, selfReport = raw.selfReport || {}) {
     selfReport: {...selfReport, signatureHeroes: ids(selfReport.signatureHeroes), desiredHeroes: ids(selfReport.desiredHeroes),
       avoidHeroes: ids(selfReport.avoidHeroes), preferredRoles: ids(selfReport.preferredRoles), roleComfort: selfReport.roleComfort || {}}};
 }
+// Position 1-5 inferred from a match's lane and the hero's roles; 0 when unknown.
+function lanePosition(m, byId) {
+  const roles = array(byId.get(+m.hero_id)?.roles);
+  const lane = Number(m.lane_role);
+  return m.is_roaming || lane === 4 ? 4 : lane === 2 ? 2 :
+    lane === 1 ? (roles.includes('Carry') ? 1 : 5) :
+    lane === 3 ? (roles.includes('Support') && !roles.includes('Carry') ? 4 : 3) : 0;
+}
+/** What an enemy's public OpenDota history says: top heroes, recent form, Battle Cup heroes, positions. */
+export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []} = {}) {
+  const byId = new Map(array(heroes).map(h => [+h.id, h]));
+  const heroRows = array(player.heroes), recentRows = array(player.recent), matchRows = array(player.matches);
+  const sources = player.sources || {}, statuses = Object.values(sources).map(s => s?.status);
+  const hasData = heroRows.some(h => +h.games > 0) || recentRows.length > 0 || matchRows.length > 0;
+  // A closed account still returns its profile and a hero list of zero-game rows; a failed
+  // request must not look like one.
+  const state = statuses.includes('fetching') || !statuses.length && !hasData ? 'loading'
+    : sources.profile?.status === 'private' ? 'closed'
+    : hasData ? 'ready'
+    : statuses.includes('error') ? 'error' : 'closed';
+  const topHeroes = heroRows.filter(h => +h.games > 0)
+    .map(h => ({heroId: +h.hero_id, games: +h.games, wins: h.win == null ? null : Math.max(0, +h.win || 0)}))
+    .sort((a, b) => b.games - a.games || (b.wins ?? 0) - (a.wins ?? 0)).slice(0, 5)
+    .map(h => ({...h, winRate: h.wins == null ? null : Math.round(100 * h.wins / h.games)}));
+  const won = m => Boolean(m.radiant_win) === (+m.player_slot < 128);
+  const recent = {wins: 0, losses: 0};
+  for (const m of recentRows) if (m.radiant_win != null) won(m) ? recent.wins++ : recent.losses++;
+  // Recent rows always carry hero_id, so they win the dedupe over older cached match rows.
+  const seen = new Set(), cup = new Map(), counts = [0, 0, 0, 0, 0, 0];
+  for (const m of [...recentRows, ...matchRows]) {
+    const age = (now - Number(m.start_time)) / 86400, key = String(m.match_id);
+    if (m.match_id == null || !(age >= 0 && age <= 180) || seen.has(key)) continue;
+    seen.add(key);
+    const position = lanePosition(m, byId);
+    if (position) counts[position]++;
+    if (+m.lobby_type === 9 && m.hero_id != null) {
+      const row = cup.get(+m.hero_id) || {heroId: +m.hero_id, games: 0, wins: 0};
+      row.games++; if (m.radiant_win != null && won(m)) row.wins++;
+      cup.set(row.heroId, row);
+    }
+  }
+  return {state, topHeroes, recent,
+    cup: [...cup.values()].sort((a, b) => b.games - a.games || b.wins - a.wins),
+    positions: [1, 2, 3, 4, 5].map(position => ({position, games: counts[position]})).filter(r => r.games > 0)
+      .sort((a, b) => b.games - a.games || a.position - b.position)};
+}
 function history(player, now, byId) {
   const result = new Map(), seen = new Set();
   const row = id => {
@@ -43,11 +89,7 @@ function history(player, now, byId) {
     if (!(age >= 0 && age <= 180) || seen.has(key)) continue;
     seen.add(key);
     const h = row(+m.hero_id);
-    const roles = array(byId.get(+m.hero_id)?.roles);
-    const lane = Number(m.lane_role);
-    const position = m.is_roaming || lane === 4 ? 4 : lane === 2 ? 2 :
-      lane === 1 ? (roles.includes('Carry') ? 1 : 5) :
-      lane === 3 ? (roles.includes('Support') && !roles.includes('Carry') ? 4 : 3) : 0;
+    const position = lanePosition(m, byId);
     if (position) h.roleCounts[position]++;
     if (age <= 30) h.recent++;
     if (+m.lobby_type === 9) {
