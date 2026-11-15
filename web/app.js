@@ -6,9 +6,11 @@ import {createWelcome} from './welcome.js';
 
 import snapshot from './heroes.json';
 
-import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary} from './draft-engine.js';
+import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop} from './draft-engine.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
+// Namespace import keeps optional scouting helpers off the strict named-import list.
+import * as matchData from './data.js';
 
 import {initialState,demoState,reduceDraft} from './demo.js';
 
@@ -291,6 +293,7 @@ function renderView(){
  renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();const poolOrder=document.querySelector('.hero-board-heading>span');if(poolOrder)poolOrder.textContent=turn?.mode==='ourPick'?'Team wants first · then popularity':'Most played first · OpenDota';
 
  $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick');n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);}n.append(el('p','Traits: '+[...new Set(picks.flatMap(a=>heroes[a.heroId]?.roles||[]))].join(', ')));}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
+ if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
 }
 
@@ -372,7 +375,9 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
  }else root.append(el('p','Choose a suggested hero or browse the pool. Review your selection here before confirming.','decision-empty'));
 
- const candidates=el('div',null,'decision-candidates');candidates.append(el('h3',turn.action==='ban'?'Suggested bans':'Suggested picks'));root.append(candidates);const more=el('details',null,'more-candidates');more.append(el('summary','More suggestions'));let candidateIndex=0;const visibleCandidates=ranked.filter(candidate=>candidate.heroId!==selected?.id).slice(0,8);for(const r of visibleCandidates){const b=button('',()=>stage(r.heroId,r),candidateIndex++<3?candidates:more,'rec-row');const summary=el('span',null,'rec-summary');summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));b.append(portrait(r.heroId),summary);b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)root.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
+ const candidates=el('div',null,'decision-candidates');candidates.append(el('h3',turn.action==='ban'?'Suggested bans':'Suggested picks'));root.append(candidates);const more=el('details',null,'more-candidates');more.append(el('summary','More suggestions'));let candidateIndex=0;const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
+ if(turn.mode==='ourPick'&&visibleCandidates.length){const legend=el('div',null,'rec-legend');legend.setAttribute('aria-label','Suggestion categories');for(const [cls,label] of [['team','Team'],['counter','Counter'],['meta','Meta'],['all','All three']])legend.append(el('span',label,'rec-badge rec-badge-'+cls));candidates.before(legend);}for(const r of visibleCandidates){const b=button('',()=>stage(r.heroId,r),candidateIndex++<3?candidates:more,'rec-row');const summary=el('span',null,'rec-summary');summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));b.append(portrait(r.heroId),summary);
+ const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)root.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
  if(visibleCandidates.length>3)root.append(more);
  const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));root.append(evidence);
  if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();refreshScouting();render();},root);}
@@ -383,6 +388,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 // Public OpenDota history for one enemy: what to ban against them.
 function enemyDetails(card,p){
  const s=enemySummary(p,{now:Math.floor(Date.now()/1000),heroes:Object.values(heroes)});
+ const seen=seenAgainstUs(p);if(seen)card.append(el('p',seen,'enemy-seen'));
  if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
  card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
  const strip=(title,cls,rows,label,empty)=>{
@@ -395,10 +401,197 @@ function enemyDetails(card,p){
  card.append(el('h4','Recent'),el('p',total?`${s.recent.wins}W ${s.recent.losses}L (last ${total})`:'No recent matches','enemy-recent'));
  strip('Battle Cup','enemy-cup',s.cup,h=>`${h.games} games · ${h.wins}W`,'No Battle Cup games found');
 }
+// Earlier Battle Cup matches pasted to scout the enemy team. Shared through the team
+// database inside a team draft; stored on this device otherwise or until the owner
+// applies migration 010.
+const enemyMatchKey='captain-enemy-matches-v1';
+let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false,enemyMatchState='ready',enemyMatchLoad=0;
+function enemyMatchTeam(){return typeof backend?.listEnemyMatches==='function'&&shared?.team_id&&user?shared.team_id:null;}
+// Device storage is per account so another local user does not see this scouting.
+const localMatchKey=()=>enemyMatchKey+':'+(user?.id||'practice');
+function readLocalMatches(){try{const rows=JSON.parse(localStorage.getItem(localMatchKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
+function writeLocalMatches(){try{localStorage.setItem(localMatchKey(),JSON.stringify(enemyMatches.slice(0,200)));}catch{}}
+const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
+function syncEnemyMatches(){
+ const teamId=enemyMatchTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===enemyMatchScope)return;
+ // Every scope change invalidates in-flight team loads, including team → device.
+ enemyMatchScope=scope;enemyMatchRemote=false;const load=++enemyMatchLoad;
+ if(!teamId){enemyMatchState='ready';enemyMatches=readLocalMatches();return;}
+ // Team scope never mixes in device rows; adding waits until the team list settles.
+ enemyMatchState='loading';enemyMatches=[];
+ void Promise.resolve().then(()=>backend.listEnemyMatches(teamId)).then(rows=>{
+  if(load!==enemyMatchLoad)return;enemyMatchRemote=true;enemyMatchState='ready';
+  enemyMatches=(Array.isArray(rows)?rows:[]).map(r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}));render();
+ }).catch(error=>{
+  if(load!==enemyMatchLoad)return;
+  if(missingRpc(error)){enemyMatchState='ready';enemyMatches=readLocalMatches();notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.');render();}
+  else{enemyMatchState='failed';notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'));}
+ });
+}
+async function addEnemyMatches(text){
+ const ids=matchData.parseMatchIds(text);if(!ids.length)throw Error('Enter match IDs or match links.');if(ids.length>10)throw Error('Load at most 10 matches at a time.');
+ syncEnemyMatches();
+ if(enemyMatchState==='loading')throw Error('Team matches are still loading. Try again in a moment.');
+ // A failed team load is retried on the next attempt instead of needing a reload.
+ if(enemyMatchState==='failed'){enemyMatchScope=null;syncEnemyMatches();throw Error('Team matches could not be loaded. Retrying now; try again in a moment.');}
+ const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String),failed=[],unsaved=[];
+ for(const id of ids){
+  let summary;
+  try{summary=await matchData.loadMatch(id);}catch{}
+  if(scope!==enemyMatchScope)return false;
+  if(!Array.isArray(summary?.players)||!summary.players.length){failed.push(id);continue;}
+  const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
+  if(teamId){try{await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);}catch{unsaved.push(id);continue;}}
+  if(scope!==enemyMatchScope)return false;
+  enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
+ }
+ if(!teamId)writeLocalMatches();render();
+ const problems=[];
+ if(failed.length)problems.push('Could not load match '+failed.join(', ')+'. Check the ID, or try again if OpenDota is busy.');
+ if(unsaved.length)problems.push('Could not save match '+unsaved.join(', ')+' to the team. Check your team access and try again.');
+ if(problems.length)throw Error(problems.join(' '));
+ return true;
+}
+async function setEnemyMatchSide(matchId,side){
+ const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope;
+ if(teamId)await backend.setEnemyMatchSide(teamId,matchId,side);
+ if(scope!==enemyMatchScope)return;
+ enemyMatches=enemyMatches.map(r=>r.matchId===matchId?{...r,enemySide:side}:r);if(!teamId)writeLocalMatches();render();
+}
+function renderEnemyMatches(section){
+ section.querySelector('.draft-enemy-matches')?.remove();
+ const rows=relevantEnemyMatches(enemyMatches,state.enemyIds||[],Date.now());if(!rows.length)return false;
+ const r=enemyMatchReport(rows,state.enemyIds||[]),root=el('div',null,'draft-enemy-matches');
+ const resolved=r.matches.filter(m=>m.side),wins=resolved.filter(m=>m.won).length;
+ root.append(el('h4','Their Battle Cup matches'),el('p',`${rows.length} match${rows.length===1?'':'es'} · ${wins}W ${resolved.filter(m=>m.won===false).length}L${r.anonymous?` · ${r.anonymous} anonymous picks`:''}`,'draft-enemy-match-summary'));
+ const list=(cls,items,label)=>{if(!items.length)return;const box=el('div',null,'draft-enemy-match-list');for(const h of items.slice(0,8))box.append(el('span',label(h),cls));root.append(box);};
+ list('draft-enemy-match-pick',r.picks,h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`);
+ if(r.bans.length)root.append(el('p','They banned:','draft-enemy-match-label'));
+ list('draft-enemy-match-ban',r.bans,h=>`${heroName(h.heroId)} ×${h.count}`);
+ for(const id of r.unresolved){
+  const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${id}: which side was the enemy?`));
+  for(const [label,side] of [['Enemy was Radiant','radiant'],['Enemy was Dire','dire']])button(label,()=>setEnemyMatchSide(id,side),box);
+  root.append(box);
+ }
+ // A wrongly chosen or inferred side can be corrected; kept collapsed so the panel stays short.
+ const resolvedSides=r.matches.filter(m=>m.side);
+ if(resolvedSides.length){
+  const sides=el('details',null,'draft-enemy-match-sides');sides.append(el('summary',`Enemy side in ${resolvedSides.length} match${resolvedSides.length===1?'':'es'}`));
+  for(const m of resolvedSides.slice(0,10)){
+   const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${m.matchId}: enemy was ${m.side==='radiant'?'Radiant':'Dire'}`));
+   button('Switch side for match '+m.matchId,()=>setEnemyMatchSide(m.matchId,m.side==='radiant'?'dire':'radiant'),box);
+   sides.append(box);
+  }
+  root.append(sides);
+ }
+ section.append(root);return true;
+}
+// Who played what against us: recorded by the team after its own games, so it also
+// covers closed accounts. Team database in team drafts, this device otherwise.
+const sightingKey='captain-enemy-sightings-v1';
+let sightings=[],sightingScope=null,sightingRemote=false,sightingState='ready',sightingLoad=0,sightingLoadedAt=0,assignment={key:null,map:{},result:''};
+const localSightingKey=()=>sightingKey+':'+(user?.id||'practice');
+function sightingTeam(){return typeof backend?.listEnemySightings==='function'&&shared?.team_id&&user?shared.team_id:null;}
+function readLocalSightings(){try{const rows=JSON.parse(localStorage.getItem(localSightingKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
+function writeLocalSightings(){try{localStorage.setItem(localSightingKey(),JSON.stringify(sightings.slice(-2000)));}catch{}}
+function syncSightings(){
+ const teamId=sightingTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===sightingScope)return;
+ sightingScope=scope;sightingRemote=false;
+ if(!teamId){++sightingLoad;sightingState='ready';sightings=readLocalSightings();return;}
+ sightingState='loading';sightings=[];listSightings(teamId);
+}
+// Re-reads the team list; current rows stay visible until the new ones arrive.
+function listSightings(teamId){
+ const load=++sightingLoad;
+ void Promise.resolve().then(()=>backend.listEnemySightings(teamId)).then(rows=>{
+  if(load!==sightingLoad)return;sightingRemote=true;sightingState='ready';sightingLoadedAt=Date.now();
+  sightings=(Array.isArray(rows)?rows:[]).map(r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}));render();
+ }).catch(error=>{
+  if(load!==sightingLoad)return;
+  if(missingRpc(error)){sightingState='ready';sightings=readLocalSightings();render();}
+  else if(sightingState==='loading'){sightingState='failed';notice('Could not load the team scouting list: '+(error.message||'try again later.'));}
+ });
+}
+// Called from the draft poll so idle teammates also see a newly saved assignment.
+function refreshSightings(){
+ const teamId=sightingTeam();
+ if(teamId&&sightingRemote&&sightingState==='ready'&&state.actions.length>=24&&Date.now()-sightingLoadedAt>15000){sightingLoadedAt=Date.now();listSightings(teamId);}
+}
+// One key per game. Reset keeps the draft id, so the key also uses the opening bans
+// and the enemy accounts; a later Undo and re-pick stays the same game.
+function draftFingerprint(){let h=0x811c9dc5;const text=state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(state.enemyIds||[])].map(String).sort().join(',');for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+const sightingDraftBase=()=>shared?.id?'draft:'+shared.id:'draft:practice';
+const sightingGameKey=()=>sightingDraftBase()+':'+draftFingerprint();
+// Key last saved per draft in this session, so a corrected enemy list or opening replaces it.
+const lastSightingKey=new Map();
+async function saveSightings(entries){
+ if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
+ if(shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
+ syncSightings();
+ if(sightingState==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
+ if(sightingState==='failed'){sightingScope=null;syncSightings();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
+ const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
+ const previous=lastSightingKey.get(slot)!==key?lastSightingKey.get(slot):null;
+ if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
+ if(scope!==sightingScope)return false;
+ let staleKept=false;
+ if(teamId&&previous)try{await backend.recordEnemySightings(teamId,previous,[],'manual');}catch{staleKept=true;}
+ if(scope!==sightingScope)return false;
+ // Remembered only once the earlier version is gone, so saving again retries the cleanup.
+ if(!staleKept)lastSightingKey.set(slot,key);
+ // A list request started before this save must not drop the new rows.
+ if(teamId)++sightingLoad;
+ sightings=[...sightings.filter(r=>r.sourceKey!==key&&r.sourceKey!==previous),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
+ // Invented demo opponents never reach the real list.
+ if(!teamId&&!demo)writeLocalSightings();render();
+ if(staleKept)notice('Saved. The earlier version of this game could not be removed; save again to retry.');
+ return true;
+}
+function seenAgainstUs(p){
+ const seen=enemySightings(sightings,String(p.id));
+ return seen.length?'Seen vs us: '+seen.slice(0,4).map(h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`).join(', '):'';
+}
+function renderEnemyAssignment(root){
+ const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
+ if(!picks.length||!enemies.length)return;
+ syncSightings();const key=sightingScope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
+ // Teammates outside the drafter seat always see the saved assignment (refreshed by the poll);
+ // the drafter's unsaved edits survive a failed poll or a pending action.
+ const viewer=!!shared&&shared.drafter_user_id!==user?.id;
+ if(assignment.key!==key||viewer){
+  const saved=sightings.filter(r=>r.sourceKey===sightingGameKey());
+  assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
+ }
+ const box=el('section',null,'enemy-assignment');
+ box.append(el('h3','Who played what?'),el('p','Saved for your team. When these accounts show up again, the board shows what they played against you.','secondary'));
+ for(const a of picks){
+  const row=el('label',null,'enemy-assignment-row'),select=el('select');select.dataset.hero=String(a.heroId);
+  select.setAttribute('aria-label','Enemy player for '+heroName(a.heroId));select.append(new Option('Unknown',''));
+  for(const p of enemies)select.append(new Option(p.name,String(p.id)));
+  select.value=assignment.map[a.heroId]||'';select.disabled=readOnly;select.onchange=()=>{assignment.map[a.heroId]=select.value;};
+  row.append(el('span',heroName(a.heroId)),select);box.append(row);
+ }
+ const resultLabel=el('label',null,'enemy-assignment-row'),result=el('select');result.setAttribute('aria-label','Our result');
+ for(const [value,label] of [['','Result unknown'],['won','We won'],['lost','We lost']])result.append(new Option(label,value));
+ result.value=assignment.result;result.disabled=readOnly;result.onchange=()=>{assignment.result=result.value;};resultLabel.append(el('span','Our result'),result);box.append(resultLabel);
+ const saveButton=button('Save who played what',async()=>{
+  assignment.result=result.value;
+  for(const select of box.querySelectorAll('select[data-hero]'))assignment.map[select.dataset.hero]=select.value;
+  const enemyWon=assignment.result==='lost'?true:assignment.result==='won'?false:null;
+  const entries=picks.filter(a=>assignment.map[a.heroId]).map(a=>({accountId:assignment.map[a.heroId],heroId:a.heroId,enemyWon}));
+  if(await saveSightings(entries))notice('Saved who played what.');
+ },box,'primary');
+ if(readOnly){saveButton.disabled=true;box.append(el('p','Only the current drafter can save this.','secondary'));}
+ root.append(box);
+}
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
 function renderDraftEnemies(){
  const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
- const enemies=opponents();section.hidden=!enemies.length;list.replaceChildren();
+ syncEnemyMatches();syncSightings();
+ // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
+ // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
+ if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
+ const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');
@@ -411,6 +604,7 @@ function renderDraftEnemies(){
    row.append(heroesRow);
    if(s.cup.length)row.append(el('p','Battle Cup: '+s.cup.slice(0,3).map(h=>heroName(h.heroId)).join(', '),'draft-enemy-cup'));
   }
+  const seen=seenAgainstUs(p);if(seen)row.append(el('p',seen,'draft-enemy-seen'));
   list.append(row);
  }
 }
@@ -894,6 +1088,9 @@ async function lobby(){
   }
  }
  const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(state.enemyIds||[]).join(' '),'textarea');enemies.id='enemy-account-input';enemies.placeholder='One player ID or link per line';enemies.rows=3;scouting.append(scoutingActions);
+ const matchIds=field(scouting,'Their earlier Battle Cup matches (IDs or links)','','textarea');matchIds.id='enemy-match-input';matchIds.placeholder='Match IDs or Dotabuff/OpenDota links from the bracket';matchIds.rows=2;
+ const matchActions=el('div',null,'lobby-actions');scouting.append(matchActions);
+ button('Load matches',async()=>{if(!await addEnemyMatches(matchIds.value))return;matchIds.value='';notice('Battle Cup matches loaded.');},matchActions);
  const validateEnemies=()=>{
   const tokens=enemies.value.trim().split(/[\s,;]+/).filter(Boolean);
   const invalid=tokens.filter(token=>parseAccountIds(token).length!==1);
@@ -1277,7 +1474,7 @@ function openLinkInvitation(){
 }
 window.addEventListener('hashchange',openLinkInvitation);
 window.addEventListener('popstate',()=>void safe(async()=>{if(openLinkInvitation())return;const params=new URLSearchParams(location.search);if(params.has('cup')){openCup();return;}if(params.has('team')&&(user||demo)){navigateTeam();return;}showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await openDraft(draft,{navigate:false});else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
-setInterval(()=>void poll(),3000);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
+setInterval(()=>{void poll();refreshSightings();},3000);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
 
 if(imageId!==null){
  $('welcome-view').hidden=true;

@@ -73,6 +73,52 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     positions: [1, 2, 3, 4, 5].map(position => ({position, games: counts[position]})).filter(r => r.games > 0)
       .sort((a, b) => b.games - a.games || a.position - b.position)};
 }
+/** Heroes one enemy account played against this team, from the team's own records. */
+export function enemySightings(rows = [], accountId) {
+  const id = String(accountId), byHero = new Map();
+  for (const r of array(rows)) {
+    if (String(r.accountId) !== id) continue;
+    const h = byHero.get(+r.heroId) || {heroId: +r.heroId, games: 0, wins: 0};
+    h.games++; if (r.enemyWon === true) h.wins++;
+    byHero.set(h.heroId, h);
+  }
+  return [...byHero.values()].sort((a, b) => b.games - a.games || b.wins - a.wins || a.heroId - b.heroId);
+}
+const overlaps = (ids, wanted) => array(ids).some(id => wanted.includes(String(id)));
+/** Earlier Battle Cup matches pasted for scouting, worth showing for the current enemies. */
+export function relevantEnemyMatches(rows = [], enemyIds = [], now = Date.now()) {
+  const wanted = array(enemyIds).map(String);
+  return array(rows).filter(r => overlaps(r.contextIds, wanted)
+    || overlaps(array(r.summary?.players).map(p => p.accountId).filter(Boolean), wanted)
+    // Recent rows count only if they were not saved for a different opponent.
+    || !array(r.contextIds).length && now - Number(r.addedAt) <= 86400000);
+}
+/** Team-level picks and bans of the enemy across pasted matches; closed players stay anonymous. */
+export function enemyMatchReport(rows = [], enemyIds = []) {
+  const wanted = array(enemyIds).map(String), picks = new Map(), bans = new Map();
+  const report = {matches: [], unresolved: [], picks: [], bans: [], players: [], anonymous: 0};
+  for (const row of array(rows)) {
+    const players = array(row.summary?.players);
+    const onSide = radiant => players.some(p => p.isRadiant === radiant && p.accountId && wanted.includes(p.accountId));
+    const side = row.enemySide === 'radiant' || row.enemySide === 'dire' ? row.enemySide
+      : onSide(true) !== onSide(false) ? (onSide(true) ? 'radiant' : 'dire') : null;
+    const radiantWin = row.summary?.radiantWin;
+    report.matches.push({matchId: row.matchId, side, won: side && typeof radiantWin === 'boolean' ? radiantWin === (side === 'radiant') : null});
+    if (!side) { report.unresolved.push(row.matchId); continue; }
+    const won = typeof radiantWin === 'boolean' && radiantWin === (side === 'radiant');
+    for (const p of players.filter(p => p.isRadiant === (side === 'radiant'))) {
+      const h = picks.get(p.heroId) || {heroId: p.heroId, games: 0, wins: 0};
+      h.games++; if (won) h.wins++; picks.set(p.heroId, h);
+      if (p.accountId) report.players.push({accountId: p.accountId, name: p.name, heroId: p.heroId, matchId: row.matchId});
+      else report.anonymous++;
+    }
+    for (const b of array(row.summary?.picksBans).filter(b => !b.isPick && b.team === (side === 'radiant' ? 0 : 1)))
+      bans.set(b.heroId, {heroId: b.heroId, count: (bans.get(b.heroId)?.count || 0) + 1});
+  }
+  report.picks = [...picks.values()].sort((a, b) => b.games - a.games || b.wins - a.wins || a.heroId - b.heroId);
+  report.bans = [...bans.values()].sort((a, b) => b.count - a.count || a.heroId - b.heroId);
+  return report;
+}
 function history(player, now, byId) {
   const result = new Map(), seen = new Set();
   const row = id => {
@@ -144,6 +190,55 @@ function observed(hero, enemy, matchups) {
     return {score:sign * 20*(row.wins-row.games_played/2)/(Number(row.games_played)+50),games:+row.games_played};
   }
 }
+const round1 = x => Math.round(x * 10) / 10;
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+/** Pool-wide totals for meta rates: Divine+ (brackets 7-8) picks and pro picks. */
+export function metaTotals(pool = []) {
+  let high = 0, pro = 0, heroes = 0;
+  for (const h of array(pool)) {
+    const picks = (+h?.['7_pick'] || 0) + (+h?.['8_pick'] || 0);
+    high += picks; pro += +h?.pro_pick || 0; if (picks > 0) heroes++;
+  }
+  return {high, pro, heroes};
+}
+/** Current meta for one hero from OpenDota hero stats: Divine+ public games and pro games. */
+export function heroMeta(hero = {}, totals = {}) {
+  const highPicks = (+hero['7_pick'] || 0) + (+hero['8_pick'] || 0), highWins = (+hero['7_win'] || 0) + (+hero['8_win'] || 0);
+  const proPicks = +hero.pro_pick || 0, proBans = +hero.pro_ban || 0;
+  if (highPicks < 200 && proPicks + proBans < 5) return null;
+  const winRate = highPicks >= 200 ? round1(100 * highWins / highPicks) : null;
+  const pickRate = totals.high > 0 && highPicks >= 200 ? round1(100 * highPicks * 10 / totals.high) : null;
+  const proWinRate = proPicks >= 5 ? round1(100 * (+hero.pro_win || 0) / proPicks) : null;
+  // A gentle tie-breaker: the whole range (-1.5..3) stays below "wants to play" (5),
+  // so a player's own heroes win when everything else is equal.
+  const avgPick = totals.heroes > 0 ? 1000 / totals.heroes : null;
+  const winPart = winRate == null ? 0 : clamp((winRate - 50) * 0.5, -1.5, 1.5);
+  const pickPart = pickRate == null || !avgPick ? 0 : pickRate <= 0 ? -0.75 : clamp(0.75 * Math.log2(pickRate / avgPick), -0.75, 1);
+  const proGames = (totals.pro || 0) / 10;
+  // Few pro games say little: damp until about 300 games.
+  const proPart = proGames > 0 ? Math.min(1, 2 * (proPicks + proBans) / proGames) * Math.min(1, proGames / 300) : 0;
+  return {winRate, pickRate, proPicks, proBans, proWinRate, score: +clamp(winPart + pickPart + proPart, -1.5, 3).toFixed(2)};
+}
+function metaText(m) {
+  const parts = [];
+  if (m.winRate != null) parts.push(`${m.winRate}% win in Divine+ (${m.pickRate}% of games)`);
+  if (m.proPicks || m.proBans) parts.push(`pro ${m.proPicks} picks / ${m.proBans} bans`);
+  return parts.length ? 'Meta: ' + parts.join(', ') : '';
+}
+/** Top suggestions that always include the best few of each category, in score order. */
+export function diverseTop(ranked = [], limit = 8, perTag = 2) {
+  if (ranked.length <= limit) return [...ranked];
+  const must = new Set();
+  for (const tag of ['team', 'counter', 'meta']) ranked.filter(r => r.tags?.includes(tag)).slice(0, perTag).forEach(r => must.add(r));
+  const chosen = new Set(ranked.slice(0, limit));
+  for (const r of must) {
+    if (chosen.has(r)) continue;
+    const victim = [...chosen].reverse().find(x => !must.has(x));
+    if (!victim) break;
+    chosen.delete(victim); chosen.add(r);
+  }
+  return ranked.filter(r => chosen.has(r));
+}
 export function recommend({heroes = [],draft = [],allies = [],opponents = [],matchups = {},firstPick = true,now = Date.now(),mode} = {}) {
   if (!nextTurn(draft,firstPick)) return [];
   mode ||= nextTurn(draft,firstPick).mode;
@@ -187,7 +282,10 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
         if (!slot) continue;
         const personal = (player?.selfReport.signatureHeroes.includes(heroId) ? 20 : 0) +
           experience(histories.get(player?.id)?.get(heroId));
-        assign(index+1,remaining.filter(p=>p!==seat),open.filter(i=>i!==pos),score+slot.score+personal);
+        // On a tie, an unattributed pick goes to an unknown seat, so a known teammate
+        // stays available for their own heroes.
+        const keepKnownFree = player && !personal && action.playerId == null ? 0.01 : 0;
+        assign(index+1,remaining.filter(p=>p!==seat),open.filter(i=>i!==pos),score+slot.score+personal-keepKnownFree);
       }
       // Unknown seats have interchangeable evidence and constraints.
       if (seat.unknown) break;
@@ -201,16 +299,19 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   if (picking && remaining.some(p=>p.unknown)) slots.push(null);
   const penalties = new Map(slots.map(p => [p, picking ? reservationPenalties(p,available,open) : {}]));
   const covered = new Set(picked.flatMap(a => array(byId.get(+a.heroId)?.roles)));
+  const totals = metaTotals(pool);
   const ranked = [];
   for (const hero of pool) {
     const heroId = +hero.id;
     if (taken.has(heroId)) continue;
+    // Meta only shapes picks; ban suggestions stay evidence-based.
+    const meta = picking ? heroMeta(hero, totals) : null, metaReason = meta ? metaText(meta) : '';
     let best;
     for (const player of slots) {
       const s = player?.selfReport, h = histories.get(player?.id)?.get(heroId);
       if (s?.avoidHeroes.includes(heroId)) continue;
       const components = {history:experience(h),signature:s?.signatureHeroes.includes(heroId)?20:0,
-        desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0};
+        desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0,meta:meta?.score ?? 0};
       const evidence = [], reasons = [];
       if (experienceText(h)) evidence.push(experienceText(h));
       if (components.signature) reasons.push('Reported signature hero');
@@ -239,6 +340,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
           if (components.deny) reasons.push('Denies '+target.p.name+' a played hero ('+experienceText(target.h)+')');
         }
         if (slot.score > 0) reasons.push('Position '+slot.position+' fit');
+        if (metaReason) meta.score >= 2 ? reasons.unshift(metaReason) : reasons.push(metaReason);
+        if (!totals.high && !totals.pro) evidence.push('Meta data unavailable');
       }
       let matchupGames = 0;
       {
@@ -252,13 +355,18 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       if (!matchupGames && draft.some(a=>a.mode===opposing)) evidence.push('Observed matchup data unavailable');
       if (picking && !array(hero.roles).length) evidence.push('Composition tags unavailable');
       const score = +Object.values(components).reduce((sum,x)=>sum+x,0).toFixed(2);
-      const rec = {heroId,score,reasons,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
+      // Category tags for our picks: the team's own heroes, counters to their picks, current meta.
+      const tags = mode !== 'ourPick' ? [] : [
+        (components.signature > 0 || components.desired > 0 || components.history > 0) && 'team',
+        // Counter needs a clear edge on enough games: small pro samples are noisy.
+        components.matchup >= 1 && matchupGames >= 30 && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
+      const rec = {heroId,score,reasons,tags,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
         details:Object.entries(components).map(([category,contribution]) => ({
           category,contribution,heroId,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,
           source:({history:experienceText(h),signature:'Teammate profile',desired:'Teammate profile',
             role:picking?'Declared role and OpenDota hero roles':'Inferred from observed lane',
             composition:'OpenDota hero roles',matchup:matchupGames?'OpenDota hero matchups':null,
-            deny:reasons.find(r=>r.startsWith('Denies '))})[category] || null,
+            deny:reasons.find(r=>r.startsWith('Denies ')),meta:meta?'OpenDota hero stats (Divine+ and pro)':null})[category] || null,
           sample:category==='history' && h ? {games:h.games,recent30d:h.recent,cup180d:h.cup,cup16h:h.currentCup} :
             category==='matchup'?matchupGames:category==='role' && !picking?roleSample:null
         }))};

@@ -87,6 +87,15 @@ export function createBackend({ supabaseUrl, supabaseAnonKey } = {}) {
       return accountRpc('suggest_team_identity', {target_team:teamId,suggestion:name,mime,encoded_image:data}, userId);
     },
     getTeamIdentityImage(id) { return rpc('get_team_identity_image', {image_id:id}); },
+    async listEnemyMatches(teamId) { return await rpc('list_enemy_matches', {target_team: teamId}) || []; },
+    saveEnemyMatch(teamId, matchId, summary, side, contextIds) {
+      return rpc('save_enemy_match', {target_team: teamId, target_match: matchId, match_summary: summary, side: side || null, context_ids: contextIds || []});
+    },
+    setEnemyMatchSide(teamId, matchId, side) { return rpc('set_enemy_match_side', {target_team: teamId, target_match: matchId, side}); },
+    async listEnemySightings(teamId) { return await rpc('list_enemy_sightings', {target_team: teamId}) || []; },
+    recordEnemySightings(teamId, gameKey, entries, source = 'manual') {
+      return rpc('record_enemy_sightings', {target_team: teamId, game_key: gameKey, entries, entry_source: source});
+    },
     async listTeams() { return await rpc('list_my_teams') || []; },
     createTeam(name) { return rpc('create_scout_team', { team_name: name.trim() }); },
     async joinTeam(inviteCode, expectedUserId) {
