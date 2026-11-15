@@ -6,7 +6,7 @@ import {createWelcome} from './welcome.js';
 
 import snapshot from './heroes.json';
 
-import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile} from './draft-engine.js';
+import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary} from './draft-engine.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 
@@ -368,6 +368,21 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
 }
 
+// Public OpenDota history for one enemy: what to ban against them.
+function enemyDetails(card,p){
+ const s=enemySummary(p,{now:Math.floor(Date.now()/1000),heroes:Object.values(heroes)});
+ if(s.state!=='ready'){card.append(el('p',s.state==='loading'?'Loading public stats…':'Closed account — no public match history.','enemy-status'));return;}
+ card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
+ const strip=(title,cls,rows,label,empty)=>{
+  card.append(el('h4',title));const root=el('div',null,'roster-hero-strip '+cls);
+  for(const h of rows){const item=el('div');item.append(portrait(h.heroId),el('small',heroName(h.heroId)),el('small',label(h)));root.append(item);}
+  if(!rows.length)root.append(el('span',empty,'secondary'));card.append(root);
+ };
+ strip('Most played · 180 days','enemy-top-heroes',s.topHeroes,h=>`${h.games} games · ${h.winRate}%`,'No hero data');
+ const total=s.recent.wins+s.recent.losses;
+ card.append(el('h4','Recent'),el('p',total?`${s.recent.wins}W ${s.recent.losses}L (last ${total})`:'No recent matches','enemy-recent'));
+ strip('Battle Cup','enemy-cup',s.cup,h=>`${h.games} games · ${h.wins}W`,'No Battle Cup games found');
+}
 function renderRoster(){
  const root=$('team-roster');root.replaceChildren();
  const homeActive=!$('team-view').hidden&&user;
@@ -377,8 +392,10 @@ function renderRoster(){
   const heading=el('h2',label,'roster-group-heading');root.append(heading);
   for(const p of players){
    const card=el('article',null,'player-card');
-   card.append(el('h3',p.name),el('p',p.selfReport.preferredRoles.map(role=>roleNames[role-1]||role).join(' · ')||'Role preferences not set','player-role-summary'));
-   for(const [title,ids] of [['Signatures',p.selfReport.signatureHeroes],['Wants',p.selfReport.desiredHeroes]]){
+   card.append(el('h3',p.name));
+   if(label==='Enemy scouting')enemyDetails(card,p);
+   else card.append(el('p',p.selfReport.preferredRoles.map(role=>roleNames[role-1]||role).join(' · ')||'Role preferences not set','player-role-summary'));
+   if(label!=='Enemy scouting')for(const [title,ids] of [['Signatures',p.selfReport.signatureHeroes],['Wants',p.selfReport.desiredHeroes]]){
     card.append(el('h4',title));const strip=el('div',null,'roster-hero-strip');
     for(const id of ids){const item=el('div');item.append(portrait(id),el('small',heroName(id)));strip.append(item);}
     if(!ids.length)strip.append(el('span','Not set','secondary'));card.append(strip);
