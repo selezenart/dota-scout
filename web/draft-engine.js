@@ -39,10 +39,14 @@ function lanePosition(m, byId) {
 export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []} = {}) {
   const byId = new Map(array(heroes).map(h => [+h.id, h]));
   const heroRows = array(player.heroes), recentRows = array(player.recent), matchRows = array(player.matches);
-  const sources = player.sources || {};
-  const state = Object.values(sources).some(s => s?.status === 'fetching') ? 'loading'
-    // A closed account still returns its profile and a hero list of zero-game rows.
-    : sources.profile?.status === 'private' || !heroRows.some(h => +h.games > 0) && !recentRows.length && !matchRows.length ? 'closed' : 'ready';
+  const sources = player.sources || {}, statuses = Object.values(sources).map(s => s?.status);
+  const hasData = heroRows.some(h => +h.games > 0) || recentRows.length > 0 || matchRows.length > 0;
+  // A closed account still returns its profile and a hero list of zero-game rows; a failed
+  // request must not look like one.
+  const state = statuses.includes('fetching') || !statuses.length && !hasData ? 'loading'
+    : sources.profile?.status === 'private' ? 'closed'
+    : hasData ? 'ready'
+    : statuses.includes('error') ? 'error' : 'closed';
   const topHeroes = heroRows.filter(h => +h.games > 0)
     .map(h => ({heroId: +h.hero_id, games: +h.games, wins: Math.max(0, +h.win || 0)}))
     .sort((a, b) => b.games - a.games || b.wins - a.wins).slice(0, 5)
@@ -60,7 +64,7 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     if (position) counts[position]++;
     if (+m.lobby_type === 9 && m.hero_id != null) {
       const row = cup.get(+m.hero_id) || {heroId: +m.hero_id, games: 0, wins: 0};
-      row.games++; if (won(m)) row.wins++;
+      row.games++; if (m.radiant_win != null && won(m)) row.wins++;
       cup.set(row.heroId, row);
     }
   }

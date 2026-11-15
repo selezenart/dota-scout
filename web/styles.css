@@ -5070,3 +5070,15 @@ body:has(#identity-download:not([hidden])) {min-height:100vh;background-repeat:n
 #profile-dialog [data-close][hidden] {display:none;}
 .team-member-management {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;text-align:left;}
 .team-member-management button {min-height:44px;}
+
+/* Enemy scouting inside the Next decision panel. */
+.draft-enemy-scouting{border-top:1px solid #353b45;margin-top:14px;padding:12px 14px 4px}
+.draft-enemy-scouting h3{font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;color:var(--enemy,#e58a8a)}
+.draft-enemy{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:8px 0;border-bottom:1px solid #2a2f37}
+.draft-enemy:last-child{border-bottom:none}
+.draft-enemy-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.draft-enemy-meta{font-size:11px;color:#aab1bd;white-space:nowrap}
+.draft-enemy-heroes{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.draft-enemy-hero{display:flex;align-items:center;gap:4px;font-size:11px}
+.draft-enemy-hero img{width:30px;height:17px;object-fit:cover;border-radius:3px}
+.draft-enemy-cup{grid-column:1/-1;margin:0;font-size:11px;color:#e7c58e}

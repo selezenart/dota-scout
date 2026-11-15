@@ -24,6 +24,21 @@ test('loadPlayer asks OpenDota to project hero_id for matches',async()=>{
 test('state is loading while any source is fetching',()=>{
  assert.equal(summary(player({sources:sources({matches:{status:'fetching'}}),heroes:[{hero_id:1,games:3,win:1}]})).state,'loading');
 });
+test('state is error, not closed, when OpenDota failed and nothing usable loaded',()=>{
+ const failed={status:'error',message:'429'};
+ assert.equal(summary(player({sources:sources({recent:failed,heroes:failed,matches:failed})})).state,'error');
+ assert.equal(summary(player({sources:sources({profile:failed,recent:failed,heroes:failed,matches:failed})})).state,'error');
+ assert.equal(summary(player({sources:sources({profile:{status:'private'},recent:failed})})).state,'closed');
+ assert.equal(summary(player({sources:sources({matches:failed}),heroes:[{hero_id:1,games:3,win:1}]})).state,'ready');
+});
+test('state is loading before any source exists, ready for sourceless fixtures with data',()=>{
+ assert.equal(summary(engine.normalizeProfile({id:'9',name:'New'})).state,'loading');
+ assert.equal(summary(engine.normalizeProfile({id:'9',name:'Demo',heroes:[{hero_id:1,games:5,win:3}]})).state,'ready');
+});
+test('cup games with an unknown result are counted but never as wins',()=>{
+ const cup=summary(player({recent:[match(1,2,1,{lobby_type:9,radiant_win:null,player_slot:128})]})).cup;
+ assert.deepEqual(cup,[{heroId:2,games:1,wins:0}]);
+});
 test('state is closed for a private profile or when all history is empty',()=>{
  assert.equal(summary(player({sources:sources({profile:{status:'private'}}),heroes:[{hero_id:1,games:3,win:1}]})).state,'closed');
  assert.equal(summary(player()).state,'closed');
@@ -109,6 +124,61 @@ test('enemy scouting cards show public stats, loading and closed states',async()
   assert.match(o.querySelector('.enemy-recent').textContent,/6W 4L \(last 10\)/);
   assert.match(o.querySelector('.enemy-cup').textContent,/Nature's Prophet/);
   assert.match(o.querySelector('.enemy-cup').textContent,/1 games?/);
+ }finally{w.close();}
+});
+
+const boot=async(players,ids)=>{
+ const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
+ w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__players=players;
+ w.eval(code);await flush();w.eval(`Date.now=()=>${now*1000}`);
+ if(ids){w.document.getElementById('setup-button').click();await flush();w.document.getElementById('enemy-account-input').value=ids;
+  [...w.document.querySelectorAll('button')].find(b=>b.textContent==='Save and scout enemies').click();await flush();}
+ return w;
+};
+
+test('draft panel shows enemy scouting for open and closed enemies without the Team tab',async()=>{
+ const open={id:'111',name:'Open Foe',sources:sources(),
+  heroes:[{hero_id:1,games:14,win:10,last_played:now},{hero_id:53,games:3,win:1,last_played:now},{hero_id:2,games:2,win:1,last_played:now},{hero_id:3,games:1,win:0,last_played:now}],
+  recent:[...Array(6)].map((_,i)=>match(100+i,1,1,{lane_role:2})).concat([...Array(4)].map((_,i)=>match(200+i,1,1,{lane_role:3}))),
+  matches:[match(300,53,2,{lane_role:2,lobby_type:9})]};
+ const closed={id:'222',name:'Closed Foe',sources:sources({profile:{status:'private'},recent:{status:'empty'},heroes:{status:'empty'},matches:{status:'empty'}})};
+ const w=await boot({111:open,222:closed},'111\n222'),doc=w.document;
+ try{
+  assert.equal(doc.getElementById('draft-view').hidden,false);assert.equal(doc.getElementById('team-view').hidden,true);
+  const s=doc.getElementById('draft-enemy-scouting');
+  assert.ok(s,'#draft-enemy-scouting exists');assert.equal(s.hidden,false);
+  assert.ok(s.closest('aside.decision-panel'),'inside decision panel');
+  assert.equal(s.querySelector('h3').textContent,'Enemy scouting');
+  const cards=[...s.querySelectorAll('.draft-enemy')];
+  assert.deepEqual(cards.map(c=>c.querySelector('.draft-enemy-name').textContent),['Open Foe','Closed Foe']);
+  const [o,c]=cards;
+  assert.match(o.querySelector('.draft-enemy-meta').textContent,/^Pos \d · Pos \d$/);
+  const hs=[...o.querySelectorAll('.draft-enemy-hero')];
+  assert.equal(hs.length,3);
+  assert.match(hs[0].textContent,/Anti-Mage/);assert.match(hs[0].textContent,/71% · 14/);
+  assert.match(hs[1].textContent,/Nature's Prophet/);assert.match(hs[2].textContent,/Axe/);
+  assert.equal(o.querySelector('.draft-enemy-cup').textContent,"Battle Cup: Nature's Prophet");
+  assert.equal(c.querySelector('.draft-enemy-meta').textContent,'Closed account');
+  assert.equal(c.querySelectorAll('.draft-enemy-hero').length,0);assert.equal(c.querySelector('.draft-enemy-cup'),null);
+ }finally{w.close();}
+});
+
+test('draft enemy scouting section is hidden when no enemies are set',async()=>{
+ const w=await boot({});
+ try{const s=w.document.getElementById('draft-enemy-scouting');assert.ok(s,'section exists');assert.equal(s.hidden,true);assert.ok(s.closest('aside.decision-panel'));}finally{w.close();}
+});
+
+test('draft enemy scouting shows Loading… while a source is fetching',async()=>{
+ const w=await boot({333:{id:'333',name:'Slow Foe',sources:sources({matches:{status:'fetching'}})}},'333');
+ try{
+  const s=w.document.getElementById('draft-enemy-scouting');
+  assert.ok(s,'section exists');assert.equal(s.hidden,false);
+  const c=s.querySelector('.draft-enemy');
+  assert.equal(c.querySelector('.draft-enemy-name').textContent,'Slow Foe');
+  assert.equal(c.querySelector('.draft-enemy-meta').textContent,'Loading…');
+  assert.equal(c.querySelectorAll('.draft-enemy-hero').length,0);
  }finally{w.close();}
 });
 
