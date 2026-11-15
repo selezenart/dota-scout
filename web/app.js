@@ -506,19 +506,24 @@ function refreshSightings(){
 // One key per game. Reset keeps the draft id, so the key also uses the opening bans
 // and the enemy accounts; a later Undo and re-pick stays the same game.
 function draftFingerprint(){let h=0x811c9dc5;const text=state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(state.enemyIds||[])].map(String).sort().join(',');for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
-const sightingGameKey=()=>(shared?.id?'draft:'+shared.id:'draft:practice')+':'+draftFingerprint();
+const sightingDraftBase=()=>shared?.id?'draft:'+shared.id:'draft:practice';
+const sightingGameKey=()=>sightingDraftBase()+':'+draftFingerprint();
+// Key last saved per draft in this session, so a corrected enemy list or opening replaces it.
+const lastSightingKey=new Map();
 async function saveSightings(entries){
  if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
  if(shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
  syncSightings();
  if(sightingState==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
  if(sightingState==='failed'){sightingScope=null;syncSightings();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
- const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey();
- if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
+ const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
+ const previous=lastSightingKey.get(slot)!==key?lastSightingKey.get(slot):null;
+ if(teamId){await backend.recordEnemySightings(teamId,key,entries,'manual');if(previous)await backend.recordEnemySightings(teamId,previous,[],'manual');}
  if(scope!==sightingScope)return false;
+ lastSightingKey.set(slot,key);
  // A list request started before this save must not drop the new rows.
  if(teamId)++sightingLoad;
- sightings=[...sightings.filter(r=>r.sourceKey!==key),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
+ sightings=[...sightings.filter(r=>r.sourceKey!==key&&r.sourceKey!==previous),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
  // Invented demo opponents never reach the real list.
  if(!teamId&&!demo)writeLocalSightings();render();return true;
 }
@@ -530,8 +535,10 @@ function renderEnemyAssignment(root){
  const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
  if(!picks.length||!enemies.length)return;
  syncSightings();const key=sightingScope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
- // Read-only teammates always see the saved assignment, refreshed by the poll.
- if(assignment.key!==key||readOnly){
+ // Teammates outside the drafter seat always see the saved assignment (refreshed by the poll);
+ // the drafter's unsaved edits survive a failed poll or a pending action.
+ const viewer=!!shared&&shared.drafter_user_id!==user?.id;
+ if(assignment.key!==key||viewer){
   const saved=sightings.filter(r=>r.sourceKey===sightingGameKey());
   assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
  }

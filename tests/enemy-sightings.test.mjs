@@ -133,3 +133,17 @@ test('Undo and a different last pick in the same game replace the saved entries'
   finally{w2.close();}
  }finally{w.close();}
 });
+
+test('correcting an enemy account after saving replaces the earlier entries for that draft',async()=>{
+ const w=await boot(),d=w.document;
+ try{
+  await pick(w,"Enemy player for Nature's Prophet",'111');await pick(w,'Enemy player for Axe','222');await save(w);
+  assert.equal(count(w),2);
+  d.getElementById('setup-button').click();await flush();
+  d.getElementById('enemy-account-input').value='111 333';
+  [...d.querySelectorAll('button')].find(b=>b.textContent==='Save and scout enemies').click();await flush();
+  for(const dialog of d.querySelectorAll('dialog[open]'))dialog.close();await flush();
+  await pick(w,"Enemy player for Nature's Prophet",'111');await save(w);
+  assert.equal(count(w),1);assert.equal(seenText(w,'Axe').length,0);
+ }finally{w.close();}
+});
