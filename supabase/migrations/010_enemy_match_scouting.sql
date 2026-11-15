@@ -24,7 +24,7 @@ begin
   end if;
   if side is not null and side not in ('radiant','dire') then raise exception 'Invalid side' using errcode = '22023'; end if;
   foreach id in array coalesce(context_ids, '{}') loop
-    if id !~ '^[1-9][0-9]{0,9}$' or id::numeric > 4294967295 then raise exception 'Invalid opponent account ID' using errcode = '22023'; end if;
+    if id is null or id !~ '^[1-9][0-9]{0,9}$' or id::numeric > 4294967295 then raise exception 'Invalid opponent account ID' using errcode = '22023'; end if;
   end loop;
   insert into public.scout_enemy_matches(team_id, match_id, summary, enemy_side, context_enemy_ids)
   values (target_team, target_match, match_summary, side, coalesce(context_ids, '{}'))
@@ -33,11 +33,11 @@ begin
         enemy_side = coalesce(excluded.enemy_side, public.scout_enemy_matches.enemy_side),
         context_enemy_ids = excluded.context_enemy_ids,
         added_at = now();
-  -- Keep each team's list bounded: drop the oldest beyond 500.
+  -- Keep each team's list bounded: drop the oldest beyond 200 (all of them are listed).
   delete from public.scout_enemy_matches m
   where m.team_id = target_team and m.match_id in (
     select match_id from public.scout_enemy_matches where team_id = target_team
-    order by added_at desc offset 500);
+    order by added_at desc offset 200);
 end;
 $$;
 

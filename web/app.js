@@ -389,34 +389,51 @@ function enemyDetails(card,p){
 // database inside a team draft; stored on this device otherwise or until the owner
 // applies migration 010.
 const enemyMatchKey='captain-enemy-matches-v1';
-let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false;
+let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false,enemyMatchState='ready';
 function enemyMatchTeam(){return typeof backend?.listEnemyMatches==='function'&&shared?.team_id&&user?shared.team_id:null;}
-function readLocalMatches(){try{const rows=JSON.parse(localStorage.getItem(enemyMatchKey)||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
-function writeLocalMatches(){try{localStorage.setItem(enemyMatchKey,JSON.stringify(enemyMatches.slice(0,200)));}catch{}}
+// Device storage is per account so another local user does not see this scouting.
+const localMatchKey=()=>enemyMatchKey+':'+(user?.id||'practice');
+function readLocalMatches(){try{const rows=JSON.parse(localStorage.getItem(localMatchKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
+function writeLocalMatches(){try{localStorage.setItem(localMatchKey(),JSON.stringify(enemyMatches.slice(0,200)));}catch{}}
 const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
 function syncEnemyMatches(){
- const teamId=enemyMatchTeam(),scope=teamId||'device';if(scope===enemyMatchScope)return;
- enemyMatchScope=scope;enemyMatchRemote=false;enemyMatches=readLocalMatches();
- if(!teamId)return;
+ const teamId=enemyMatchTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===enemyMatchScope)return;
+ enemyMatchScope=scope;enemyMatchRemote=false;
+ if(!teamId){enemyMatchState='ready';enemyMatches=readLocalMatches();return;}
+ // Team scope never mixes in device rows; adding waits until the team list settles.
+ enemyMatchState='loading';enemyMatches=[];
  void Promise.resolve().then(()=>backend.listEnemyMatches(teamId)).then(rows=>{
-  if(enemyMatchScope!==teamId)return;enemyMatchRemote=true;
+  if(enemyMatchScope!==scope)return;enemyMatchRemote=true;enemyMatchState='ready';
   enemyMatches=(Array.isArray(rows)?rows:[]).map(r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}));render();
- }).catch(error=>{if(enemyMatchScope===teamId&&missingRpc(error))notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.');});
+ }).catch(error=>{
+  if(enemyMatchScope!==scope)return;
+  if(missingRpc(error)){enemyMatchState='ready';enemyMatches=readLocalMatches();notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.');render();}
+  else{enemyMatchState='failed';notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'));}
+ });
 }
 async function addEnemyMatches(text){
  const ids=matchData.parseMatchIds(text);if(!ids.length)throw Error('Enter match IDs or match links.');if(ids.length>10)throw Error('Load at most 10 matches at a time.');
- syncEnemyMatches();const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String);
+ syncEnemyMatches();
+ if(enemyMatchState==='loading')throw Error('Team matches are still loading. Try again in a moment.');
+ if(enemyMatchState==='failed')throw Error('Team match storage is unavailable. Reload the page to try again.');
+ const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String),failed=[];
  for(const id of ids){
-  const summary=await matchData.loadMatch(id);if(scope!==enemyMatchScope)return;
-  const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
-  if(teamId)await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);
-  enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
+  try{
+   const summary=await matchData.loadMatch(id);if(scope!==enemyMatchScope)return;
+   if(!Array.isArray(summary?.players)||!summary.players.length)throw Error('no match data');
+   const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
+   if(teamId)await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);
+   if(scope!==enemyMatchScope)return;
+   enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
+  }catch{if(scope!==enemyMatchScope)return;failed.push(id);}
  }
  if(!teamId)writeLocalMatches();render();
+ if(failed.length)throw Error('Could not load match '+failed.join(', ')+'. Check the ID, or try again if OpenDota is busy.');
 }
 async function setEnemyMatchSide(matchId,side){
- const teamId=enemyMatchRemote?enemyMatchTeam():null;
+ const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope;
  if(teamId)await backend.setEnemyMatchSide(teamId,matchId,side);
+ if(scope!==enemyMatchScope)return;
  enemyMatches=enemyMatches.map(r=>r.matchId===matchId?{...r,enemySide:side}:r);if(!teamId)writeLocalMatches();render();
 }
 function renderEnemyMatches(section){
@@ -432,6 +449,12 @@ function renderEnemyMatches(section){
  for(const id of r.unresolved){
   const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${id}: which side was the enemy?`));
   for(const [label,side] of [['Enemy was Radiant','radiant'],['Enemy was Dire','dire']])button(label,()=>setEnemyMatchSide(id,side),box);
+  root.append(box);
+ }
+ // A wrongly chosen or inferred side can be corrected.
+ for(const m of r.matches.filter(m=>m.side)){
+  const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${m.matchId}: enemy was ${m.side==='radiant'?'Radiant':'Dire'}`));
+  button('Switch side for match '+m.matchId,()=>setEnemyMatchSide(m.matchId,m.side==='radiant'?'dire':'radiant'),box);
   root.append(box);
  }
  section.append(root);return true;

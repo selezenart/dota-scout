@@ -79,7 +79,8 @@ export function relevantEnemyMatches(rows = [], enemyIds = [], now = Date.now())
   const wanted = array(enemyIds).map(String);
   return array(rows).filter(r => overlaps(r.contextIds, wanted)
     || overlaps(array(r.summary?.players).map(p => p.accountId).filter(Boolean), wanted)
-    || now - Number(r.addedAt) <= 86400000);
+    // Recent rows count only if they were not saved for a different opponent.
+    || !array(r.contextIds).length && now - Number(r.addedAt) <= 86400000);
 }
 /** Team-level picks and bans of the enemy across pasted matches; closed players stay anonymous. */
 export function enemyMatchReport(rows = [], enemyIds = []) {

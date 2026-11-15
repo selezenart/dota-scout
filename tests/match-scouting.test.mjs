@@ -73,8 +73,10 @@ test('enemyMatchReport won is null when radiantWin is unknown',()=>{
 });
 test('relevantEnemyMatches keeps overlapping or last-24h rows',()=>{
  const now=1_700_000_000_000,h=3600000;
- const rows=[{matchId:'a',summary:sumA,contextIds:[],addedAt:now-100*h},{matchId:'b',summary:sumB,contextIds:['111'],addedAt:now-100*h},{matchId:'c',summary:sumB,contextIds:[],addedAt:now-2*h},{matchId:'d',summary:sumB,contextIds:[],addedAt:now-100*h}];
+ const rows=[{matchId:'a',summary:sumA,contextIds:[],addedAt:now-100*h},{matchId:'b',summary:sumB,contextIds:['111'],addedAt:now-100*h},{matchId:'c',summary:sumB,contextIds:[],addedAt:now-2*h},{matchId:'d',summary:sumB,contextIds:[],addedAt:now-100*h},{matchId:'e',summary:sumB,contextIds:['999'],addedAt:now-2*h}];
  assert.deepEqual(engine.relevantEnemyMatches(rows,['111'],now).map(r=>r.matchId),['a','b','c']);
+ // A recent row saved for another opponent must not leak into this one.
+ assert.deepEqual(engine.relevantEnemyMatches(rows,['555'],now).map(r=>r.matchId),['c']);
 });
 
 // UI
@@ -123,16 +125,38 @@ test('Setup has match input and draft panel shows Battle Cup matches with side r
   assert.equal([...m2.querySelectorAll('button')].filter(b=>/^Enemy was/.test(b.textContent)).length,0);
   picks=items(m2,'.draft-enemy-match-pick').join('|');
   assert.match(picks,/Anti-Mage.*×1/);assert.match(picks,/Nature's Prophet.*×2/);
+  const sw=[...m2.querySelectorAll('button')].find(b=>b.textContent==='Switch side for match 8002');
+  assert.ok(sw,'resolved side can be changed');sw.click();await flush();
+  const m3=d.querySelector('#draft-enemy-scouting .draft-enemy-matches');
+  picks=items(m3,'.draft-enemy-match-pick').join('|');
+  assert.match(picks,/Crystal Maiden.*×2/);assert.match(picks,/Axe.*×1/);assert.doesNotMatch(picks,/Anti-Mage/);
  }finally{w.close();}
 });
 
 test('practice matches persist on this device across reload',async()=>{
  const w=await boot(null,true);
  const saved=Object.fromEntries(Object.keys(w.localStorage).map(k=>[k,w.localStorage.getItem(k)]));w.close();
- assert.ok(saved['captain-enemy-matches-v1'],'device storage key');
+ assert.ok(saved['captain-enemy-matches-v1:practice'],'device storage key per account');
  const w2=await boot(saved,false);
  try{
   const m=w2.document.querySelector('#draft-enemy-scouting .draft-enemy-matches');
   assert.ok(m,'matches still shown');assert.match(items(m,'.draft-enemy-match-pick').join('|'),/Crystal Maiden/);
  }finally{w2.close();}
+});
+
+test('a failing match in a batch keeps the others and names the failed ID',async()=>{
+ const w=await boot(null,false),d=w.document;
+ try{
+  d.getElementById('setup-button').click();await flush();
+  d.getElementById('enemy-account-input').value='111';
+  [...d.querySelectorAll('button')].find(b=>b.textContent==='Save and scout enemies').click();await flush();
+  d.getElementById('setup-button').click();await flush();
+  d.getElementById('enemy-match-input').value='8001 8003';
+  [...d.querySelectorAll('button')].find(b=>b.textContent==='Load matches').click();await flush();
+  // With Setup open, notices render inside the dialog.
+  assert.match((d.querySelector('dialog[open] [data-dialog-notice]')||d.getElementById('notice')).textContent,/8003/);
+  const m=d.querySelector('#draft-enemy-scouting .draft-enemy-matches');
+  assert.ok(m,'loaded match still shown');assert.match(items(m,'.draft-enemy-match-pick').join('|'),/Crystal Maiden/);
+  assert.ok(w.localStorage.getItem('captain-enemy-matches-v1:practice'),'loaded match saved');
+ }finally{w.close();}
 });
