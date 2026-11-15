@@ -117,3 +117,12 @@ test('UI: ban turns have no badges and no legend',async()=>{
     assert.equal(w.document.querySelector('.rec-legend'),null);
   }finally{w.close();}
 });
+
+test('engine: a small or slight matchup edge is not tagged Counter',()=>{
+ // 7 of 10 games: a strong-looking but tiny sample; 53 of 100: enough games but a slight edge.
+ const small=[{hero_id:30,games_played:10,wins:3}],slight=[{hero_id:30,games_played:100,wins:47}];
+ for(const rows of [small,slight]){
+  const r=engine.recommend({heroes:heroMap,draft:midDraft,allies:[{...ally,selfReport:ally}],matchups:{50:rows,51:rows},firstPick:true,now}).find(x=>x.heroId===30);
+  assert.ok(r&&!r.tags.includes('counter'),'no counter tag for '+JSON.stringify(rows[0]));
+ }
+});

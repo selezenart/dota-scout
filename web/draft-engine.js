@@ -358,7 +358,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       // Category tags for our picks: the team's own heroes, counters to their picks, current meta.
       const tags = mode !== 'ourPick' ? [] : [
         (components.signature > 0 || components.desired > 0 || components.history > 0) && 'team',
-        components.matchup >= 0.5 && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
+        // Counter needs a clear edge on enough games: small pro samples are noisy.
+        components.matchup >= 1 && matchupGames >= 30 && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
       const rec = {heroId,score,reasons,tags,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
         details:Object.entries(components).map(([category,contribution]) => ({
           category,contribution,heroId,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,
