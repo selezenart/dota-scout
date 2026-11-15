@@ -73,6 +73,40 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     positions: [1, 2, 3, 4, 5].map(position => ({position, games: counts[position]})).filter(r => r.games > 0)
       .sort((a, b) => b.games - a.games || a.position - b.position)};
 }
+const overlaps = (ids, wanted) => array(ids).some(id => wanted.includes(String(id)));
+/** Earlier Battle Cup matches pasted for scouting, worth showing for the current enemies. */
+export function relevantEnemyMatches(rows = [], enemyIds = [], now = Date.now()) {
+  const wanted = array(enemyIds).map(String);
+  return array(rows).filter(r => overlaps(r.contextIds, wanted)
+    || overlaps(array(r.summary?.players).map(p => p.accountId).filter(Boolean), wanted)
+    || now - Number(r.addedAt) <= 86400000);
+}
+/** Team-level picks and bans of the enemy across pasted matches; closed players stay anonymous. */
+export function enemyMatchReport(rows = [], enemyIds = []) {
+  const wanted = array(enemyIds).map(String), picks = new Map(), bans = new Map();
+  const report = {matches: [], unresolved: [], picks: [], bans: [], players: [], anonymous: 0};
+  for (const row of array(rows)) {
+    const players = array(row.summary?.players);
+    const onSide = radiant => players.some(p => p.isRadiant === radiant && p.accountId && wanted.includes(p.accountId));
+    const side = row.enemySide === 'radiant' || row.enemySide === 'dire' ? row.enemySide
+      : onSide(true) !== onSide(false) ? (onSide(true) ? 'radiant' : 'dire') : null;
+    const radiantWin = row.summary?.radiantWin;
+    report.matches.push({matchId: row.matchId, side, won: side && typeof radiantWin === 'boolean' ? radiantWin === (side === 'radiant') : null});
+    if (!side) { report.unresolved.push(row.matchId); continue; }
+    const won = typeof radiantWin === 'boolean' && radiantWin === (side === 'radiant');
+    for (const p of players.filter(p => p.isRadiant === (side === 'radiant'))) {
+      const h = picks.get(p.heroId) || {heroId: p.heroId, games: 0, wins: 0};
+      h.games++; if (won) h.wins++; picks.set(p.heroId, h);
+      if (p.accountId) report.players.push({accountId: p.accountId, name: p.name, heroId: p.heroId, matchId: row.matchId});
+      else report.anonymous++;
+    }
+    for (const b of array(row.summary?.picksBans).filter(b => !b.isPick && b.team === (side === 'radiant' ? 0 : 1)))
+      bans.set(b.heroId, {heroId: b.heroId, count: (bans.get(b.heroId)?.count || 0) + 1});
+  }
+  report.picks = [...picks.values()].sort((a, b) => b.games - a.games || b.wins - a.wins || a.heroId - b.heroId);
+  report.bans = [...bans.values()].sort((a, b) => b.count - a.count || a.heroId - b.heroId);
+  return report;
+}
 function history(player, now, byId) {
   const result = new Map(), seen = new Set();
   const row = id => {

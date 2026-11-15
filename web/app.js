@@ -6,9 +6,11 @@ import {createWelcome} from './welcome.js';
 
 import snapshot from './heroes.json';
 
-import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary} from './draft-engine.js';
+import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches} from './draft-engine.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
+// Namespace import keeps optional scouting helpers off the strict named-import list.
+import * as matchData from './data.js';
 
 import {initialState,demoState,reduceDraft} from './demo.js';
 
@@ -383,10 +385,61 @@ function enemyDetails(card,p){
  card.append(el('h4','Recent'),el('p',total?`${s.recent.wins}W ${s.recent.losses}L (last ${total})`:'No recent matches','enemy-recent'));
  strip('Battle Cup','enemy-cup',s.cup,h=>`${h.games} games · ${h.wins}W`,'No Battle Cup games found');
 }
+// Earlier Battle Cup matches pasted to scout the enemy team. Shared through the team
+// database inside a team draft; stored on this device otherwise or until the owner
+// applies migration 010.
+const enemyMatchKey='captain-enemy-matches-v1';
+let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false;
+function enemyMatchTeam(){return typeof backend?.listEnemyMatches==='function'&&shared?.team_id&&user?shared.team_id:null;}
+function readLocalMatches(){try{const rows=JSON.parse(localStorage.getItem(enemyMatchKey)||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
+function writeLocalMatches(){try{localStorage.setItem(enemyMatchKey,JSON.stringify(enemyMatches.slice(0,200)));}catch{}}
+const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
+function syncEnemyMatches(){
+ const teamId=enemyMatchTeam(),scope=teamId||'device';if(scope===enemyMatchScope)return;
+ enemyMatchScope=scope;enemyMatchRemote=false;enemyMatches=readLocalMatches();
+ if(!teamId)return;
+ void Promise.resolve().then(()=>backend.listEnemyMatches(teamId)).then(rows=>{
+  if(enemyMatchScope!==teamId)return;enemyMatchRemote=true;
+  enemyMatches=(Array.isArray(rows)?rows:[]).map(r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}));render();
+ }).catch(error=>{if(enemyMatchScope===teamId&&missingRpc(error))notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.');});
+}
+async function addEnemyMatches(text){
+ const ids=matchData.parseMatchIds(text);if(!ids.length)throw Error('Enter match IDs or match links.');if(ids.length>10)throw Error('Load at most 10 matches at a time.');
+ syncEnemyMatches();const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String);
+ for(const id of ids){
+  const summary=await matchData.loadMatch(id);if(scope!==enemyMatchScope)return;
+  const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
+  if(teamId)await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);
+  enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
+ }
+ if(!teamId)writeLocalMatches();render();
+}
+async function setEnemyMatchSide(matchId,side){
+ const teamId=enemyMatchRemote?enemyMatchTeam():null;
+ if(teamId)await backend.setEnemyMatchSide(teamId,matchId,side);
+ enemyMatches=enemyMatches.map(r=>r.matchId===matchId?{...r,enemySide:side}:r);if(!teamId)writeLocalMatches();render();
+}
+function renderEnemyMatches(section){
+ section.querySelector('.draft-enemy-matches')?.remove();
+ const rows=relevantEnemyMatches(enemyMatches,state.enemyIds||[],Date.now());if(!rows.length)return false;
+ const r=enemyMatchReport(rows,state.enemyIds||[]),root=el('div',null,'draft-enemy-matches');
+ const resolved=r.matches.filter(m=>m.side),wins=resolved.filter(m=>m.won).length;
+ root.append(el('h4','Their Battle Cup matches'),el('p',`${rows.length} match${rows.length===1?'':'es'} · ${wins}W ${resolved.filter(m=>m.won===false).length}L${r.anonymous?` · ${r.anonymous} anonymous picks`:''}`,'draft-enemy-match-summary'));
+ const list=(cls,items,label)=>{if(!items.length)return;const box=el('div',null,'draft-enemy-match-list');for(const h of items.slice(0,8))box.append(el('span',label(h),cls));root.append(box);};
+ list('draft-enemy-match-pick',r.picks,h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`);
+ if(r.bans.length)root.append(el('p','They banned:','draft-enemy-match-label'));
+ list('draft-enemy-match-ban',r.bans,h=>`${heroName(h.heroId)} ×${h.count}`);
+ for(const id of r.unresolved){
+  const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${id}: which side was the enemy?`));
+  for(const [label,side] of [['Enemy was Radiant','radiant'],['Enemy was Dire','dire']])button(label,()=>setEnemyMatchSide(id,side),box);
+  root.append(box);
+ }
+ section.append(root);return true;
+}
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
 function renderDraftEnemies(){
  const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
- const enemies=opponents();section.hidden=!enemies.length;list.replaceChildren();
+ syncEnemyMatches();const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');
@@ -882,6 +935,9 @@ async function lobby(){
   }
  }
  const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(state.enemyIds||[]).join(' '),'textarea');enemies.id='enemy-account-input';enemies.placeholder='One player ID or link per line';enemies.rows=3;scouting.append(scoutingActions);
+ const matchIds=field(scouting,'Their earlier Battle Cup matches (IDs or links)','','textarea');matchIds.id='enemy-match-input';matchIds.placeholder='Match IDs or Dotabuff/OpenDota links from the bracket';matchIds.rows=2;
+ const matchActions=el('div',null,'lobby-actions');scouting.append(matchActions);
+ button('Load matches',async()=>{await addEnemyMatches(matchIds.value);matchIds.value='';notice('Battle Cup matches loaded.');},matchActions);
  const validateEnemies=()=>{
   const tokens=enemies.value.trim().split(/[\s,;]+/).filter(Boolean);
   const invalid=tokens.filter(token=>parseAccountIds(token).length!==1);

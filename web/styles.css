@@ -5082,3 +5082,12 @@ body:has(#identity-download:not([hidden])) {min-height:100vh;background-repeat:n
 .draft-enemy-hero{display:flex;align-items:center;gap:4px;font-size:11px}
 .draft-enemy-hero img{width:30px;height:17px;object-fit:cover;border-radius:3px}
 .draft-enemy-cup{grid-column:1/-1;margin:0;font-size:11px;color:#e7c58e}
+
+.draft-enemy-matches{padding:8px 0 4px;border-top:1px solid #2a2f37}
+.draft-enemy-matches h4{margin:0 0 4px;font-size:12px}
+.draft-enemy-match-summary,.draft-enemy-match-label{margin:2px 0;font-size:11px;color:#aab1bd}
+.draft-enemy-match-list{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.draft-enemy-match-pick,.draft-enemy-match-ban{font-size:11px;padding:2px 6px;border-radius:4px;background:#252a32}
+.draft-enemy-match-ban{color:#e7c58e}
+.draft-enemy-match-side{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0;font-size:11px}
+.draft-enemy-match-side button{font-size:11px;padding:3px 8px}
