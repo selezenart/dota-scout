@@ -518,14 +518,20 @@ async function saveSightings(entries){
  if(sightingState==='failed'){sightingScope=null;syncSightings();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
  const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
  const previous=lastSightingKey.get(slot)!==key?lastSightingKey.get(slot):null;
- if(teamId){await backend.recordEnemySightings(teamId,key,entries,'manual');if(previous)await backend.recordEnemySightings(teamId,previous,[],'manual');}
+ if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
  if(scope!==sightingScope)return false;
- lastSightingKey.set(slot,key);
+ let staleKept=false;
+ if(teamId&&previous)try{await backend.recordEnemySightings(teamId,previous,[],'manual');}catch{staleKept=true;}
+ if(scope!==sightingScope)return false;
+ // Remembered only once the earlier version is gone, so saving again retries the cleanup.
+ if(!staleKept)lastSightingKey.set(slot,key);
  // A list request started before this save must not drop the new rows.
  if(teamId)++sightingLoad;
  sightings=[...sightings.filter(r=>r.sourceKey!==key&&r.sourceKey!==previous),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
  // Invented demo opponents never reach the real list.
- if(!teamId&&!demo)writeLocalSightings();render();return true;
+ if(!teamId&&!demo)writeLocalSightings();render();
+ if(staleKept)notice('Saved. The earlier version of this game could not be removed; save again to retry.');
+ return true;
 }
 function seenAgainstUs(p){
  const seen=enemySightings(sightings,String(p.id));
@@ -567,7 +573,10 @@ function renderEnemyAssignment(root){
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
 function renderDraftEnemies(){
  const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
- syncEnemyMatches();syncSightings();const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
+ syncEnemyMatches();syncSightings();
+ // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
+ if(!state.actions.length)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
+ const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');

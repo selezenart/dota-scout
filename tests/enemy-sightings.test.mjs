@@ -147,3 +147,23 @@ test('correcting an enemy account after saving replaces the earlier entries for 
   assert.equal(count(w),1);assert.equal(seenText(w,'Axe').length,0);
  }finally{w.close();}
 });
+
+test('a Reset and a new game in the same window keep the earlier game',async()=>{
+ const w=await boot(),d=w.document;
+ try{
+  await pick(w,"Enemy player for Nature's Prophet",'111');await pick(w,'Enemy player for Axe','222');await save(w);
+  assert.equal(count(w),2);
+  d.getElementById('reset-draft').click();await flush();
+  // Play a fresh 24-action draft through the real controls.
+  for(let i=0;i<24;i++){
+   const card=[...d.querySelectorAll('#hero-groups [data-hero-id]')].find(b=>!b.disabled&&!b.getAttribute('aria-disabled'));
+   assert.ok(card,'a hero is available at step '+i);card.click();await flush();
+   const confirm=[...d.querySelectorAll('button')].find(b=>/^(Enemy )?(Pick|Ban) /.test(b.textContent)&&!b.disabled);
+   assert.ok(confirm,'confirm button at step '+i);confirm.click();await flush();
+  }
+  const selects=[...d.querySelectorAll('#analysis .enemy-assignment select[data-hero]')];
+  assert.equal(selects.length,5);
+  selects[0].value='111';selects[0].dispatchEvent(new w.Event('change',{bubbles:true}));await save(w);
+  assert.equal(count(w),3,'game 1 entries kept, game 2 added');
+ }finally{w.close();}
+});
