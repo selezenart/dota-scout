@@ -8,34 +8,48 @@ const plain = {id:1,roles:['Carry']};
 const pool = [plain,strong,weak];
 const round2 = x => Math.round(x*100)/100;
 
-test('metaTotals sums Divine+ picks and pro picks, missing fields are 0',()=>{
-  assert.deepEqual(metaTotals([{'7_pick':100,'8_pick':50,pro_pick:3},{'7_pick':10,pro_pick:2},{}]),{high:160,pro:5});
-  assert.deepEqual(metaTotals([]),{high:0,pro:0});
+test('metaTotals sums Divine+ picks, pro picks and counts heroes with Divine+ picks',()=>{
+  assert.deepEqual(metaTotals([{'7_pick':100,'8_pick':50,pro_pick:3},{'7_pick':10,pro_pick:2},{pro_pick:4}]),{high:160,pro:9,heroes:2});
+  assert.deepEqual(metaTotals([]),{high:0,pro:0,heroes:0});
 });
+// strong: 250 picks, 132 wins -> 52.8% win; pickRate 100*250*10/50000 = 5; avg = 1000/100 = 10
+// winPart (52.8-50)*.5 = 1.4; pickPart .75*log2(5/10) = -.75; pro: 30 of 100 games -> min(1,.6) * min(1,100/300) = .2; 1.4-.75+.2 = .85
 test('heroMeta computes rates and score from Divine+ and pro data',()=>{
-  assert.deepEqual(heroMeta(strong,{high:50000,pro:1000}),
-    {winRate:52.8,pickRate:5,proPicks:10,proBans:20,proWinRate:60,score:7.2});
+  assert.deepEqual(heroMeta(strong,{high:50000,pro:1000,heroes:100}),
+    {winRate:52.8,pickRate:5,proPicks:10,proBans:20,proWinRate:60,score:0.85});
 });
 test('heroMeta is null below both thresholds',()=>{
-  assert.equal(heroMeta({'7_pick':100,'8_pick':99,pro_pick:2,pro_ban:2},{high:1000,pro:1000}),null);
-  assert.equal(heroMeta({},{high:1000,pro:1000}),null);
+  assert.equal(heroMeta({'7_pick':100,'8_pick':99,pro_pick:2,pro_ban:2},{high:1000,pro:1000,heroes:10}),null);
+  assert.equal(heroMeta({},{high:1000,pro:1000,heroes:10}),null);
 });
-test('heroMeta boundary: 200 Divine+ games alone is enough, without pro data',()=>{
-  const m = heroMeta({'8_pick':200,'8_win':100},{high:20000,pro:0});
-  assert.deepEqual(m,{winRate:50,pickRate:10,proPicks:0,proBans:0,proWinRate:null,score:4});
+// pickRate 100*200*10/40000 = 5 vs avg 10 -> .75*log2(.5) = -.75; winRate 50 -> 0; no pro
+test('heroMeta: pick rate below the average gives a negative pick part',()=>{
+  const m = heroMeta({'8_pick':200,'8_win':100},{high:40000,pro:0,heroes:100});
+  assert.deepEqual(m,{winRate:50,pickRate:5,proPicks:0,proBans:0,proWinRate:null,score:-0.75});
 });
+// pickRate 100*200*10/10000 = 20 vs avg 10 -> .75*log2(2) = .75
+test('heroMeta: pick rate above the average gives a positive pick part',()=>{
+  assert.equal(heroMeta({'8_pick':200,'8_win':100},{high:10000,pro:0,heroes:100}).score,0.75);
+});
+test('heroMeta: pick part is 0 without a hero count',()=>{
+  assert.deepEqual(heroMeta({'8_pick':200,'8_win':100},{high:20000,pro:0,heroes:0}),
+    {winRate:50,pickRate:10,proPicks:0,proBans:0,proWinRate:null,score:0});
+});
+// 5 pro picks+bans, 100 pro games: min(1,2*5/100)=.1, damping 100/300 -> .0333 -> .03
 test('heroMeta boundary: 5 pro picks+bans alone is enough, but win rates need samples',()=>{
-  const m = heroMeta({'7_pick':199,pro_pick:3,pro_ban:2,pro_win:3},{high:1000,pro:1000});
-  assert.deepEqual(m,{winRate:null,pickRate:null,proPicks:3,proBans:2,proWinRate:null,score:0.4});
+  const m = heroMeta({'7_pick':199,pro_pick:3,pro_ban:2,pro_win:3},{high:1000,pro:1000,heroes:10});
+  assert.deepEqual(m,{winRate:null,pickRate:null,proPicks:3,proBans:2,proWinRate:null,score:0.03});
 });
-test('heroMeta tolerates missing pro fields and totals',()=>{
-  assert.deepEqual(heroMeta({pro_pick:5,pro_win:3},{high:0,pro:1000}),
-    {winRate:null,pickRate:null,proPicks:5,proBans:0,proWinRate:60,score:0.4});
-  assert.equal(heroMeta({pro_pick:5,pro_win:3},{high:0,pro:0}).score,0);
+// 50 pro picks+bans of 100 games: min(1,2*50/100)=1, small-sample damping 100/300 -> .33
+test('heroMeta damps the pro part for small pro samples',()=>{
+  assert.equal(heroMeta({pro_pick:10,pro_ban:40},{high:0,pro:1000,heroes:0}).score,0.33);
+  assert.equal(heroMeta({pro_pick:5,pro_win:3},{high:0,pro:0,heroes:0}).score,0);
 });
-test('heroMeta score clamps at 12 and -4',()=>{
-  assert.equal(heroMeta({'7_pick':1000,'7_win':800,pro_pick:100,pro_ban:100},{high:10000,pro:1000}).score,12);
-  assert.equal(heroMeta({'7_pick':1000,'7_win':300},{high:0,pro:0}).score,-4);
+// 1000 picks, 600 wins: win part clamps 1.5; pickRate 100 vs avg 10 -> clamps 1; 200 of 300 pro games -> 1*1 = 1; 3.5 -> 3
+// 200 picks, 60 wins: win -1.5; pickRate .2 vs avg 10 -> clamps -.75; -2.25 -> -1.5
+test('heroMeta score clamps at 3 and -1.5',()=>{
+  assert.equal(heroMeta({'7_pick':1000,'7_win':600,pro_pick:100,pro_ban:100},{high:10000,pro:3000,heroes:100}).score,3);
+  assert.equal(heroMeta({'7_pick':200,'7_win':60},{high:1000000,pro:0,heroes:100}).score,-1.5);
 });
 
 const pickRec = (heroes,extra={}) => recommend({heroes,now,mode:'ourPick',...extra});
@@ -80,4 +94,53 @@ test('ban turns ignore meta',()=>{
     assert.ok(!rec.some(x=>x.reasons.some(t=>t.startsWith('Meta: '))));
     assert.equal(r.details.find(d=>d.category==='meta').contribution,0);
   }
+});
+
+// Pool with realistic totals: 100 small fillers, one huge Divine+ filler and one pro-heavy filler.
+const fillers = [{id:9,roles:['Carry'],'7_pick':100000},{id:8,roles:['Carry'],'7_pick':90,pro_pick:2900},
+  ...Array.from({length:100},(_,i)=>({id:100+i,roles:['Carry'],'7_pick':90}))];
+// worst: 30% win → -1.5; 300 picks is ~2.6% of games vs ~9.6% average → -0.75; clamp → -1.5
+const worst = {id:2,roles:['Carry'],'7_pick':300,'7_win':90}, best = {id:3,roles:['Carry'],'7_pick':3000,'7_win':1800,pro_pick:100,pro_ban:100};
+const rankPool = [worst,best,...fillers], rankTotals = metaTotals(rankPool);
+const metaOf = (rec,id) => rec.find(r=>r.heroId===id);
+test('fixtures: worst meta is -1.5 and best meta is 3',()=>{
+  assert.equal(heroMeta(worst,rankTotals).score,-1.5);
+  assert.equal(heroMeta(best,rankTotals).score,3);
+});
+test('a desired hero with the worst meta still outranks an undesired top-meta hero',()=>{
+  const allies = [{id:1,selfReport:{desiredHeroes:[2]}}];
+  const rec = pickRec(rankPool,{allies});
+  assert.ok(metaOf(rec,2).score > metaOf(rec,3).score);
+  assert.ok(rec.findIndex(r=>r.heroId===2) < rec.findIndex(r=>r.heroId===3));
+});
+test('a hero the player has 3 games on outranks a top-meta hero despite the worst meta',()=>{
+  const allies = [{id:1,heroes:[{hero_id:2,games:3,last_played:now-100*86400}]}];
+  const rec = pickRec(rankPool,{allies});
+  assert.ok(metaOf(rec,2).components.history > 0);
+  assert.ok(rec.findIndex(r=>r.heroId===2) < rec.findIndex(r=>r.heroId===3));
+});
+test('pick turn: a strong meta reason (score >= 2) comes first, a weaker one stays last',()=>{
+  // mid: 52% win → +1; ~13% of games vs ~9.5% average → about +0.34; total about 1.34 (between 0 and 2)
+  const mid = {id:7,roles:['Carry'],'7_pick':1500,'7_win':780};
+  const rec = pickRec([mid,...rankPool]);
+  const top = metaOf(rec,3), low = metaOf(rec,7);
+  assert.ok(top.components.meta >= 2 && top.reasons.length > 1);
+  assert.ok(top.reasons[0].startsWith('Meta: '));
+  assert.ok(low.components.meta > 0 && low.components.meta < 2 && low.reasons.length > 1);
+  assert.ok(low.reasons.at(-1).startsWith('Meta: '));
+});
+test('pick turn without any meta data says so in the evidence; ban turns do not',()=>{
+  const rec = pickRec([{id:1,roles:['Carry']},{id:2,roles:['Carry']}]);
+  assert.equal(rec.length,2);
+  assert.ok(rec.every(r=>r.evidence.includes('Meta data unavailable')));
+  const withMeta = pickRec(rankPool);
+  assert.ok(withMeta.every(r=>!r.evidence.includes('Meta data unavailable')));
+  const ban = recommend({heroes:[{id:1,roles:['Carry']}],now,mode:'enemyBan',allies:[{id:1,selfReport:{signatureHeroes:[1]}}]});
+  assert.equal(ban.length,1);
+  assert.ok(!ban[0].evidence.includes('Meta data unavailable'));
+});
+test('predicted enemy picks use meta too',()=>{
+  const rec = recommend({heroes:pool,now,mode:'enemyPick'}), totals = metaTotals(pool);
+  assert.equal(rec.find(r=>r.heroId===2).components.meta,heroMeta(strong,totals).score);
+  assert.equal(rec.find(r=>r.heroId===1).components.meta,0);
 });

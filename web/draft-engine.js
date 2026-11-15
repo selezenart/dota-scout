@@ -194,9 +194,12 @@ const round1 = x => Math.round(x * 10) / 10;
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 /** Pool-wide totals for meta rates: Divine+ (brackets 7-8) picks and pro picks. */
 export function metaTotals(pool = []) {
-  let high = 0, pro = 0;
-  for (const h of array(pool)) { high += (+h?.['7_pick'] || 0) + (+h?.['8_pick'] || 0); pro += +h?.pro_pick || 0; }
-  return {high, pro};
+  let high = 0, pro = 0, heroes = 0;
+  for (const h of array(pool)) {
+    const picks = (+h?.['7_pick'] || 0) + (+h?.['8_pick'] || 0);
+    high += picks; pro += +h?.pro_pick || 0; if (picks > 0) heroes++;
+  }
+  return {high, pro, heroes};
 }
 /** Current meta for one hero from OpenDota hero stats: Divine+ public games and pro games. */
 export function heroMeta(hero = {}, totals = {}) {
@@ -206,10 +209,15 @@ export function heroMeta(hero = {}, totals = {}) {
   const winRate = highPicks >= 200 ? round1(100 * highWins / highPicks) : null;
   const pickRate = totals.high > 0 && highPicks >= 200 ? round1(100 * highPicks * 10 / totals.high) : null;
   const proWinRate = proPicks >= 5 ? round1(100 * (+hero.pro_win || 0) / proPicks) : null;
-  const winPart = winRate == null ? 0 : clamp(winRate - 50, -4, 6);
-  const pickPart = pickRate == null ? 0 : Math.min(4, pickRate * 0.4);
-  const proPart = totals.pro > 0 ? Math.min(4, 8 * (proPicks + proBans) / (totals.pro / 10)) : 0;
-  return {winRate, pickRate, proPicks, proBans, proWinRate, score: +clamp(winPart + pickPart + proPart, -4, 12).toFixed(2)};
+  // A gentle tie-breaker: the whole range (-1.5..3) stays below "wants to play" (5),
+  // so a player's own heroes win when everything else is equal.
+  const avgPick = totals.heroes > 0 ? 1000 / totals.heroes : null;
+  const winPart = winRate == null ? 0 : clamp((winRate - 50) * 0.5, -1.5, 1.5);
+  const pickPart = pickRate == null || !avgPick ? 0 : pickRate <= 0 ? -0.75 : clamp(0.75 * Math.log2(pickRate / avgPick), -0.75, 1);
+  const proGames = (totals.pro || 0) / 10;
+  // Few pro games say little: damp until about 300 games.
+  const proPart = proGames > 0 ? Math.min(1, 2 * (proPicks + proBans) / proGames) * Math.min(1, proGames / 300) : 0;
+  return {winRate, pickRate, proPicks, proBans, proWinRate, score: +clamp(winPart + pickPart + proPart, -1.5, 3).toFixed(2)};
 }
 function metaText(m) {
   const parts = [];
@@ -315,7 +323,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
           if (components.deny) reasons.push('Denies '+target.p.name+' a played hero ('+experienceText(target.h)+')');
         }
         if (slot.score > 0) reasons.push('Position '+slot.position+' fit');
-        if (metaReason) reasons.push(metaReason);
+        if (metaReason) meta.score >= 2 ? reasons.unshift(metaReason) : reasons.push(metaReason);
+        if (!totals.high && !totals.pro) evidence.push('Meta data unavailable');
       }
       let matchupGames = 0;
       {
