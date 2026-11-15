@@ -1,5 +1,5 @@
 import {signupProgress} from './signup-progress.js';
-export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,onRegistered,onPractice,onHome,onInvitation,hasInvitation,hasDraftInvitation}) {
+export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,onRegistered,onPractice,onHome,onInvitation,hasInvitation,hasDraftInvitation,onOpenTeam}) {
  const $=id=>document.getElementById(id);
  function googleButton(){
   const wrap=document.createElement('div');wrap.className='google-auth';
@@ -27,6 +27,18 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
  }
  let connection='checking';
  let explicitHome=false, mode='signin', busy=false, recovery=false;
+ // A restored session must not look signed out on the home page.
+ let signedInAccount=false;
+ function syncAccount(){
+  const signin=$('welcome-signin'),register=$('welcome-register');
+  if(signin){
+   const updating=signedInAccount&&recovery;
+   signin.textContent=updating?'Choose new password':signedInAccount?'Open my team':'Sign in';
+   // Signed in, the button navigates instead of opening the auth panel.
+   if(signedInAccount&&!updating)signin.removeAttribute('aria-controls');else signin.setAttribute('aria-controls','welcome-auth');
+  }
+  if(register)register.hidden=signedInAccount;
+ }
  function view(board){document.body.dataset.view=board?'board':'welcome';if($('welcome-view'))$('welcome-view').hidden=board;if($('app-shell'))$('app-shell').hidden=!board;}
  function board(){explicitHome=false;clear();view(true);}
  function continueToBoard(){if(!onInvitation?.()){if(onRegistered)onRegistered();else board();}}
@@ -82,6 +94,7 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
     }else if(mode==='update'){
      await backend.updatePassword(password.value);
      recovery=false;
+     syncAccount();
      confirmation=true;
      password.value='';
      for(const child of [...f.children])if(child!==heading&&child!==message)child.remove();
@@ -145,13 +158,13 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
   action(expired?'Continue to Battle Cup':invalid?'Dismiss invitation':'Decline invitation',onDismiss,expired);
   root.append(card);actions.firstElementChild?.focus();
  }
- for(const [id,next] of [['welcome-signin','signin'],['welcome-register','register']])if($(id))$(id).onclick=e=>{e.preventDefault();form(next);};
+ for(const [id,next] of [['welcome-signin','signin'],['welcome-register','register']])if($(id))$(id).onclick=e=>{e.preventDefault();if(signedInAccount){if(recovery)form('update');else if(onOpenTeam)onOpenTeam();else board();return;}form(next);};
  if($('welcome-practice'))$('welcome-practice').onclick=e=>{e.preventDefault();const result=onPractice();const enter=allowed=>{if(allowed===false)return;board();$('hero-search')?.focus();};if(result?.then)result.then(enter);else enter(result);};
  if($('home-button'))$('home-button').onclick=e=>{e.preventDefault();onHome?.();const url=new URL(location.href);url.searchParams.delete('cup');url.searchParams.delete('practice');url.searchParams.delete('demo');url.searchParams.delete('mock');url.searchParams.delete('draft');url.searchParams.delete('team');history.pushState({home:true},'',url);if(!onInvitation?.())home();};
  const params=new URLSearchParams(location.search);view(params.has('demo')||params.has('mock')||params.has('practice'));
- return {board,home,form,clear,invitation,setConnection(value){connection=value;refreshSteam();refreshGoogle();const message=$('welcome-auth')?.querySelector('form>.auth-message[role="status"]');if(message&&!busy&&(!message.dataset.state||message.dataset.state==='availability')){delete message.dataset.state;showConnection(message);}},linkError(provider){
+ return {board,home,form,clear,invitation,setAccount(value,keepRecovery=false){signedInAccount=!!value;if(!keepRecovery)recovery=false;syncAccount();},setConnection(value){connection=value;refreshSteam();refreshGoogle();const message=$('welcome-auth')?.querySelector('form>.auth-message[role="status"]');if(message&&!busy&&(!message.dataset.state||message.dataset.state==='availability')){delete message.dataset.state;showConnection(message);}},linkError(provider){
   form('signin');
   const message=$('welcome-auth')?.querySelector('form>.auth-message[role="status"]');
   if(message){message.dataset.state='error';message.textContent=provider==='google'?'Google sign-in was canceled or could not finish. Try again, or use Steam or email.':'This email link is expired or has already been used. If you confirmed your email earlier, try signing in. For password recovery, request a fresh link.';}
- },get recovery(){return recovery;},signedIn(){if(recovery)return;clear();if(!explicitHome)board();},recover(){recovery=true;form('update');}};
+ },get recovery(){return recovery;},signedIn(){if(recovery)return;clear();if(!explicitHome)board();},recover(){recovery=true;syncAccount();form('update');}};
 }
