@@ -4,7 +4,7 @@
 -- members of that team.
 create table public.scout_enemy_sightings (
   team_id uuid not null references public.teams(id) on delete cascade,
-  source_key text not null check (source_key ~ '^(draft:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|match:[1-9][0-9]{0,10})$'),
+  source_key text not null check (source_key ~ '^(draft:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}|match:[1-9][0-9]{0,10})$'),
   account_id bigint not null check (account_id between 1 and 4294967295),
   hero_id integer not null check (hero_id between 1 and 1000),
   source text not null default 'manual' check (source in ('manual','helper')),
@@ -18,7 +18,8 @@ alter table public.scout_enemy_sightings enable row level security;
 revoke all on public.scout_enemy_sightings from public, anon, authenticated;
 
 -- Replaces the entries of one game (draft or match) so a corrected assignment
--- does not add duplicates.
+-- does not add duplicates. 'helper' marks entries meant for the local helper's
+-- automatic recording; any member can currently set it, so it is a label only.
 create function public.record_enemy_sightings(target_team uuid, game_key text, entries jsonb, entry_source text)
 returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare entry jsonb; account text; hero text;
@@ -27,8 +28,13 @@ begin
     raise exception 'Team membership required' using errcode = '42501';
   end if;
   if coalesce(entry_source, 'manual') not in ('manual','helper') then raise exception 'Invalid source' using errcode = '22023'; end if;
-  if game_key is null or game_key !~ '^(draft:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|match:[1-9][0-9]{0,10})$' then
+  if game_key is null or game_key !~ '^(draft:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}|match:[1-9][0-9]{0,10})$' then
     raise exception 'Invalid game key' using errcode = '22023';
+  end if;
+  -- A draft key must name one of this team's drafts.
+  if game_key like 'draft:%' and not exists (
+    select 1 from public.team_drafts d where d.id = substring(game_key from 7 for 36)::uuid and d.team_id = target_team) then
+    raise exception 'Unknown draft for this team' using errcode = '22023';
   end if;
   if entries is null or jsonb_typeof(entries) <> 'array' or jsonb_array_length(entries) > 5 then
     raise exception 'Invalid sightings' using errcode = '22023';
@@ -49,11 +55,11 @@ begin
   select target_team, game_key, (value->>'accountId')::bigint, (value->>'heroId')::integer, coalesce(entry_source, 'manual'),
     case when jsonb_typeof(value->'enemyWon') = 'boolean' then (value->>'enemyWon')::boolean end
   from jsonb_array_elements(entries);
-  -- Keep each team's list bounded.
+  -- Keep each team's list bounded by whole games (at most 400 games, 2000 rows).
   delete from public.scout_enemy_sightings s
-  where s.team_id = target_team and (s.source_key, s.account_id) in (
-    select source_key, account_id from public.scout_enemy_sightings where team_id = target_team
-    order by seen_at desc offset 2000);
+  where s.team_id = target_team and s.source_key in (
+    select source_key from public.scout_enemy_sightings where team_id = target_team
+    group by source_key order by max(seen_at) desc, source_key offset 400);
 end;
 $$;
 

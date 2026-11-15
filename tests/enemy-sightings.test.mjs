@@ -91,3 +91,31 @@ test('re-saving the same draft replaces its earlier sightings',async()=>{
   assert.equal(d.querySelectorAll('#draft-enemy-scouting .draft-enemy-seen').length,1);
  }finally{w.close();}
 });
+
+test('a different practice game keeps the earlier game sightings',async()=>{
+ const w=await boot();
+ try{
+  await pick(w,"Enemy player for Nature's Prophet",'111');await pick(w,'Enemy player for Axe','222');await save(w);
+  assert.equal(count(w),2);
+  const saved=Object.fromEntries(Object.keys(w.localStorage).map(k=>[k,w.localStorage.getItem(k)]));w.close();
+  // Next game: same enemies, different draft (first ban changed).
+  const next=draft();next[0]={...next[0],heroId:139};
+  saved['captain-practice-v1']=JSON.stringify({state:{actions:next,firstPick:true,enemyIds:['111','222']},profile:{}});
+  const w2=await boot(saved);
+  try{
+   const fresh=[...w2.document.querySelectorAll('#analysis .enemy-assignment select')].filter(s=>s.getAttribute('aria-label')?.startsWith('Enemy player'));
+   assert.ok(fresh.every(s=>s.value===''),'new game starts with an empty form');
+   await pick(w2,'Enemy player for Axe','111');await save(w2);
+   // Both games kept: 222 played Axe in game 1, 111 played Axe in game 2.
+   assert.equal(count(w2),3);assert.equal(seenText(w2,'Axe').length,2);
+  }finally{w2.close();}
+ }finally{w.close();}
+});
+
+test('the result selector has a visible label',async()=>{
+ const w=await boot();
+ try{
+  const select=[...w.document.querySelectorAll('#analysis .enemy-assignment select')].find(s=>[...s.options].some(o=>o.value==='lost'));
+  assert.ok(select.closest('label'),'wrapped in a label');assert.match(select.closest('label').textContent,/Our result/);
+ }finally{w.close();}
+});

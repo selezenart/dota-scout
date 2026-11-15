@@ -475,7 +475,7 @@ function renderEnemyMatches(section){
 // Who played what against us: recorded by the team after its own games, so it also
 // covers closed accounts. Team database in team drafts, this device otherwise.
 const sightingKey='captain-enemy-sightings-v1';
-let sightings=[],sightingScope=null,sightingRemote=false,sightingState='ready',sightingLoad=0,assignment={key:null,map:{},result:''};
+let sightings=[],sightingScope=null,sightingRemote=false,sightingState='ready',sightingLoad=0,sightingLoadedAt=0,assignment={key:null,map:{},result:''};
 const localSightingKey=()=>sightingKey+':'+(user?.id||'practice');
 function sightingTeam(){return typeof backend?.listEnemySightings==='function'&&shared?.team_id&&user?shared.team_id:null;}
 function readLocalSightings(){try{const rows=JSON.parse(localStorage.getItem(localSightingKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
@@ -486,7 +486,7 @@ function syncSightings(){
  if(!teamId){sightingState='ready';sightings=readLocalSightings();return;}
  sightingState='loading';sightings=[];
  void Promise.resolve().then(()=>backend.listEnemySightings(teamId)).then(rows=>{
-  if(load!==sightingLoad)return;sightingRemote=true;sightingState='ready';
+  if(load!==sightingLoad)return;sightingRemote=true;sightingState='ready';sightingLoadedAt=Date.now();
   sightings=(Array.isArray(rows)?rows:[]).map(r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}));render();
  }).catch(error=>{
   if(load!==sightingLoad)return;
@@ -494,9 +494,12 @@ function syncSightings(){
   else{sightingState='failed';notice('Could not load the team scouting list: '+(error.message||'try again later.'));}
  });
 }
-const sightingGameKey=()=>shared?.id?'draft:'+shared.id:'draft:practice';
+// One key per game: Reset keeps the draft id, so the actions are part of the key.
+function draftFingerprint(){let h=0x811c9dc5;for(const ch of state.actions.map(a=>a.mode[0]+a.heroId).join(',')){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+const sightingGameKey=()=>(shared?.id?'draft:'+shared.id:'draft:practice')+':'+draftFingerprint();
 async function saveSightings(entries){
  if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
+ if(shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
  syncSightings();
  if(sightingState==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
  if(sightingState==='failed'){sightingScope=null;syncSightings();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
@@ -504,7 +507,8 @@ async function saveSightings(entries){
  if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
  if(scope!==sightingScope)return false;
  sightings=[...sightings.filter(r=>r.sourceKey!==key),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
- if(!teamId)writeLocalSightings();render();return true;
+ // Invented demo opponents never reach the real list.
+ if(!teamId&&!demo)writeLocalSightings();render();return true;
 }
 function seenAgainstUs(p){
  const seen=enemySightings(sightings,String(p.id));
@@ -513,9 +517,11 @@ function seenAgainstUs(p){
 function renderEnemyAssignment(root){
  const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
  if(!picks.length||!enemies.length)return;
- syncSightings();const key=sightingGameKey();
+ // Teammates see the drafter's saved assignment without reloading.
+ if(sightingRemote&&sightingState==='ready'&&Date.now()-sightingLoadedAt>30000)sightingScope=null;
+ syncSightings();const key=sightingScope+'|'+sightingGameKey();
  if(assignment.key!==key){
-  const saved=sightings.filter(r=>r.sourceKey===key);
+  const saved=sightings.filter(r=>r.sourceKey===sightingGameKey());
   assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
  }
  const box=el('section',null,'enemy-assignment');
@@ -527,16 +533,17 @@ function renderEnemyAssignment(root){
   select.value=assignment.map[a.heroId]||'';select.onchange=()=>{assignment.map[a.heroId]=select.value;};
   row.append(el('span',heroName(a.heroId)),select);box.append(row);
  }
- const result=el('select');result.setAttribute('aria-label','Our result');
+ const resultLabel=el('label',null,'enemy-assignment-row'),result=el('select');result.setAttribute('aria-label','Our result');
  for(const [value,label] of [['','Result unknown'],['won','We won'],['lost','We lost']])result.append(new Option(label,value));
- result.value=assignment.result;result.onchange=()=>{assignment.result=result.value;};box.append(result);
- button('Save who played what',async()=>{
+ result.value=assignment.result;result.onchange=()=>{assignment.result=result.value;};resultLabel.append(el('span','Our result'),result);box.append(resultLabel);
+ const saveButton=button('Save who played what',async()=>{
   assignment.result=result.value;
   for(const select of box.querySelectorAll('select[data-hero]'))assignment.map[select.dataset.hero]=select.value;
   const enemyWon=assignment.result==='lost'?true:assignment.result==='won'?false:null;
   const entries=picks.filter(a=>assignment.map[a.heroId]).map(a=>({accountId:assignment.map[a.heroId],heroId:a.heroId,enemyWon}));
   if(await saveSightings(entries))notice('Saved who played what.');
  },box,'primary');
+ if(shared&&!canWrite()){saveButton.disabled=true;box.append(el('p','Only the current drafter can save this.','secondary'));}
  root.append(box);
 }
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
