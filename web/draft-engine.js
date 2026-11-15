@@ -190,6 +190,33 @@ function observed(hero, enemy, matchups) {
     return {score:sign * 20*(row.wins-row.games_played/2)/(Number(row.games_played)+50),games:+row.games_played};
   }
 }
+const round1 = x => Math.round(x * 10) / 10;
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+/** Pool-wide totals for meta rates: Divine+ (brackets 7-8) picks and pro picks. */
+export function metaTotals(pool = []) {
+  let high = 0, pro = 0;
+  for (const h of array(pool)) { high += (+h?.['7_pick'] || 0) + (+h?.['8_pick'] || 0); pro += +h?.pro_pick || 0; }
+  return {high, pro};
+}
+/** Current meta for one hero from OpenDota hero stats: Divine+ public games and pro games. */
+export function heroMeta(hero = {}, totals = {}) {
+  const highPicks = (+hero['7_pick'] || 0) + (+hero['8_pick'] || 0), highWins = (+hero['7_win'] || 0) + (+hero['8_win'] || 0);
+  const proPicks = +hero.pro_pick || 0, proBans = +hero.pro_ban || 0;
+  if (highPicks < 200 && proPicks + proBans < 5) return null;
+  const winRate = highPicks >= 200 ? round1(100 * highWins / highPicks) : null;
+  const pickRate = totals.high > 0 && highPicks >= 200 ? round1(100 * highPicks * 10 / totals.high) : null;
+  const proWinRate = proPicks >= 5 ? round1(100 * (+hero.pro_win || 0) / proPicks) : null;
+  const winPart = winRate == null ? 0 : clamp(winRate - 50, -4, 6);
+  const pickPart = pickRate == null ? 0 : Math.min(4, pickRate * 0.4);
+  const proPart = totals.pro > 0 ? Math.min(4, 8 * (proPicks + proBans) / (totals.pro / 10)) : 0;
+  return {winRate, pickRate, proPicks, proBans, proWinRate, score: +clamp(winPart + pickPart + proPart, -4, 12).toFixed(2)};
+}
+function metaText(m) {
+  const parts = [];
+  if (m.winRate != null) parts.push(`${m.winRate}% win in Divine+ (${m.pickRate}% of games)`);
+  if (m.proPicks || m.proBans) parts.push(`pro ${m.proPicks} picks / ${m.proBans} bans`);
+  return parts.length ? 'Meta: ' + parts.join(', ') : '';
+}
 export function recommend({heroes = [],draft = [],allies = [],opponents = [],matchups = {},firstPick = true,now = Date.now(),mode} = {}) {
   if (!nextTurn(draft,firstPick)) return [];
   mode ||= nextTurn(draft,firstPick).mode;
@@ -247,16 +274,19 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   if (picking && remaining.some(p=>p.unknown)) slots.push(null);
   const penalties = new Map(slots.map(p => [p, picking ? reservationPenalties(p,available,open) : {}]));
   const covered = new Set(picked.flatMap(a => array(byId.get(+a.heroId)?.roles)));
+  const totals = metaTotals(pool);
   const ranked = [];
   for (const hero of pool) {
     const heroId = +hero.id;
     if (taken.has(heroId)) continue;
+    // Meta only shapes picks; ban suggestions stay evidence-based.
+    const meta = picking ? heroMeta(hero, totals) : null, metaReason = meta ? metaText(meta) : '';
     let best;
     for (const player of slots) {
       const s = player?.selfReport, h = histories.get(player?.id)?.get(heroId);
       if (s?.avoidHeroes.includes(heroId)) continue;
       const components = {history:experience(h),signature:s?.signatureHeroes.includes(heroId)?20:0,
-        desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0};
+        desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0,meta:meta?.score ?? 0};
       const evidence = [], reasons = [];
       if (experienceText(h)) evidence.push(experienceText(h));
       if (components.signature) reasons.push('Reported signature hero');
@@ -285,6 +315,7 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
           if (components.deny) reasons.push('Denies '+target.p.name+' a played hero ('+experienceText(target.h)+')');
         }
         if (slot.score > 0) reasons.push('Position '+slot.position+' fit');
+        if (metaReason) reasons.push(metaReason);
       }
       let matchupGames = 0;
       {
@@ -304,7 +335,7 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
           source:({history:experienceText(h),signature:'Teammate profile',desired:'Teammate profile',
             role:picking?'Declared role and OpenDota hero roles':'Inferred from observed lane',
             composition:'OpenDota hero roles',matchup:matchupGames?'OpenDota hero matchups':null,
-            deny:reasons.find(r=>r.startsWith('Denies '))})[category] || null,
+            deny:reasons.find(r=>r.startsWith('Denies ')),meta:meta?'OpenDota hero stats (Divine+ and pro)':null})[category] || null,
           sample:category==='history' && h ? {games:h.games,recent30d:h.recent,cup180d:h.cup,cup16h:h.currentCup} :
             category==='matchup'?matchupGames:category==='role' && !picking?roleSample:null
         }))};
