@@ -1,0 +1,133 @@
+{
+  "match": {
+    "matchid": "8012345678",
+    "server_steam_id": "90108373362313221",
+    "game_time": 312,
+    "league_id": 0
+  },
+  "teams": [
+    {
+      "team_number": 2,
+      "players": [
+        {
+          "accountid": 1000,
+          "playerid": 0,
+          "team": 2,
+          "name": "p0",
+          "heroid": 1,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1001,
+          "playerid": 1,
+          "team": 2,
+          "name": "p1",
+          "heroid": 2,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1002,
+          "playerid": 2,
+          "team": 2,
+          "name": "p2",
+          "heroid": 3,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1003,
+          "playerid": 3,
+          "team": 2,
+          "name": "p3",
+          "heroid": 4,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1004,
+          "playerid": 4,
+          "team": 2,
+          "name": "p4",
+          "heroid": 5,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        }
+      ]
+    },
+    {
+      "team_number": 3,
+      "players": [
+        {
+          "accountid": 39734273,
+          "playerid": 0,
+          "team": 3,
+          "name": "p0",
+          "heroid": 1,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1006,
+          "playerid": 1,
+          "team": 3,
+          "name": "p1",
+          "heroid": 2,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1007,
+          "playerid": 2,
+          "team": 3,
+          "name": "p2",
+          "heroid": 3,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1008,
+          "playerid": 3,
+          "team": 3,
+          "name": "p3",
+          "heroid": 4,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        },
+        {
+          "accountid": 1009,
+          "playerid": 4,
+          "team": 3,
+          "name": "p4",
+          "heroid": 5,
+          "kills": 0,
+          "net_worth": 600,
+          "position_x": 1.5
+        }
+      ]
+    }
+  ],
+  "buildings": [
+    {
+      "team": 2,
+      "destroyed": false
+    }
+  ],
+  "graph_data": {
+    "graph_gold": [
+      0,
+      100
+    ]
+  },
+  "delta_frame": false
+}
