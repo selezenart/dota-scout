@@ -225,6 +225,20 @@ function metaText(m) {
   if (m.proPicks || m.proBans) parts.push(`pro ${m.proPicks} picks / ${m.proBans} bans`);
   return parts.length ? 'Meta: ' + parts.join(', ') : '';
 }
+/** Top suggestions that always include the best few of each category, in score order. */
+export function diverseTop(ranked = [], limit = 8, perTag = 2) {
+  if (ranked.length <= limit) return [...ranked];
+  const must = new Set();
+  for (const tag of ['team', 'counter', 'meta']) ranked.filter(r => r.tags?.includes(tag)).slice(0, perTag).forEach(r => must.add(r));
+  const chosen = new Set(ranked.slice(0, limit));
+  for (const r of must) {
+    if (chosen.has(r)) continue;
+    const victim = [...chosen].reverse().find(x => !must.has(x));
+    if (!victim) break;
+    chosen.delete(victim); chosen.add(r);
+  }
+  return ranked.filter(r => chosen.has(r));
+}
 export function recommend({heroes = [],draft = [],allies = [],opponents = [],matchups = {},firstPick = true,now = Date.now(),mode} = {}) {
   if (!nextTurn(draft,firstPick)) return [];
   mode ||= nextTurn(draft,firstPick).mode;
@@ -268,7 +282,10 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
         if (!slot) continue;
         const personal = (player?.selfReport.signatureHeroes.includes(heroId) ? 20 : 0) +
           experience(histories.get(player?.id)?.get(heroId));
-        assign(index+1,remaining.filter(p=>p!==seat),open.filter(i=>i!==pos),score+slot.score+personal);
+        // On a tie, an unattributed pick goes to an unknown seat, so a known teammate
+        // stays available for their own heroes.
+        const keepKnownFree = player && !personal && action.playerId == null ? 0.01 : 0;
+        assign(index+1,remaining.filter(p=>p!==seat),open.filter(i=>i!==pos),score+slot.score+personal-keepKnownFree);
       }
       // Unknown seats have interchangeable evidence and constraints.
       if (seat.unknown) break;
@@ -338,7 +355,11 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       if (!matchupGames && draft.some(a=>a.mode===opposing)) evidence.push('Observed matchup data unavailable');
       if (picking && !array(hero.roles).length) evidence.push('Composition tags unavailable');
       const score = +Object.values(components).reduce((sum,x)=>sum+x,0).toFixed(2);
-      const rec = {heroId,score,reasons,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
+      // Category tags for our picks: the team's own heroes, counters to their picks, current meta.
+      const tags = mode !== 'ourPick' ? [] : [
+        (components.signature > 0 || components.desired > 0 || components.history > 0) && 'team',
+        components.matchup >= 0.5 && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
+      const rec = {heroId,score,reasons,tags,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
         details:Object.entries(components).map(([category,contribution]) => ({
           category,contribution,heroId,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,
           source:({history:experienceText(h),signature:'Teammate profile',desired:'Teammate profile',
