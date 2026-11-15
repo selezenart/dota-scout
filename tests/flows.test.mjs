@@ -58,6 +58,24 @@ const inviteKey='captain-team-invite-v1';
 const invitedTeam={id:'invited-team',name:'Night Shift',owner_user_id:'owner'};
 const guestSession={user:{id:'guest'}};
 
+test('team home cards show saved roles, signatures and wanted heroes',async()=>{
+ const rows=[{userId:'owner',displayName:'Captain',preferredRoles:[1,3],signatureHeroes:[1],desiredHeroes:[2]},{userId:'mate',displayName:'Mate',preferredRoles:[],signatureHeroes:[],desiredHeroes:[]}];
+ const h=await harness({query:'',backend:accountBackend({listTeams:async()=>[invitedTeam],loadRoster:async()=>rows})});
+ try{
+  await flush();
+  const cards=[...h.q('team-roster').querySelectorAll('.player-card')];
+  const captain=cards.find(card=>card.querySelector('h3').textContent==='Captain');
+  assert.ok(captain,'captain card rendered');
+  assert.notEqual(captain.querySelector('.player-role-summary').textContent,'Role preferences not set');
+  const strips=captain.querySelectorAll('.roster-hero-strip');
+  assert.equal(strips[0].querySelectorAll('img, .hero-portrait, div').length>0,true);
+  assert.doesNotMatch(strips[0].textContent,/Not set/);
+  assert.doesNotMatch(strips[1].textContent,/Not set/);
+  const mate=cards.find(card=>card.querySelector('h3').textContent==='Mate');
+  assert.equal(mate.querySelector('.player-role-summary').textContent,'Role preferences not set');
+ }finally{h.w.close();}
+});
+
 test('team owner copies a shareable invite URL distinct from the draft link',async()=>{
  let copied;
  const backend=accountBackend({listTeams:async()=>[{...invitedTeam,invite_code:inviteCode}],loadRoster:async()=>[]});
