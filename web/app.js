@@ -6,7 +6,7 @@ import {createWelcome} from './welcome.js';
 
 import snapshot from './heroes.json';
 
-import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches} from './draft-engine.js';
+import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings} from './draft-engine.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
@@ -281,6 +281,7 @@ function renderView(){
  renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();const poolOrder=document.querySelector('.hero-board-heading>span');if(poolOrder)poolOrder.textContent=turn?.mode==='ourPick'?'Team wants first · then popularity':'Most played first · OpenDota';
 
  $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick');n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);}n.append(el('p','Traits: '+[...new Set(picks.flatMap(a=>heroes[a.heroId]?.roles||[]))].join(', ')));}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
+ if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
 }
 
@@ -373,6 +374,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 // Public OpenDota history for one enemy: what to ban against them.
 function enemyDetails(card,p){
  const s=enemySummary(p,{now:Math.floor(Date.now()/1000),heroes:Object.values(heroes)});
+ const seen=seenAgainstUs(p);if(seen)card.append(el('p',seen,'enemy-seen'));
  if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
  card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
  const strip=(title,cls,rows,label,empty)=>{
@@ -470,10 +472,77 @@ function renderEnemyMatches(section){
  }
  section.append(root);return true;
 }
+// Who played what against us: recorded by the team after its own games, so it also
+// covers closed accounts. Team database in team drafts, this device otherwise.
+const sightingKey='captain-enemy-sightings-v1';
+let sightings=[],sightingScope=null,sightingRemote=false,sightingState='ready',sightingLoad=0,assignment={key:null,map:{},result:''};
+const localSightingKey=()=>sightingKey+':'+(user?.id||'practice');
+function sightingTeam(){return typeof backend?.listEnemySightings==='function'&&shared?.team_id&&user?shared.team_id:null;}
+function readLocalSightings(){try{const rows=JSON.parse(localStorage.getItem(localSightingKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
+function writeLocalSightings(){try{localStorage.setItem(localSightingKey(),JSON.stringify(sightings.slice(-2000)));}catch{}}
+function syncSightings(){
+ const teamId=sightingTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===sightingScope)return;
+ sightingScope=scope;sightingRemote=false;const load=++sightingLoad;
+ if(!teamId){sightingState='ready';sightings=readLocalSightings();return;}
+ sightingState='loading';sightings=[];
+ void Promise.resolve().then(()=>backend.listEnemySightings(teamId)).then(rows=>{
+  if(load!==sightingLoad)return;sightingRemote=true;sightingState='ready';
+  sightings=(Array.isArray(rows)?rows:[]).map(r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}));render();
+ }).catch(error=>{
+  if(load!==sightingLoad)return;
+  if(missingRpc(error)){sightingState='ready';sightings=readLocalSightings();render();}
+  else{sightingState='failed';notice('Could not load the team scouting list: '+(error.message||'try again later.'));}
+ });
+}
+const sightingGameKey=()=>shared?.id?'draft:'+shared.id:'draft:practice';
+async function saveSightings(entries){
+ if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
+ syncSightings();
+ if(sightingState==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
+ if(sightingState==='failed'){sightingScope=null;syncSightings();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
+ const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey();
+ if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
+ if(scope!==sightingScope)return false;
+ sightings=[...sightings.filter(r=>r.sourceKey!==key),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
+ if(!teamId)writeLocalSightings();render();return true;
+}
+function seenAgainstUs(p){
+ const seen=enemySightings(sightings,String(p.id));
+ return seen.length?'Seen vs us: '+seen.slice(0,4).map(h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`).join(', '):'';
+}
+function renderEnemyAssignment(root){
+ const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
+ if(!picks.length||!enemies.length)return;
+ syncSightings();const key=sightingGameKey();
+ if(assignment.key!==key){
+  const saved=sightings.filter(r=>r.sourceKey===key);
+  assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
+ }
+ const box=el('section',null,'enemy-assignment');
+ box.append(el('h3','Who played what?'),el('p','Saved for your team. When these accounts show up again, the board shows what they played against you.','secondary'));
+ for(const a of picks){
+  const row=el('label',null,'enemy-assignment-row'),select=el('select');select.dataset.hero=String(a.heroId);
+  select.setAttribute('aria-label','Enemy player for '+heroName(a.heroId));select.append(new Option('Unknown',''));
+  for(const p of enemies)select.append(new Option(p.name,String(p.id)));
+  select.value=assignment.map[a.heroId]||'';select.onchange=()=>{assignment.map[a.heroId]=select.value;};
+  row.append(el('span',heroName(a.heroId)),select);box.append(row);
+ }
+ const result=el('select');result.setAttribute('aria-label','Our result');
+ for(const [value,label] of [['','Result unknown'],['won','We won'],['lost','We lost']])result.append(new Option(label,value));
+ result.value=assignment.result;result.onchange=()=>{assignment.result=result.value;};box.append(result);
+ button('Save who played what',async()=>{
+  assignment.result=result.value;
+  for(const select of box.querySelectorAll('select[data-hero]'))assignment.map[select.dataset.hero]=select.value;
+  const enemyWon=assignment.result==='lost'?true:assignment.result==='won'?false:null;
+  const entries=picks.filter(a=>assignment.map[a.heroId]).map(a=>({accountId:assignment.map[a.heroId],heroId:a.heroId,enemyWon}));
+  if(await saveSightings(entries))notice('Saved who played what.');
+ },box,'primary');
+ root.append(box);
+}
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
 function renderDraftEnemies(){
  const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
- syncEnemyMatches();const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
+ syncEnemyMatches();syncSightings();const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');
@@ -486,6 +555,7 @@ function renderDraftEnemies(){
    row.append(heroesRow);
    if(s.cup.length)row.append(el('p','Battle Cup: '+s.cup.slice(0,3).map(h=>heroName(h.heroId)).join(', '),'draft-enemy-cup'));
   }
+  const seen=seenAgainstUs(p);if(seen)row.append(el('p',seen,'draft-enemy-seen'));
   list.append(row);
  }
 }

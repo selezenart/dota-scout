@@ -73,6 +73,17 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     positions: [1, 2, 3, 4, 5].map(position => ({position, games: counts[position]})).filter(r => r.games > 0)
       .sort((a, b) => b.games - a.games || a.position - b.position)};
 }
+/** Heroes one enemy account played against this team, from the team's own records. */
+export function enemySightings(rows = [], accountId) {
+  const id = String(accountId), byHero = new Map();
+  for (const r of array(rows)) {
+    if (String(r.accountId) !== id) continue;
+    const h = byHero.get(+r.heroId) || {heroId: +r.heroId, games: 0, wins: 0};
+    h.games++; if (r.enemyWon === true) h.wins++;
+    byHero.set(h.heroId, h);
+  }
+  return [...byHero.values()].sort((a, b) => b.games - a.games || b.wins - a.wins || a.heroId - b.heroId);
+}
 const overlaps = (ids, wanted) => array(ids).some(id => wanted.includes(String(id)));
 /** Earlier Battle Cup matches pasted for scouting, worth showing for the current enemies. */
 export function relevantEnemyMatches(rows = [], enemyIds = [], now = Date.now()) {

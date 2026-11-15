@@ -5091,3 +5091,7 @@ body:has(#identity-download:not([hidden])) {min-height:100vh;background-repeat:n
 .draft-enemy-match-ban{color:#e7c58e}
 .draft-enemy-match-side{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0;font-size:11px}
 .draft-enemy-match-side button{font-size:11px;padding:3px 8px}
+
+.enemy-assignment{margin-top:16px;padding-top:12px;border-top:1px solid #353b45;display:grid;gap:8px;max-width:520px}
+.enemy-assignment-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px;align-items:center;font-size:13px}
+.draft-enemy-seen,.enemy-seen{grid-column:1/-1;margin:2px 0 0;font-size:11px;color:#9fd3a8}
