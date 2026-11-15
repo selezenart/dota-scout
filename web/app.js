@@ -575,7 +575,8 @@ function renderDraftEnemies(){
  const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
  syncEnemyMatches();syncSightings();
  // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
- if(!state.actions.length)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
+ // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
+ if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
  const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
