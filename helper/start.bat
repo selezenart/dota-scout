@@ -8,7 +8,7 @@ title Captain's Draft Board helper
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js 18 or newer is required. Install the LTS version from https://nodejs.org and run this file again.
+  echo Node.js 20 or newer is required. Install the LTS version from https://nodejs.org and run this file again.
   pause
   exit /b 1
 )

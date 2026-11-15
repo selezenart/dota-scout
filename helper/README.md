@@ -20,7 +20,7 @@ The helper only reads files and calls the Steam Web API. It does not read game m
 
 ## Setup
 
-1. Install [Node.js](https://nodejs.org) 18 or newer (LTS).
+1. Install [Node.js](https://nodejs.org) 20 or newer (LTS).
 2. Get a Steam Web API key at <https://steamcommunity.com/dev/apikey> (any domain name works, e.g. `localhost`).
 3. Create `helper/steam-key.txt` and paste the key on one line. Git and Vercel ignore this file (`*key*.txt`). Alternatively set the `STEAM_WEB_API_KEY` environment variable. The helper never prints the key.
 4. In Steam: Dota 2 → Properties → Launch options → add `-condebug`. Restart Dota.
@@ -43,7 +43,8 @@ The helper only reads files and calls the Steam Web API. It does not read game m
 
 - Listens on `127.0.0.1:8765` only.
 - Only the allowed origins get CORS access; other origins get `403`. Requests with an unexpected `Host` header get `421` (DNS-rebinding guard).
-- Steam errors reach the browser as a generic message; the helper window shows only the HTTP status.
+- Requests without an `Origin` header are refused when the browser marks them as coming from another site (`Sec-Fetch-Site`), so other pages cannot spend your Steam key quota with `<img>` or `no-cors` requests.
+- Steam errors reach the browser as a generic message; the helper window shows only the HTTP status. After a `403` (bad key) or `429` (rate limit) the helper waits 30 s before asking Steam again for that server.
 
 ## Limits
 

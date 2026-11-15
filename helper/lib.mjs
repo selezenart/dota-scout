@@ -7,7 +7,10 @@ export const DEFAULT_ALLOWED_ORIGINS = ['https://captains-draft.vercel.app', 'ht
 
 // [A:1:account:instance] → SteamID64 (universe 1, account type 4 = anonymous game server).
 export function anonServerSteamId64(accountId, instance) {
-  return ((1n << 56n) | (4n << 52n) | (BigInt(instance) << 32n) | BigInt(accountId)).toString();
+  const account = BigInt(accountId);
+  const slot = BigInt(instance);
+  if (account > 0xFFFFFFFFn || slot > 0xFFFFFn) return null;
+  return ((1n << 56n) | (4n << 52n) | (slot << 32n) | account).toString();
 }
 
 // Latest game server the client connected to, from Dota's console.log (-condebug).
@@ -16,8 +19,8 @@ export function serverSteamIdFromLog(text) {
   const pattern = /\[A:1:(\d{1,10}):(\d{1,10})\]|steamid\s*:\s*(9\d{16})(?!\d)|\((9\d{16})\)/gi;
   let found = null;
   for (const match of text.matchAll(pattern)) {
-    if (match[1]) found = anonServerSteamId64(match[1], match[2]);
-    else found = match[3] || match[4];
+    const id = match[1] ? anonServerSteamId64(match[1], match[2]) : match[3] || match[4];
+    if (id) found = id;
   }
   return found;
 }

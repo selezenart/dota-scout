@@ -39,15 +39,15 @@ export function createHelperServer({readConsoleLog, getLocalAccountId, fetchReal
     return shapeLiveRoster(stats, accountId);
   }
 
-  const server = createServer(async (request, response) => {
-    const send = (status, headers, body = '') => {
-      response.writeHead(status, {'Cache-Control': 'no-store', ...headers});
-      response.end(body);
-    };
+  async function handle(request, send) {
     if (!isLocalHost(request.headers.host, port || server.address()?.port)) return send(421, {'Content-Type': 'text/plain'}, 'Unknown host');
     const cors = corsHeaders(request.headers.origin, allowedOrigins);
     if (!cors) return send(403, {'Content-Type': 'text/plain'}, 'Origin not allowed');
+    if (!URL.canParse(request.url, 'http://localhost')) return send(400, {'Content-Type': 'text/plain'}, 'Bad request');
     const path = new URL(request.url, 'http://localhost').pathname;
+    // Browsers omit Origin on no-cors requests (<img>, mode: 'no-cors'); refuse those from other sites.
+    const fetchSite = request.headers['sec-fetch-site'];
+    if (path === '/live-roster' && request.headers.origin === undefined && fetchSite && !['none', 'same-origin'].includes(fetchSite)) return send(403, {'Content-Type': 'text/plain'}, 'Origin not allowed');
     if (path === '/' && request.method === 'GET') return send(200, {'Content-Type': 'text/html; charset=utf-8'}, STATUS_PAGE);
     if (path !== '/live-roster') return send(404, {...cors, 'Content-Type': 'text/plain'}, 'Not found');
     if (request.method === 'OPTIONS') {
@@ -64,6 +64,15 @@ export function createHelperServer({readConsoleLog, getLocalAccountId, fetchReal
       body = {status: 'error', message: 'The helper could not read the live roster.'};
     }
     send(200, {...cors, 'Content-Type': 'application/json; charset=utf-8'}, JSON.stringify(body));
+  }
+
+  const server = createServer((request, response) => {
+    const send = (status, headers, body = '') => {
+      if (response.headersSent) return;
+      response.writeHead(status, {'Cache-Control': 'no-store', ...headers});
+      response.end(body);
+    };
+    handle(request, send).catch(() => send(400, {'Content-Type': 'text/plain'}, 'Bad request'));
   });
   return server;
 }
@@ -118,21 +127,28 @@ async function getLocalAccountId() {
   return null;
 }
 
-// The board polls every 5 s; reuse one Steam answer per server for 4 s.
-function steamFetcher(key) {
+// The board polls every 5 s; reuse one Steam answer per server for 4 s,
+// and back off for 30 s when Steam rejects the key or rate-limits us.
+export function steamFetcher(key, fetchImpl = fetch) {
   let cached = {serverSteamId: null, at: 0, result: null};
+  let failure = {serverSteamId: null, at: 0, error: null};
   return async serverSteamId => {
+    if (failure.serverSteamId === serverSteamId && Date.now() - failure.at < 30000) throw failure.error;
     if (cached.serverSteamId === serverSteamId && Date.now() - cached.at < 4000) return cached.result;
     const url = new URL('https://api.steampowered.com/IDOTA2MatchStats_570/GetRealtimeStats/v1/');
     url.searchParams.set('key', key);
     url.searchParams.set('server_steam_id', serverSteamId);
     let response;
     try {
-      response = await fetch(url, {signal: AbortSignal.timeout(10000)});
+      response = await fetchImpl(url, {signal: AbortSignal.timeout(10000)});
     } catch (error) {
       throw new Error(redact(error?.message || 'network error', key));
     }
-    if (!response.ok) throw Object.assign(new Error('Steam Web API error'), {status: response.status});
+    if (!response.ok) {
+      const error = Object.assign(new Error('Steam Web API error'), {status: response.status});
+      if ([403, 429].includes(response.status)) failure = {serverSteamId, at: Date.now(), error};
+      throw error;
+    }
     const result = await response.json().catch(() => ({}));
     cached = {serverSteamId, at: Date.now(), result};
     return result;
@@ -147,7 +163,11 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (!/^[0-9A-F]{32}$/i.test(key)) console.warn('Warning: the Steam Web API key does not look like a 32-character key.');
+  if (!/^[0-9A-F]{32}$/i.test(key)) {
+    console.error('The Steam Web API key must be 32 letters and digits (0-9, A-F). Check steam-key.txt.');
+    process.exitCode = 1;
+    return;
+  }
   const allowedOrigins = process.env.HELPER_ALLOWED_ORIGINS
     ? process.env.HELPER_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
     : DEFAULT_ALLOWED_ORIGINS;

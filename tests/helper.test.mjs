@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import {readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {liveLineup} from '../web/live-roster.js';
@@ -8,7 +9,7 @@ import {
   anonServerSteamId64, serverSteamIdFromLog, localAccountFromLoginUsers, libraryPathsFromVdf,
   shapeLiveRoster, corsHeaders, isLocalHost, steamKeyFrom, redact,
 } from '../helper/lib.mjs';
-import {createHelperServer} from '../helper/server.mjs';
+import {createHelperServer, steamFetcher} from '../helper/server.mjs';
 
 const fx = name => readFile(new URL(`./fixtures/helper/${name}`, import.meta.url), 'utf8');
 const root = new URL('..', import.meta.url).pathname;
@@ -216,6 +217,47 @@ test('server: GET /live-roster with allowed origin returns a ready roster', asyn
     assert.ok(liveLineup(body));
     assert.equal(calls.fetch, 1);
   });
+});
+
+test('review: anonServerSteamId64 rejects ids wider than their SteamID fields', () => {
+  assert.equal(anonServerSteamId64(4294967296, 1), null);
+  assert.equal(anonServerSteamId64(1, 1048576), null);
+  assert.equal(serverSteamIdFromLog('[A:1:9999999999:1]'), null);
+});
+
+test('review: a malformed request target gets 400 and the helper keeps running', async () => {
+  await withServer({}, async ({port}) => {
+    const raw = await new Promise((resolve, reject) => {
+      const socket = net.connect(port, '127.0.0.1', () => socket.write(`GET http://[ HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`));
+      let data = '';
+      socket.on('data', chunk => data += chunk);
+      socket.on('end', () => resolve(data));
+      socket.on('error', reject);
+    });
+    assert.match(raw, /^HTTP\/1\.1 400/);
+    assert.equal((await request({port, headers: {Origin: ORIGIN}})).status, 200);
+  });
+});
+
+test('review: cross-site no-cors requests without Origin are rejected before any Steam call', async () => {
+  await withServer({}, async ({port, calls}) => {
+    const res = await request({port, headers: {'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'no-cors'}});
+    assert.equal(res.status, 403);
+    assert.equal(calls.fetch, 0);
+    const direct = await request({port, headers: {'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate'}});
+    assert.equal(direct.status, 200);
+    const statusPage = await request({port, path: '/', headers: {'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'navigate'}});
+    assert.equal(statusPage.status, 200);
+  });
+});
+
+test('review: Steam 403/429 failures are cached so polling does not hammer Steam', async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return {ok: false, status: 403, json: async () => ({})}; };
+  const fetchStats = steamFetcher('0123456789ABCDEF0123456789ABCDEF', fetchImpl);
+  await assert.rejects(fetchStats('90108373362313221'), error => error.status === 403);
+  await assert.rejects(fetchStats('90108373362313221'), error => error.status === 403);
+  assert.equal(calls, 1);
 });
 
 test('server: disallowed origin gets 403 and no Steam call', async () => {
