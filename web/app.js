@@ -378,7 +378,7 @@ function enemyDetails(card,p){
   for(const h of rows){const item=el('div');item.append(portrait(h.heroId),el('small',heroName(h.heroId)),el('small',label(h)));root.append(item);}
   if(!rows.length)root.append(el('span',empty,'secondary'));card.append(root);
  };
- strip('Most played · 180 days','enemy-top-heroes',s.topHeroes,h=>`${h.games} games · ${h.winRate}%`,'No hero data');
+ strip('Most played · 180 days','enemy-top-heroes',s.topHeroes,h=>h.winRate==null?`${h.games} games`:`${h.games} games · ${h.winRate}%`,'No hero data');
  const total=s.recent.wins+s.recent.losses;
  card.append(el('h4','Recent'),el('p',total?`${s.recent.wins}W ${s.recent.losses}L (last ${total})`:'No recent matches','enemy-recent'));
  strip('Battle Cup','enemy-cup',s.cup,h=>`${h.games} games · ${h.wins}W`,'No Battle Cup games found');
@@ -395,7 +395,7 @@ function renderDraftEnemies(){
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
   if(s.state==='ready'){
    const heroesRow=el('div',null,'draft-enemy-heroes');
-   for(const h of s.topHeroes.slice(0,3)){const item=el('span',null,'draft-enemy-hero');item.title=heroName(h.heroId);item.append(portrait(h.heroId),el('small',`${heroName(h.heroId)} ${h.winRate}% · ${h.games}`));heroesRow.append(item);}
+   for(const h of s.topHeroes.slice(0,3)){const item=el('span',null,'draft-enemy-hero'),img=portrait(h.heroId);img.alt='';item.append(img,el('small',`${heroName(h.heroId)} ${h.winRate==null?h.games+' games':`${h.winRate}% · ${h.games}`}`));heroesRow.append(item);}
    row.append(heroesRow);
    if(s.cup.length)row.append(el('p','Battle Cup: '+s.cup.slice(0,3).map(h=>heroName(h.heroId)).join(', '),'draft-enemy-cup'));
   }

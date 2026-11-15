@@ -48,9 +48,9 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     : hasData ? 'ready'
     : statuses.includes('error') ? 'error' : 'closed';
   const topHeroes = heroRows.filter(h => +h.games > 0)
-    .map(h => ({heroId: +h.hero_id, games: +h.games, wins: Math.max(0, +h.win || 0)}))
-    .sort((a, b) => b.games - a.games || b.wins - a.wins).slice(0, 5)
-    .map(h => ({...h, winRate: Math.round(100 * h.wins / h.games)}));
+    .map(h => ({heroId: +h.hero_id, games: +h.games, wins: h.win == null ? null : Math.max(0, +h.win || 0)}))
+    .sort((a, b) => b.games - a.games || (b.wins ?? 0) - (a.wins ?? 0)).slice(0, 5)
+    .map(h => ({...h, winRate: h.wins == null ? null : Math.round(100 * h.wins / h.games)}));
   const won = m => Boolean(m.radiant_win) === (+m.player_slot < 128);
   const recent = {wins: 0, losses: 0};
   for (const m of recentRows) if (m.radiant_win != null) won(m) ? recent.wins++ : recent.losses++;

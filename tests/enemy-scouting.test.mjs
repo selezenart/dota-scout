@@ -35,6 +35,9 @@ test('state is loading before any source exists, ready for sourceless fixtures w
  assert.equal(summary(engine.normalizeProfile({id:'9',name:'New'})).state,'loading');
  assert.equal(summary(engine.normalizeProfile({id:'9',name:'Demo',heroes:[{hero_id:1,games:5,win:3}]})).state,'ready');
 });
+test('topHeroes has no win rate when OpenDota gave no win count',()=>{
+ assert.deepEqual(summary(player({heroes:[{hero_id:1,games:40}]})).topHeroes,[{heroId:1,games:40,wins:null,winRate:null}]);
+});
 test('cup games with an unknown result are counted but never as wins',()=>{
  const cup=summary(player({recent:[match(1,2,1,{lobby_type:9,radiant_win:null,player_slot:128})]})).cup;
  assert.deepEqual(cup,[{heroId:2,games:1,wins:0}]);
