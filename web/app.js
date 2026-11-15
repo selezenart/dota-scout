@@ -389,7 +389,7 @@ function enemyDetails(card,p){
 // database inside a team draft; stored on this device otherwise or until the owner
 // applies migration 010.
 const enemyMatchKey='captain-enemy-matches-v1';
-let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false,enemyMatchState='ready';
+let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false,enemyMatchState='ready',enemyMatchLoad=0;
 function enemyMatchTeam(){return typeof backend?.listEnemyMatches==='function'&&shared?.team_id&&user?shared.team_id:null;}
 // Device storage is per account so another local user does not see this scouting.
 const localMatchKey=()=>enemyMatchKey+':'+(user?.id||'practice');
@@ -401,12 +401,12 @@ function syncEnemyMatches(){
  enemyMatchScope=scope;enemyMatchRemote=false;
  if(!teamId){enemyMatchState='ready';enemyMatches=readLocalMatches();return;}
  // Team scope never mixes in device rows; adding waits until the team list settles.
- enemyMatchState='loading';enemyMatches=[];
+ enemyMatchState='loading';enemyMatches=[];const load=++enemyMatchLoad;
  void Promise.resolve().then(()=>backend.listEnemyMatches(teamId)).then(rows=>{
-  if(enemyMatchScope!==scope)return;enemyMatchRemote=true;enemyMatchState='ready';
+  if(load!==enemyMatchLoad)return;enemyMatchRemote=true;enemyMatchState='ready';
   enemyMatches=(Array.isArray(rows)?rows:[]).map(r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}));render();
  }).catch(error=>{
-  if(enemyMatchScope!==scope)return;
+  if(load!==enemyMatchLoad)return;
   if(missingRpc(error)){enemyMatchState='ready';enemyMatches=readLocalMatches();notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.');render();}
   else{enemyMatchState='failed';notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'));}
  });
@@ -415,20 +415,25 @@ async function addEnemyMatches(text){
  const ids=matchData.parseMatchIds(text);if(!ids.length)throw Error('Enter match IDs or match links.');if(ids.length>10)throw Error('Load at most 10 matches at a time.');
  syncEnemyMatches();
  if(enemyMatchState==='loading')throw Error('Team matches are still loading. Try again in a moment.');
- if(enemyMatchState==='failed')throw Error('Team match storage is unavailable. Reload the page to try again.');
- const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String),failed=[];
+ // A failed team load is retried on the next attempt instead of needing a reload.
+ if(enemyMatchState==='failed'){enemyMatchScope=null;syncEnemyMatches();throw Error('Team matches could not be loaded. Retrying now; try again in a moment.');}
+ const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String),failed=[],unsaved=[];
  for(const id of ids){
-  try{
-   const summary=await matchData.loadMatch(id);if(scope!==enemyMatchScope)return;
-   if(!Array.isArray(summary?.players)||!summary.players.length)throw Error('no match data');
-   const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
-   if(teamId)await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);
-   if(scope!==enemyMatchScope)return;
-   enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
-  }catch{if(scope!==enemyMatchScope)return;failed.push(id);}
+  let summary;
+  try{summary=await matchData.loadMatch(id);}catch{}
+  if(scope!==enemyMatchScope)return false;
+  if(!Array.isArray(summary?.players)||!summary.players.length){failed.push(id);continue;}
+  const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
+  if(teamId){try{await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);}catch{unsaved.push(id);continue;}}
+  if(scope!==enemyMatchScope)return false;
+  enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
  }
  if(!teamId)writeLocalMatches();render();
- if(failed.length)throw Error('Could not load match '+failed.join(', ')+'. Check the ID, or try again if OpenDota is busy.');
+ const problems=[];
+ if(failed.length)problems.push('Could not load match '+failed.join(', ')+'. Check the ID, or try again if OpenDota is busy.');
+ if(unsaved.length)problems.push('Could not save match '+unsaved.join(', ')+' to the team. Check your team access and try again.');
+ if(problems.length)throw Error(problems.join(' '));
+ return true;
 }
 async function setEnemyMatchSide(matchId,side){
  const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope;
@@ -451,11 +456,16 @@ function renderEnemyMatches(section){
   for(const [label,side] of [['Enemy was Radiant','radiant'],['Enemy was Dire','dire']])button(label,()=>setEnemyMatchSide(id,side),box);
   root.append(box);
  }
- // A wrongly chosen or inferred side can be corrected.
- for(const m of r.matches.filter(m=>m.side)){
-  const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${m.matchId}: enemy was ${m.side==='radiant'?'Radiant':'Dire'}`));
-  button('Switch side for match '+m.matchId,()=>setEnemyMatchSide(m.matchId,m.side==='radiant'?'dire':'radiant'),box);
-  root.append(box);
+ // A wrongly chosen or inferred side can be corrected; kept collapsed so the panel stays short.
+ const resolvedSides=r.matches.filter(m=>m.side);
+ if(resolvedSides.length){
+  const sides=el('details',null,'draft-enemy-match-sides');sides.append(el('summary',`Enemy side in ${resolvedSides.length} match${resolvedSides.length===1?'':'es'}`));
+  for(const m of resolvedSides.slice(0,10)){
+   const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${m.matchId}: enemy was ${m.side==='radiant'?'Radiant':'Dire'}`));
+   button('Switch side for match '+m.matchId,()=>setEnemyMatchSide(m.matchId,m.side==='radiant'?'dire':'radiant'),box);
+   sides.append(box);
+  }
+  root.append(sides);
  }
  section.append(root);return true;
 }
@@ -960,7 +970,7 @@ async function lobby(){
  const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(state.enemyIds||[]).join(' '),'textarea');enemies.id='enemy-account-input';enemies.placeholder='One player ID or link per line';enemies.rows=3;scouting.append(scoutingActions);
  const matchIds=field(scouting,'Their earlier Battle Cup matches (IDs or links)','','textarea');matchIds.id='enemy-match-input';matchIds.placeholder='Match IDs or Dotabuff/OpenDota links from the bracket';matchIds.rows=2;
  const matchActions=el('div',null,'lobby-actions');scouting.append(matchActions);
- button('Load matches',async()=>{await addEnemyMatches(matchIds.value);matchIds.value='';notice('Battle Cup matches loaded.');},matchActions);
+ button('Load matches',async()=>{if(!await addEnemyMatches(matchIds.value))return;matchIds.value='';notice('Battle Cup matches loaded.');},matchActions);
  const validateEnemies=()=>{
   const tokens=enemies.value.trim().split(/[\s,;]+/).filter(Boolean);
   const invalid=tokens.filter(token=>parseAccountIds(token).length!==1);
