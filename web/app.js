@@ -398,10 +398,11 @@ function writeLocalMatches(){try{localStorage.setItem(localMatchKey(),JSON.strin
 const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
 function syncEnemyMatches(){
  const teamId=enemyMatchTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===enemyMatchScope)return;
- enemyMatchScope=scope;enemyMatchRemote=false;
+ // Every scope change invalidates in-flight team loads, including team → device.
+ enemyMatchScope=scope;enemyMatchRemote=false;const load=++enemyMatchLoad;
  if(!teamId){enemyMatchState='ready';enemyMatches=readLocalMatches();return;}
  // Team scope never mixes in device rows; adding waits until the team list settles.
- enemyMatchState='loading';enemyMatches=[];const load=++enemyMatchLoad;
+ enemyMatchState='loading';enemyMatches=[];
  void Promise.resolve().then(()=>backend.listEnemyMatches(teamId)).then(rows=>{
   if(load!==enemyMatchLoad)return;enemyMatchRemote=true;enemyMatchState='ready';
   enemyMatches=(Array.isArray(rows)?rows:[]).map(r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}));render();

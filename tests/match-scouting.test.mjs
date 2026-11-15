@@ -160,3 +160,22 @@ test('a failing match in a batch keeps the others and names the failed ID',async
   assert.ok(w.localStorage.getItem('captain-enemy-matches-v1:practice'),'loaded match saved');
  }finally{w.close();}
 });
+
+test('a team match list arriving after sign-out never reaches the device scope',async()=>{
+ const draft='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';let auth,finish,asked=0;
+ const backend={getSession:async()=>({user:{id:'owner'}}),onAuthChange(fn){auth=fn;},loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],
+  getDraft:async()=>({id:draft,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,enemyIds:[],roster:[]}}),
+  listEnemyMatches:()=>{asked++;return new Promise(r=>{finish=r;});},signOut:async()=>{}};
+ const dom=new JSDOM(markup,{url:'https://board.example/?draft='+draft,runScripts:'outside-only'}),w=dom.window;
+ w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})});w.setInterval=()=>0;w.confirm=()=>true;
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__matches={};w.__players={};
+ try{
+  w.eval(code);for(let i=0;i<6;i++)await flush();
+  assert.ok(asked>0,'team list requested');
+  auth(null,'SIGNED_OUT');for(let i=0;i<4;i++)await flush();
+  finish([{match_id:9001,enemy_side:'dire',context_enemy_ids:[],summary:A,added_at:new Date().toISOString()}]);for(let i=0;i<4;i++)await flush();
+  assert.equal(w.document.querySelector('#draft-enemy-scouting .draft-enemy-matches'),null);
+  for(const k of Object.keys(w.localStorage).filter(k=>k.startsWith('captain-enemy-matches')))assert.doesNotMatch(w.localStorage.getItem(k),/8001|9001/);
+ }finally{w.close();}
+});
