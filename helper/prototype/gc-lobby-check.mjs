@@ -8,7 +8,7 @@
 //    and prints counts and timing only — no account ids, names or tokens.
 //
 // It never touches the Dota client, its memory or your main account.
-import {open, readFile, rm, writeFile} from 'node:fs/promises';
+import {chmod, open, readFile, rm, writeFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 import {createInterface} from 'node:readline';
@@ -59,7 +59,7 @@ let SteamUser;
 try {
   ({default: SteamUser} = await import('steam-user'));
 } catch {
-  console.error('Missing dependency. Run this once in this folder:  npm install');
+  console.error('Missing dependency. Run this once in this folder:  npm ci --ignore-scripts');
   process.exit(1);
 }
 
@@ -67,12 +67,15 @@ const user = new SteamUser({dataDirectory: null, autoRelogin: true});
 let gcReady = false;
 let helloTimer = null;
 let pending = null;
+let pollTimer = null;
+let usingToken = false;
 let lastNote = '';
 
 const note = message => { if (message !== lastNote) { lastNote = message; say(message); } };
 
 user.on('refreshToken', async token => {
   await writeFile(TOKEN_FILE, token, {mode: 0o600});
+  await chmod(TOKEN_FILE, 0o600);
   say('Saved the bot sign-in token (bot-login-token.txt). Next start needs no password.');
 });
 
@@ -102,17 +105,17 @@ user.on('receivedFromGC', (appid, msgType, payload) => {
     gcReady = true;
     clearInterval(helloTimer);
     say('Connected to the Dota game coordinator. Watching console.log for your next lobby…');
-    void poll();
+    schedulePoll(0);
   }
   if (msgType === MSG.FIND_SOURCETV_GAMES_RESPONSE && pending) report(payload);
 });
 
-user.on('disconnected', () => { gcReady = false; say('Disconnected from Steam; reconnecting…'); });
+user.on('disconnected', () => { gcReady = false; clearTimeout(pollTimer); say('Disconnected from Steam; reconnecting…'); });
 
 user.on('error', async error => {
   const reason = SteamUser.EResult[error.eresult] || error.message;
   say(`Steam sign-in failed: ${reason}.`);
-  if (['InvalidPassword', 'AccessDenied', 'Expired', 'Revoked'].includes(reason)) {
+  if (usingToken) {
     await rm(TOKEN_FILE, {force: true});
     say('Removed the saved token. Start again to sign in with the password.');
   }
@@ -141,6 +144,12 @@ function report(payload) {
   say(`LOBBY FOUND: players ${game.players.length} (with account id ${withIds.length}, sides ${sides}), you ${you ? 'included' : 'not listed'}, match id ${game.matchId === lobby.matchId ? 'matches' : 'differs'}, game time ${game.gameTime}s, spectator delay ${game.delay}s.`);
 }
 
+// One polling loop at a time, even after reconnects.
+function schedulePoll(delay = POLL_MS) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(() => void poll(), delay);
+}
+
 async function poll() {
   if (!gcReady) return;
   try {
@@ -153,9 +162,11 @@ async function poll() {
       user.sendToGC(DOTA_APP_ID, MSG.FIND_SOURCETV_GAMES, {}, encodeFindLobbies([lobby.lobbyId]));
       setTimeout(() => { if (pending?.lobby === lobby) { pending = null; say('No answer from the coordinator within 8 s.'); } }, 8000);
     }
-  } finally {
-    setTimeout(() => void poll(), POLL_MS);
+  } catch {
+    pending = null;
+    note('Request failed; retrying.');
   }
+  schedulePoll();
 }
 
 process.on('SIGINT', () => { say('Signing the bot out.'); user.logOff(); setTimeout(() => process.exit(0), 500); });
@@ -163,6 +174,7 @@ process.on('SIGINT', () => { say('Signing the bot out.'); user.logOff(); setTime
 const token = (await readFile(TOKEN_FILE, 'utf8').catch(() => '')).trim();
 if (token) {
   say('Signing in the bot account with the saved token…');
+  usingToken = true;
   user.logOn({refreshToken: token});
 } else {
   console.log('Sign in the SEPARATE bot Steam account (not your main account). The password is not stored.');

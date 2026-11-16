@@ -22,10 +22,12 @@ It does not touch your main account, the Dota client or its memory.
 
 ```bash
 cd helper/prototype
-npm install
+npm ci --ignore-scripts
 npm start
 ```
 
 Use the bot account, not your main account. Do not play Dota on the bot account while this runs.
 Queue a match on your main account; watch the output during picks. Press Ctrl+C to stop.
-Delete `bot-login-token.txt` to sign the bot out permanently.
+To sign the bot out for good, delete `bot-login-token.txt` **and** on the bot account use Steam → Settings → Security → Manage Steam Guard → Deauthorize all other devices (deleting the file alone does not revoke the token).
+
+Only the bot account carries risk: an automated client asking the coordinator every 10 s is a grey area under the Steam Subscriber Agreement. Your main account is never signed in.
