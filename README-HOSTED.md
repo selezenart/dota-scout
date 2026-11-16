@@ -64,7 +64,7 @@ Preview `?demo&cup&profile` for the profile and close it to try booking and next
 
 ### Google sign-in
 
-The Google button appears on sign-in, registration and invitation screens. Its availability is read server-side from the Supabase public Auth settings; until Google is enabled it stays disabled with an explanation. Configure a Google OAuth web client in Google Cloud with the authorized callback `https://cxawsjcmqajdyhrjrypn.supabase.co/auth/v1/callback`, then enter its client ID and secret in Supabase Authentication -> Providers -> Google and enable it. Keep the secret in Supabase only. Ensure `https://captains-draft-board.vercel.app/?cup` is allowed in Supabase Auth redirect URLs. Reload the site after enabling. Full Google OAuth still requires a real account test.
+The Google button appears on sign-in, registration and invitation screens. Its availability is read server-side from the Supabase public Auth settings; until Google is enabled it stays disabled with an explanation. Configure a Google OAuth web client in Google Cloud with the authorized callback `https://cxawsjcmqajdyhrjrypn.supabase.co/auth/v1/callback`, then enter its client ID and secret in Supabase Authentication -> Providers -> Google and enable it. Keep the secret in Supabase only. Ensure `https://captains-draft-three.vercel.app/?cup` is allowed in Supabase Auth redirect URLs. Reload the site after enabling. Full Google OAuth still requires a real account test.
 
 Profile import now seeds an empty Today list from signatures as an editable starting point. Existing Today selections remain unchanged. Selected heroes stay first in the picker grid when not searching, even if they do not match the preferred-role suggestion filter. Search still filters by name.
 

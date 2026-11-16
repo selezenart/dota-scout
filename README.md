@@ -22,7 +22,7 @@ Technical reference: [helper/README.md](helper/README.md)
 
 ## Development
 
-Requires Node.js 22+.
+Requires Node.js 22+ (the helper alone needs 20+).
 
 ```sh
 npm install

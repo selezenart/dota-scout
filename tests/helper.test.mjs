@@ -395,3 +395,15 @@ test('review: the default allowlist trusts the board, not the unrelated captains
   assert.equal(corsHeaders('https://captains-draft.vercel.app'), null);
   assert.deepEqual(corsHeaders('https://captains-draft-three.vercel.app'), {'Access-Control-Allow-Origin': 'https://captains-draft-three.vercel.app', 'Vary': 'Origin'});
 });
+
+test('review: with no allowlist configured, the server refuses the unrelated captains-draft.vercel.app site', async () => {
+  await withServer({allowedOrigins: undefined}, async ({port, calls}) => {
+    const foreign = await request({port, headers: {Origin: 'https://captains-draft.vercel.app'}});
+    assert.equal(foreign.status, 403);
+    assert.equal(foreign.headers['access-control-allow-origin'], undefined);
+    assert.equal(calls.fetch, 0);
+    const board = await request({port, headers: {Origin: 'https://captains-draft-three.vercel.app'}});
+    assert.equal(board.status, 200);
+    assert.equal(board.headers['access-control-allow-origin'], 'https://captains-draft-three.vercel.app');
+  });
+});

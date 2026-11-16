@@ -70,7 +70,7 @@ To stop: click **Stop live detection** on the board; close the helper window (or
 | --- | --- |
 | Board: "Check that the updated local helper is running…" | Start the helper (step 1) and keep its window open. Allow the browser's local network prompt. Use the board on the same computer as the helper. |
 | Board keeps waiting during picks | Check Dota has `-condebug` in its launch options and was restarted. The helper only sees matches you join after Dota started with it. |
-| Board: "Waiting for the drafter seat…" | Take the drafter seat on the board. |
+| Board: "Waiting for the drafter seat before importing the lineup." | Take the drafter seat on the board. |
 | Board: "Live lineup differs from the assigned players" | The draft already has other players. Open a new draft and detect again. |
 | Helper: `Bot sign-in failed (…)` | Run `npm run bot-login` again in the `helper` folder, then restart the helper. |
 | Helper: `Nothing to read the lineup with` | The bot is not set up. Do setup steps 2 and 3. |
