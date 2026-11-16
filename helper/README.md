@@ -8,7 +8,7 @@ Runs on the Dota PC and lets the board's **Setup → Enemy scouting → Detect l
 2. The helper reads the end of that file and takes the most recent game server id (`[A:1:<account>:<instance>]`, converted to a SteamID64, or a `steamid:9…` / `(9…)` value).
 3. It calls the official Steam Web API endpoint
    `GET https://api.steampowered.com/IDOTA2MatchStats_570/GetRealtimeStats/v1/?key=<key>&server_steam_id=<SteamID64>`.
-   The response has `match.matchid` and `teams[]` with `team_number` (2 = Radiant, 3 = Dire) and `players[].accountid`.
+   The response has `match.match_id` and `teams[]` with `team_number` (2 = Radiant, 3 = Dire) and `players[].accountid`.
 4. Your own account comes from Steam's `config/loginusers.vdf` (the `MostRecent` login, or on newer Steam clients the saved account with the newest login `timestamp`), or from `DOTA_ACCOUNT_ID`.
 5. It serves `GET http://127.0.0.1:8765/live-roster` as
    `{status: "ready", matchId, accountId, teams: [{side: 2, ids: [5]}, {side: 3, ids: [5]}]}`,

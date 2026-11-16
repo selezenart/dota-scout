@@ -55,7 +55,8 @@ export function libraryPathsFromVdf(vdfText) {
 export function shapeLiveRoster(stats, localAccountId) {
   const waiting = message => ({status: 'waiting', message});
   try {
-    const matchId = String(stats?.match?.matchid ?? '');
+    // GetRealtimeStats returns match.match_id; older docs and tools call it matchid.
+    const matchId = String(stats?.match?.match_id ?? stats?.match?.matchid ?? '');
     if (!/^\d+$/.test(matchId) || /^0+$/.test(matchId)) return waiting('Waiting for Valve to publish the live match.');
     const local = String(localAccountId ?? '');
     if (!/^\d+$/.test(local) || /^0+$/.test(local)) return waiting('Could not identify your Dota account on this PC.');

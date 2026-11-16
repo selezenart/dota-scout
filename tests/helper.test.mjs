@@ -116,6 +116,15 @@ test('shapeLiveRoster shapes a ready roster accepted by the web validator', () =
   assert.deepEqual(lineup.enemies, ['100', '101', '102', '103', '104']);
 });
 
+test('shapeLiveRoster reads match_id, the field GetRealtimeStats actually returns', () => {
+  // Field names observed in a live top-game response: match.match_id (digit string), teams[].team_number, players[].accountid.
+  const s = stats({match: {match_id: '8012345678', server_steam_id: SERVER_ID, game_time: -53}});
+  const out = shapeLiveRoster(s, '203');
+  assert.equal(out.status, 'ready');
+  assert.equal(out.matchId, '8012345678');
+  assert.equal(shapeLiveRoster(stats({match: {match_id: '0'}}), '203').status, 'waiting');
+});
+
 test('shapeLiveRoster accepts numeric matchid and falls back to player team', () => {
   const s = stats({match: {matchid: 8012345678}});
   s.teams.forEach(t => delete t.team_number);
