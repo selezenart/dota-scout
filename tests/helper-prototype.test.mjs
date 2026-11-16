@@ -30,7 +30,7 @@ test('prototype: response decoding returns lobby, match, negative game time and 
   assert.equal(game.gameTime, -53);
   assert.equal(game.delay, 120);
   assert.equal(game.players.length, 10);
-  assert.deepEqual(game.players[7], {accountId: '1007', heroId: 17, teamSlot: 2, team: 3});
+  assert.deepEqual(game.players[7], {accountId: '1007', heroId: 17, teamSlot: 2, team: 3, fields: [1, 2, 3, 4]});
 });
 
 test('prototype: decoding rejects truncated payloads instead of reading past the end', () => {

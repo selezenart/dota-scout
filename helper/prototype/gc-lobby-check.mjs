@@ -19,6 +19,8 @@ import {lastLobbyFromLog} from './lobby-log.mjs';
 const DOTA_APP_ID = 570;
 const POLL_MS = 10000;
 const TOKEN_FILE = fileURLToPath(new URL('./bot-login-token.txt', import.meta.url));
+// Local only (git-ignored): the player order of the last lobby, to check sides against the finished match.
+const LINEUP_FILE = fileURLToPath(new URL('./lobby-players.local.json', import.meta.url));
 
 function consoleLogPath() {
   if (process.env.DOTA_CONSOLE_LOG) return process.env.DOTA_CONSOLE_LOG;
@@ -70,6 +72,7 @@ let pending = null;
 let pollTimer = null;
 let usingToken = false;
 let lastNote = '';
+let savedLobbyId = null;
 
 const note = message => { if (message !== lastNote) { lastNote = message; say(message); } };
 
@@ -141,7 +144,24 @@ function report(payload) {
   const withIds = game.players.filter(player => player.accountId !== '0');
   const you = game.players.some(player => player.accountId === lobby.accountId);
   const sides = [2, 3].map(team => game.players.filter(player => player.team === team).length).join('/');
+  if (savedLobbyId !== lobby.lobbyId) {
+    savedLobbyId = lobby.lobbyId;
+    void saveLineup(lobby, game);
+  }
   say(`LOBBY FOUND: players ${game.players.length} (with account id ${withIds.length}, sides ${sides}), you ${you ? 'included' : 'not listed'}, match id ${game.matchId === lobby.matchId ? 'matches' : 'differs'}, game time ${game.gameTime}s, spectator delay ${game.delay}s.`);
+}
+
+async function saveLineup(lobby, game) {
+  const fields = [...new Set(game.players.flatMap(player => player.fields))].sort((a, b) => a - b);
+  say(`Player entry fields: ${fields.join(',')} | team_slot order: ${game.players.map(player => player.teamSlot).join(',')} | hero ids set: ${game.players.filter(player => player.heroId > 0).length}`);
+  try {
+    const players = game.players.map(({accountId, heroId, teamSlot, team}) => ({accountId, heroId, teamSlot, team}));
+    await writeFile(LINEUP_FILE, JSON.stringify({matchId: game.matchId, lobbyId: lobby.lobbyId, savedAt: new Date().toISOString(), players}, null, 2), {mode: 0o600});
+    await chmod(LINEUP_FILE, 0o600);
+    say('Saved the player order to lobby-players.local.json (stays on this Mac).');
+  } catch {
+    say('Could not save the player order.');
+  }
 }
 
 // One polling loop at a time, even after reconnects.

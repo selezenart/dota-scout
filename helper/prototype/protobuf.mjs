@@ -91,7 +91,7 @@ export function decodeGame(buffer) {
     matchId: String(uint(fields, 12)),
     players: (fields.get(22) || []).map(player => {
       const p = decodeFields(player);
-      return {accountId: String(uint(p, 1)), heroId: int32(p, 2), teamSlot: Number(uint(p, 3)), team: Number(uint(p, 4))};
+      return {accountId: String(uint(p, 1)), heroId: int32(p, 2), teamSlot: Number(uint(p, 3)), team: Number(uint(p, 4)), fields: [...p.keys()].sort((a, b) => a - b)};
     }),
   };
 }
