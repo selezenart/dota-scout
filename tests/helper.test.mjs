@@ -77,6 +77,13 @@ test('localAccountFromLoginUsers picks the newest login when Steam writes no Mos
   assert.equal(localAccountFromLoginUsers(vdf), '52079950');
   const tie = `"users"\n{\n${user('76561198000000002', '0', '5')}${user('76561198000000001', '0', '5')}}\n`;
   assert.equal(localAccountFromLoginUsers(tie), null);
+  const flagged = `"users"\n{\n"76561198000000001"\n{\n"MostRecent" "1"\n"timestamp" "1"\n}\n${user('76561198012345678', '0', '9')}}\n`;
+  assert.equal(localAccountFromLoginUsers(flagged), LOCAL);
+  const partial = `"users"\n{\n"76561198000000001"\n{\n"MostRecent" "0"\n}\n${user('76561198012345678', '0', '9')}}\n`;
+  assert.equal(localAccountFromLoginUsers(partial), null);
+  const junk = `"users"\n{\n${user('76561198000000002', '0', 'abc')}${user('76561198012345678', '0', '9')}}\n`;
+  assert.equal(localAccountFromLoginUsers(junk), null);
+  assert.equal(localAccountFromLoginUsers(`"users"\n{\n${user('76561198000000001', '0', '0')}}\n`), LOCAL);
 });
 
 test('localAccountFromLoginUsers falls back to a single user, else null', () => {

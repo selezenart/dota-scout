@@ -32,10 +32,12 @@ export function localAccountFromLoginUsers(vdfText) {
   const users = [];
   const block = /"(7656119\d{10})"\s*\{([^{}]*)\}/g;
   for (const [, id64, body] of vdfText.matchAll(block)) {
-    users.push({id64, recent: /"MostRecent"\s*"1"/i.test(body), timestamp: Number(body.match(/"timestamp"\s*"(\d+)"/i)?.[1] || 0)});
+    users.push({id64, recent: /"MostRecent"\s*"1"/i.test(body), timestamp: Number(body.match(/"timestamp"\s*"(\d{1,15})"/i)?.[1] || 0)});
   }
   // Newer Steam clients drop MostRecent and keep only each account's last login time.
-  const newest = Math.max(0, ...users.map(entry => entry.timestamp));
+  // Trust that only when every saved account has one.
+  const timed = users.length > 0 && users.every(entry => entry.timestamp > 0);
+  const newest = timed ? users.reduce((max, entry) => Math.max(max, entry.timestamp), 0) : 0;
   const latest = newest ? users.filter(entry => entry.timestamp === newest) : [];
   const user = users.find(entry => entry.recent) || (latest.length === 1 ? latest[0] : null) || (users.length === 1 ? users[0] : null);
   if (!user) return null;
