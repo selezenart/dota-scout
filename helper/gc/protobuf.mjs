@@ -5,6 +5,7 @@
 export const MSG = {
   CLIENT_HELLO: 4006, // k_EMsgGCClientHello
   CLIENT_WELCOME: 4004, // k_EMsgGCClientWelcome
+  CLIENT_CONNECTION_STATUS: 4009, // k_EMsgGCClientConnectionStatus (sent when the GC session drops)
   FIND_SOURCETV_GAMES: 8009, // k_EMsgClientToGCFindTopSourceTVGames
   FIND_SOURCETV_GAMES_RESPONSE: 8010, // k_EMsgGCToClientFindTopSourceTVGamesResponse
 };

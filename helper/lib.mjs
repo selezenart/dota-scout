@@ -79,6 +79,21 @@ export function shapeLiveRoster(stats, localAccountId) {
   }
 }
 
+// Lineup from the Dota game coordinator's lobby listing. Its teams are 0 = Radiant and 1 = Dire
+// (checked against a finished match); the board uses 2 = Radiant and 3 = Dire.
+// Reuses shapeLiveRoster so both sources pass the same checks.
+export function shapeGcRoster(game, lobby) {
+  const sides = [[0, 2], [1, 3]].map(([team, side]) => ({
+    team_number: side,
+    players: (Array.isArray(game?.players) ? game.players : [])
+      .filter(player => player?.team === team)
+      .sort((a, b) => a.teamSlot - b.teamSlot)
+      .map(player => ({accountid: player.accountId})),
+  }));
+  const matchId = /^[1-9]\d*$/.test(String(game?.matchId)) ? game.matchId : lobby?.matchId;
+  return shapeLiveRoster({match: {match_id: matchId}, teams: sides}, lobby?.accountId);
+}
+
 export function corsHeaders(origin, allowedOrigins = DEFAULT_ALLOWED_ORIGINS) {
   if (origin === undefined) return {};
   if (!allowedOrigins.includes(origin)) return null;

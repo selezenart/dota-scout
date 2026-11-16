@@ -1,7 +1,8 @@
 // Captain's Draft Board local helper.
 // Reads Dota 2's console.log (written when Dota runs with -condebug) to find the
-// current game server, then asks the official Steam Web API for that server's
-// live lineup. It never reads game memory or injects anything into the game.
+// current lobby, then asks the Dota game coordinator through a separate bot Steam account
+// for its players (falling back to the Steam Web API for published games).
+// It never reads game memory or injects anything into the game.
 import {createServer} from 'node:http';
 import {open, readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
@@ -9,8 +10,9 @@ import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {
   DEFAULT_ALLOWED_ORIGINS, corsHeaders, isLocalHost, libraryPathsFromVdf, localAccountFromLoginUsers,
-  redact, serverSteamIdFromLog, shapeLiveRoster, steamKeyFrom,
+  redact, serverSteamIdFromLog, shapeGcRoster, shapeLiveRoster, steamKeyFrom,
 } from './lib.mjs';
+import {lastLobbyFromLog} from './gc/lobby-log.mjs';
 
 const HOST = '127.0.0.1';
 const PORT = 8765;
@@ -21,10 +23,28 @@ const STATUS_PAGE = `<!doctype html><meta charset="utf-8"><title>Captain's Draft
 <p>Keep the helper window open while you play. On the board, choose Setup → Enemy scouting → Detect live lineup.</p>
 <p><a href="/live-roster">Current live roster status</a></p></body>`;
 
-export function createHelperServer({readConsoleLog, getLocalAccountId, fetchRealtimeStats, allowedOrigins = DEFAULT_ALLOWED_ORIGINS, port, log = () => {}}) {
+export function createHelperServer({readConsoleLog, getLocalAccountId, fetchRealtimeStats = null, lookupLobby = null, allowedOrigins = DEFAULT_ALLOWED_ORIGINS, port, log = () => {}}) {
   async function liveRoster() {
     const text = await readConsoleLog();
     if (text == null) return {status: 'waiting', message: 'Dota console log not found. Add -condebug to the Dota 2 launch options and restart Dota.'};
+    // First choice: the game coordinator lists the lobby's ten players as soon as picks start.
+    if (lookupLobby) {
+      const lobby = lastLobbyFromLog(text);
+      if (lobby && !lobby.ended) {
+        let game = null;
+        try {
+          game = await lookupLobby(lobby.lobbyId);
+        } catch {
+          log('The game coordinator lookup failed.');
+        }
+        const roster = game ? shapeGcRoster(game, lobby) : null;
+        if (roster?.status === 'ready') return roster;
+        if (!fetchRealtimeStats) return roster || {status: 'waiting', message: 'Asking the Dota game coordinator for your lobby…'};
+      } else if (!fetchRealtimeStats) {
+        return {status: 'waiting', message: 'Waiting for your next match in the Dota console log.'};
+      }
+    }
+    // Fallback: the Steam Web API, which only covers games Valve publishes for spectating.
     const serverSteamId = serverSteamIdFromLog(text);
     if (!serverSteamId) return {status: 'waiting', message: 'Waiting for a live match in the Dota console log.'};
     const accountId = await getLocalAccountId();
@@ -149,7 +169,7 @@ export function steamFetcher(key, fetchImpl = fetch) {
       // Steam explains rejected requests in the body (HTML or text); keep a short, key-free reason.
       let reason = '';
       try { reason = String(await response.text()); } catch { /* no readable body */ }
-      const detail = redact(reason.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), key).slice(0, 200);
+      const detail = redact(reason.slice(0, 4000).replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim(), key).slice(0, 200);
       const error = Object.assign(new Error('Steam Web API error'), {status: response.status, detail});
       if ([403, 429].includes(response.status)) failure = {serverSteamId, at: Date.now(), error};
       throw error;
@@ -167,14 +187,32 @@ async function main() {
     return;
   }
   const keyFile = fileURLToPath(new URL('./steam-key.txt', import.meta.url));
+  const tokenFile = fileURLToPath(new URL('./bot-login-token.txt', import.meta.url));
   const key = steamKeyFrom(process.env.STEAM_WEB_API_KEY, await readText(keyFile));
-  if (!key) {
-    console.error(`No Steam Web API key. Put your key on one line in ${keyFile} or set STEAM_WEB_API_KEY.\nGet a key at https://steamcommunity.com/dev/apikey`);
+  const refreshToken = ((await readText(tokenFile)) || '').trim();
+  if (key && !/^[0-9A-F]{32}$/i.test(key)) {
+    console.error('The Steam Web API key must be 32 letters and digits (0-9, A-F). Check steam-key.txt.');
     process.exitCode = 1;
     return;
   }
-  if (!/^[0-9A-F]{32}$/i.test(key)) {
-    console.error('The Steam Web API key must be 32 letters and digits (0-9, A-F). Check steam-key.txt.');
+  const secrets = [key, refreshToken];
+  const log = message => console.log(secrets.reduce((text, secret) => redact(text, secret), String(message)));
+  let bot = null;
+  if (refreshToken) {
+    try {
+      const {default: SteamUser} = await import('steam-user');
+      const {startBot} = await import('./gc/bot.mjs');
+      bot = startBot({SteamUser, refreshToken, tokenFile, log, onToken: token => secrets.push(token)});
+    } catch {
+      console.error('The bot needs one dependency. Run this once in the helper folder:  npm ci --ignore-scripts');
+    }
+  }
+  if (!bot && !key) {
+    console.error([
+      'Nothing to read the lineup with. Set up at least one of:',
+      '  - the bot account (recommended, works during picks): run "npm ci --ignore-scripts" and "npm run bot-login" in the helper folder;',
+      `  - a Steam Web API key on one line in ${keyFile} (only works for games Valve publishes for spectating).`,
+    ].join('\n'));
     process.exitCode = 1;
     return;
   }
@@ -182,8 +220,12 @@ async function main() {
     ? process.env.HELPER_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
     : DEFAULT_ALLOWED_ORIGINS;
   const server = createHelperServer({
-    readConsoleLog, getLocalAccountId, fetchRealtimeStats: steamFetcher(key), allowedOrigins, port: PORT,
-    log: message => console.log(redact(message, key)),
+    readConsoleLog, getLocalAccountId, fetchRealtimeStats: key ? steamFetcher(key) : null,
+    lookupLobby: bot?.lookupLobby || null, allowedOrigins, port: PORT, log,
+  });
+  process.on('SIGINT', () => {
+    bot?.stop();
+    setTimeout(() => process.exit(0), 300);
   });
   server.on('error', error => {
     console.error(error.code === 'EADDRINUSE' ? `Port ${PORT} is already in use. Close the other helper window and try again.` : 'The helper could not start.');
@@ -192,6 +234,7 @@ async function main() {
   server.listen(PORT, HOST, async () => {
     console.log(`Captain's Draft Board helper running at http://${HOST}:${PORT}`);
     console.log(`Allowed sites: ${allowedOrigins.join(', ')}`);
+    console.log(`Lineup sources: ${[bot && 'bot account (game coordinator)', key && 'Steam Web API'].filter(Boolean).join(', ')}.`);
     console.log((await readConsoleLog()) == null ? 'Dota console log not found yet. Add -condebug to the Dota 2 launch options, or set DOTA_CONSOLE_LOG.' : 'Dota console log found.');
     console.log((await getLocalAccountId()) ? 'Steam account found.' : 'Steam account not found. Set DOTA_ACCOUNT_ID to your Dota friend ID.');
     console.log('Keep this window open while you play. Press Ctrl+C to stop.');
