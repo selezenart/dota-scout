@@ -196,13 +196,25 @@ async function main() {
     return;
   }
   const secrets = [key, refreshToken];
-  const log = message => console.log(secrets.reduce((text, secret) => redact(text, secret), String(message)));
+  // Started at login (npm run autostart-on) the output goes to a log file, so stamp each line.
+  const stamp = () => (process.env.HELPER_AUTOSTART === '1' ? `${new Date().toISOString()} ` : '');
+  const log = message => console.log(stamp() + secrets.reduce((text, secret) => redact(text, secret), String(message)));
   let bot = null;
   if (refreshToken) {
     try {
       const {default: SteamUser} = await import('steam-user');
       const {startBot} = await import('./gc/bot.mjs');
-      bot = startBot({SteamUser, refreshToken, tokenFile, log, onToken: token => secrets.push(token)});
+      const {createDotaWatch, dotaRunningCheck} = await import('./gc/dota-watch.mjs');
+      // Sign in with the newest token: Steam may renew it while the helper runs.
+      const currentToken = () => secrets.at(-1) || refreshToken;
+      // The bot signs in only while Dota is running.
+      bot = createDotaWatch({
+        isDotaRunning: dotaRunningCheck(),
+        startBot: () => startBot({SteamUser, refreshToken: currentToken(), tokenFile, log, onToken: token => secrets.push(token)}),
+        log,
+      });
+      void bot.check();
+      setInterval(() => void bot.check(), 15000).unref();
     } catch {
       console.error('The bot needs one dependency. Run this once in the helper folder:  npm ci --ignore-scripts');
     }
@@ -223,18 +235,28 @@ async function main() {
     readConsoleLog, getLocalAccountId, fetchRealtimeStats: key ? steamFetcher(key) : null,
     lookupLobby: bot?.lookupLobby || null, allowedOrigins, port: PORT, log,
   });
-  process.on('SIGINT', () => {
+  const shutdown = () => {
     bot?.stop();
     setTimeout(() => process.exit(0), 300);
-  });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
   server.on('error', error => {
-    console.error(error.code === 'EADDRINUSE' ? `Port ${PORT} is already in use. Close the other helper window and try again.` : 'The helper could not start.');
-    process.exitCode = 1;
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Close the other helper window and try again.`);
+      // Started at login while another helper is open: stop quietly instead of being restarted.
+      process.exitCode = process.env.HELPER_AUTOSTART === '1' ? 0 : 1;
+    } else {
+      console.error('The helper could not start.');
+      process.exitCode = 1;
+    }
+    bot?.stop();
+    setTimeout(() => process.exit(), 300);
   });
   server.listen(PORT, HOST, async () => {
     console.log(`Captain's Draft Board helper running at http://${HOST}:${PORT}`);
     console.log(`Allowed sites: ${allowedOrigins.join(', ')}`);
-    console.log(`Lineup sources: ${[bot && 'bot account (game coordinator)', key && 'Steam Web API'].filter(Boolean).join(', ')}.`);
+    console.log(`Lineup sources: ${[bot && 'bot account (signs in while Dota is running)', key && 'Steam Web API'].filter(Boolean).join(', ')}.`);
     console.log((await readConsoleLog()) == null ? 'Dota console log not found yet. Add -condebug to the Dota 2 launch options, or set DOTA_CONSOLE_LOG.' : 'Dota console log found.');
     console.log((await getLocalAccountId()) ? 'Steam account found.' : 'Steam account not found. Set DOTA_ACCOUNT_ID to your Dota friend ID.');
     console.log('Keep this window open while you play. Press Ctrl+C to stop.');

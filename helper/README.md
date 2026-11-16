@@ -32,6 +32,7 @@ The helper only reads files, talks to Steam as the bot account, and calls the St
    - Windows: double-click `helper\start.bat`.
    - macOS/Linux: `./helper/start.sh` (or `npm start` in the `helper` folder).
    It should print `Connected to the Dota game coordinator.`
+   To skip the terminal from now on: `npm run autostart-on` (macOS LaunchAgent / Windows Startup folder). The helper then runs in the background from login, signs the bot in only while Dota is running (checked every 15 s, signed out 2 minutes after Dota closes) and logs to `~/Library/Logs/CaptainsDraftHelper.log` or `%LOCALAPPDATA%\CaptainsDraftHelper\helper.log`. `npm run autostart-off` removes it.
 6. On the board, take the drafter seat and choose Setup → Enemy scouting → Detect live lineup. Allow the browser's local network prompt if it appears.
 
 ### The bot account

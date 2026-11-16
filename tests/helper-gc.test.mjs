@@ -6,6 +6,8 @@ import {
 import http from 'node:http';
 import {lastLobbyFromLog} from '../helper/gc/lobby-log.mjs';
 import {createLobbyLookup} from '../helper/gc/lookup.mjs';
+import {createDotaWatch, dotaInProcessList, dotaRunningCheck} from '../helper/gc/dota-watch.mjs';
+import {launchAgentPlist, windowsStartupScript} from '../helper/autostart.mjs';
 import {shapeGcRoster} from '../helper/lib.mjs';
 import {createHelperServer} from '../helper/server.mjs';
 import {liveLineup} from '../web/live-roster.js';
@@ -225,4 +227,71 @@ test('gc lookup (review): a reply listing only other lobbies does not end the re
   assert.equal((await pending).lobbyId, LOBBY);
   for (const bad of ['0123', '18446744073709551616', '99999999999999999999']) assert.equal(await gc.lookup.lookup(bad), null);
   assert.equal(gc.sent.length, 1);
+});
+
+// --- Bot only while Dota runs, and autostart files ---
+
+test('dota watch: finds Dota in macOS, Linux and Windows process lists', async () => {
+  assert.equal(dotaInProcessList('/sbin/launchd\n/Users/me/Library/Application Support/Steam/steamapps/common/dota 2 beta/game/bin/osx64/dota2.app/Contents/MacOS/dota2\n', 'darwin'), true);
+  assert.equal(dotaInProcessList('/usr/bin/steam\n/opt/dota2helper\n', 'linux'), false);
+  assert.equal(dotaInProcessList('"dota2.exe","1234","Console","1","2,000,000 K"\r\n', 'win32'), true);
+  assert.equal(dotaInProcessList('INFO: No tasks are running which match the specified criteria.\r\n', 'win32'), false);
+  const calls = [];
+  const check = dotaRunningCheck('darwin', async (command, args) => { calls.push([command, ...args]); return 'dota2\n'; });
+  assert.equal(await check(), true);
+  assert.deepEqual(calls, [['ps', '-A', '-o', 'comm=']]);
+});
+
+test('dota watch: signs the bot in when Dota starts and out two minutes after it closes', async () => {
+  let running = false;
+  let clock = 0;
+  const bots = [];
+  const watch = createDotaWatch({
+    isDotaRunning: async () => running,
+    startBot: () => { const bot = {stopped: false, stop() { this.stopped = true; }, lookupLobby: async () => 'game'}; bots.push(bot); return bot; },
+    now: () => clock,
+  });
+  await watch.check();
+  assert.equal(bots.length, 0);
+  assert.equal(await watch.lookupLobby(LOBBY), null);
+  running = true;
+  await watch.check();
+  await watch.check();
+  assert.equal(bots.length, 1, 'one sign-in per Dota session');
+  assert.equal(await watch.lookupLobby(LOBBY), 'game');
+  running = false;
+  clock += 119000;
+  await watch.check();
+  assert.equal(bots[0].stopped, false, 'a short gap (Dota restarting) keeps the bot');
+  clock += 1000;
+  await watch.check();
+  assert.equal(bots[0].stopped, true);
+  assert.equal(watch.isActive(), false);
+  running = true;
+  await watch.check();
+  assert.equal(bots.length, 2, 'signs in again with the next Dota session');
+});
+
+test('dota watch: if the process list cannot be read, the bot stays available', async () => {
+  let started = 0;
+  const watch = createDotaWatch({isDotaRunning: async () => { throw new Error('ps missing'); }, startBot: () => { started++; return {stop() {}, lookupLobby: async () => null}; }});
+  await watch.check();
+  assert.equal(started, 1);
+});
+
+test('autostart: LaunchAgent runs the helper at login, escapes paths and stores no secrets', () => {
+  const plist = launchAgentPlist({nodePath: '/opt/node/bin/node', serverPath: '/Users/me/A&B <x>/helper/server.mjs', workDir: '/Users/me/A&B <x>/helper', logPath: '/Users/me/Library/Logs/CaptainsDraftHelper.log', env: {HELPER_ALLOWED_ORIGINS: 'https://captains-draft-three.vercel.app'}});
+  assert.match(plist, /<string>\/Users\/me\/A&amp;B &lt;x&gt;\/helper\/server\.mjs<\/string>/);
+  assert.match(plist, /<key>HELPER_AUTOSTART<\/key><string>1<\/string>/);
+  assert.match(plist, /<key>RunAtLoad<\/key><true\/>/);
+  assert.match(plist, /<key>SuccessfulExit<\/key><false\/>/);
+  assert.doesNotMatch(plist, /STEAM_WEB_API_KEY|token/i);
+});
+
+test('autostart: Windows startup script runs node hidden with quoted paths', () => {
+  const script = windowsStartupScript({nodePath: 'C:\\Program Files\\nodejs\\node.exe', workDir: 'C:\\Users\\Me\\dota scout\\helper', logPath: 'C:\\Users\\Me\\AppData\\Local\\CaptainsDraftHelper\\helper.log'});
+  assert.match(script, /shell\.CurrentDirectory = "C:\\Users\\Me\\dota scout\\helper"/);
+  assert.match(script, /shell\.Environment\("PROCESS"\)\("HELPER_AUTOSTART"\) = "1"/);
+  assert.ok(script.includes('shell.Run "cmd /c """"C:\\Program Files\\nodejs\\node.exe"" server.mjs >> ""C:\\Users\\Me\\AppData\\Local\\CaptainsDraftHelper\\helper.log"" 2>&1""", 0, False'));
+  assert.ok(script.includes('\r\n'));
 });

@@ -48,13 +48,28 @@ npm run bot-login
 
 Type the **bot** account's name, then its password (nothing appears while you type), then the Steam Guard code from that account's email or Steam app. When you see `Bot signed in. Saved its sign-in token…` you are done. The password is not stored; only a sign-in token is kept in `helper/bot-login-token.txt`. Do not share that file.
 
+### 4. Optional: start the helper automatically
+
+So you never open a terminal again, run this once in the `helper` folder:
+
+```
+npm run autostart-on
+```
+
+The helper then starts in the background whenever you log in to your computer (no window). It signs the bot in only while Dota is running and signs it out about two minutes after you close Dota. Its messages go to a log file:
+
+- **macOS:** `~/Library/Logs/CaptainsDraftHelper.log`
+- **Windows:** `%LOCALAPPDATA%\CaptainsDraftHelper\helper.log`
+
+`npm run autostart-status` shows whether it is on; `npm run autostart-off` turns it off. If you move the repository folder, run `npm run autostart-on` again.
+
 ## Every time you play
 
-1. **Start the helper** and keep its window open:
+1. **Start the helper** (skip this if you turned on autostart):
    - **macOS:** in Terminal, from the repository folder: `./helper/start.sh`
    - **Windows:** double-click `helper\start.bat`
 
-   Wait for:
+   Keep the window open. Once Dota is running you will see:
    ```
    Connected to the Dota game coordinator. The lineup appears when picks start.
    ```
@@ -62,7 +77,7 @@ Type the **bot** account's name, then its password (nothing appears while you ty
 3. Go to **Setup → Enemy scouting → Detect live lineup**. If the browser asks to allow access to devices on your local network, allow it.
 4. **Queue in Dota.** When the match is accepted and picks start, the board imports both teams (usually within 10 seconds) and starts scouting the enemy players. The button changes back once the lineup is imported.
 
-To stop: click **Stop live detection** on the board; close the helper window (or press Ctrl+C) when you are done playing.
+To stop: click **Stop live detection** on the board. Without autostart, close the helper window (or press Ctrl+C) when you are done playing.
 
 ## Troubleshooting
 
@@ -74,13 +89,14 @@ To stop: click **Stop live detection** on the board; close the helper window (or
 | Board: "Live lineup differs from the assigned players" | The draft already has other players. Open a new draft and detect again. |
 | Helper: `Bot sign-in failed (…)` | Run `npm run bot-login` again in the `helper` folder, then restart the helper. |
 | Helper: `Nothing to read the lineup with` | The bot is not set up. Do setup steps 2 and 3. |
-| Helper: `Port 8765 is already in use` | Another helper window is already open. Use that one or close it. |
+| Helper: `Port 8765 is already in use` | Another helper is already running (a window, or autostart in the background). Use that one or close the window. |
+| Autostart: nothing happens | Run `npm run autostart-status` and read the log file above. On macOS, if the log shows "Operation not permitted", allow Node in System Settings → Privacy & Security → Files and Folders, or keep the repository outside Documents/Desktop/Downloads. |
 | Helper: `Dota console log not found` | Add `-condebug` (step 1). If Dota is installed in an unusual place, set `DOTA_CONSOLE_LOG` to the full path of `console.log` (see [helper/README.md](../helper/README.md)). |
 | Some players have no account | Their Dota profile hides it. Enter those players manually on the board. |
 
 ## Turning it off for good
 
-1. Delete `helper/bot-login-token.txt`.
+1. Run `npm run autostart-off` in the `helper` folder (if you turned autostart on), then delete `helper/bot-login-token.txt`.
 2. On the bot account, in the Steam app: Steam Guard → **Deauthorize all other devices** (or change the bot's password). This cancels the saved token everywhere.
 3. Remove `-condebug` from Dota's launch options if you like.
 
