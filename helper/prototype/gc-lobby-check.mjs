@@ -143,7 +143,8 @@ function report(payload) {
   }
   const withIds = game.players.filter(player => player.accountId !== '0');
   const you = game.players.some(player => player.accountId === lobby.accountId);
-  const sides = [2, 3].map(team => game.players.filter(player => player.team === team).length).join('/');
+  const sides = [0, 1].map(team => // GC lobby teams: 0 Radiant, 1 Dire
+    game.players.filter(player => player.team === team).length).join('/');
   if (savedLobbyId !== lobby.lobbyId) {
     savedLobbyId = lobby.lobbyId;
     void saveLineup(lobby, game);
