@@ -1,0 +1,16 @@
+{
+  "name": "captains-draft-helper",
+  "private": true,
+  "type": "module",
+  "description": "Local helper that gives Captain's Draft Board the live lineup of your Dota match.",
+  "scripts": {
+    "start": "node server.mjs",
+    "bot-login": "node bot-login.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "steam-user": "^5.2.0"
+  }
+}

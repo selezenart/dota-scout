@@ -70,6 +70,22 @@ test('localAccountFromLoginUsers picks the MostRecent user', async () => {
   assert.equal(localAccountFromLoginUsers(await fx('loginusers.vdf')), '52079950');
 });
 
+test('localAccountFromLoginUsers picks the newest login when Steam writes no MostRecent flag', () => {
+  // Current macOS Steam clients store only a login timestamp per saved account.
+  const user = (id, autoLogin, timestamp) => `\t"${id}"\n\t{\n\t\t"AccountName"\t\t"x"\n\t\t"AutoLogin"\t\t"${autoLogin}"\n\t\t"timestamp"\t\t"${timestamp}"\n\t}\n`;
+  const vdf = `"users"\n{\n${user('76561198000000002', '0', '1794689934')}${user('76561198012345678', '1', '1794780390')}${user('76561198000000001', '0', '1794677237')}}\n`;
+  assert.equal(localAccountFromLoginUsers(vdf), '52079950');
+  const tie = `"users"\n{\n${user('76561198000000002', '0', '5')}${user('76561198000000001', '0', '5')}}\n`;
+  assert.equal(localAccountFromLoginUsers(tie), null);
+  const flagged = `"users"\n{\n"76561198000000001"\n{\n"MostRecent" "1"\n"timestamp" "1"\n}\n${user('76561198012345678', '0', '9')}}\n`;
+  assert.equal(localAccountFromLoginUsers(flagged), LOCAL);
+  const partial = `"users"\n{\n"76561198000000001"\n{\n"MostRecent" "0"\n}\n${user('76561198012345678', '0', '9')}}\n`;
+  assert.equal(localAccountFromLoginUsers(partial), null);
+  const junk = `"users"\n{\n${user('76561198000000002', '0', 'abc')}${user('76561198012345678', '0', '9')}}\n`;
+  assert.equal(localAccountFromLoginUsers(junk), null);
+  assert.equal(localAccountFromLoginUsers(`"users"\n{\n${user('76561198000000001', '0', '0')}}\n`), LOCAL);
+});
+
 test('localAccountFromLoginUsers falls back to a single user, else null', () => {
   const one = '"users"\n{\n"76561198000000001"\n{\n"MostRecent" "0"\n}\n}';
   assert.equal(localAccountFromLoginUsers(one), LOCAL);
@@ -98,6 +114,15 @@ test('shapeLiveRoster shapes a ready roster accepted by the web validator', () =
   const lineup = liveLineup(out);
   assert.deepEqual(lineup.ours, ['200', '201', '202', '203', '204']);
   assert.deepEqual(lineup.enemies, ['100', '101', '102', '103', '104']);
+});
+
+test('shapeLiveRoster reads match_id, the field GetRealtimeStats actually returns', () => {
+  // Field names observed in a live top-game response: match.match_id (digit string), teams[].team_number, players[].accountid.
+  const s = stats({match: {match_id: '8012345678', server_steam_id: SERVER_ID, game_time: -53}});
+  const out = shapeLiveRoster(s, '203');
+  assert.equal(out.status, 'ready');
+  assert.equal(out.matchId, '8012345678');
+  assert.equal(shapeLiveRoster(stats({match: {match_id: '0'}}), '203').status, 'waiting');
 });
 
 test('shapeLiveRoster accepts numeric matchid and falls back to player team', () => {
@@ -258,6 +283,22 @@ test('review: Steam 403/429 failures are cached so polling does not hammer Steam
   await assert.rejects(fetchStats('90108373362313221'), error => error.status === 403);
   await assert.rejects(fetchStats('90108373362313221'), error => error.status === 403);
   assert.equal(calls, 1);
+});
+
+test('review: Steam error reasons reach the helper window without the key', async () => {
+  const key = '0123456789ABCDEF0123456789ABCDEF';
+  const fetchImpl = async () => ({ok: false, status: 400, text: async () => `<html><body><h1>Bad Request</h1>Invalid server_steam_id for key=${key}</body></html>`, json: async () => ({})});
+  const fetchStats = steamFetcher(key, fetchImpl);
+  const error = await fetchStats('90108373362313221').catch(caught => caught);
+  assert.equal(error.status, 400);
+  assert.match(error.detail, /Invalid server_steam_id/);
+  assert.ok(!error.detail.includes(key));
+  assert.ok(!error.detail.includes('<'));
+  await withServer({fetchRealtimeStats: async () => { throw error; }}, async ({port, calls}) => {
+    const res = await request({port, headers: {Origin: ORIGIN}});
+    assert.ok(!res.body.includes('Invalid server_steam_id'));
+    assert.ok(calls.logs.some(line => line.includes('HTTP 400') && line.includes('Invalid server_steam_id')));
+  });
 });
 
 test('server: disallowed origin gets 403 and no Steam call', async () => {

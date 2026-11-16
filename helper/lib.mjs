@@ -25,15 +25,21 @@ export function serverSteamIdFromLog(text) {
   return found;
 }
 
-// Account id (32-bit) of the most recent Steam login, from Steam's config/loginusers.vdf.
+// Account id (32-bit) of the most recent Steam login, from Steam's config/loginusers.vdf
+// (MostRecent flag, else the newest login timestamp, else the only saved account).
 export function localAccountFromLoginUsers(vdfText) {
   if (typeof vdfText !== 'string') return null;
   const users = [];
   const block = /"(7656119\d{10})"\s*\{([^{}]*)\}/g;
   for (const [, id64, body] of vdfText.matchAll(block)) {
-    users.push({id64, recent: /"MostRecent"\s*"1"/i.test(body)});
+    users.push({id64, recent: /"MostRecent"\s*"1"/i.test(body), timestamp: Number(body.match(/"timestamp"\s*"(\d{1,15})"/i)?.[1] || 0)});
   }
-  const user = users.find(entry => entry.recent) || (users.length === 1 ? users[0] : null);
+  // Newer Steam clients drop MostRecent and keep only each account's last login time.
+  // Trust that only when every saved account has one.
+  const timed = users.length > 0 && users.every(entry => entry.timestamp > 0);
+  const newest = timed ? users.reduce((max, entry) => Math.max(max, entry.timestamp), 0) : 0;
+  const latest = newest ? users.filter(entry => entry.timestamp === newest) : [];
+  const user = users.find(entry => entry.recent) || (latest.length === 1 ? latest[0] : null) || (users.length === 1 ? users[0] : null);
   if (!user) return null;
   const account = BigInt(user.id64) - STEAM_ID64_BASE;
   return account > 0n && account < 4294967296n ? account.toString() : null;
@@ -49,7 +55,8 @@ export function libraryPathsFromVdf(vdfText) {
 export function shapeLiveRoster(stats, localAccountId) {
   const waiting = message => ({status: 'waiting', message});
   try {
-    const matchId = String(stats?.match?.matchid ?? '');
+    // GetRealtimeStats returns match.match_id; older docs and tools call it matchid.
+    const matchId = String(stats?.match?.match_id ?? stats?.match?.matchid ?? '');
     if (!/^\d+$/.test(matchId) || /^0+$/.test(matchId)) return waiting('Waiting for Valve to publish the live match.');
     const local = String(localAccountId ?? '');
     if (!/^\d+$/.test(local) || /^0+$/.test(local)) return waiting('Could not identify your Dota account on this PC.');
@@ -70,6 +77,21 @@ export function shapeLiveRoster(stats, localAccountId) {
   } catch {
     return waiting('Waiting for a live match.');
   }
+}
+
+// Lineup from the Dota game coordinator's lobby listing. Its teams are 0 = Radiant and 1 = Dire
+// (checked against a finished match); the board uses 2 = Radiant and 3 = Dire.
+// Reuses shapeLiveRoster so both sources pass the same checks.
+export function shapeGcRoster(game, lobby) {
+  const sides = [[0, 2], [1, 3]].map(([team, side]) => ({
+    team_number: side,
+    players: (Array.isArray(game?.players) ? game.players : [])
+      .filter(player => player?.team === team)
+      .sort((a, b) => a.teamSlot - b.teamSlot)
+      .map(player => ({accountid: player.accountId})),
+  }));
+  const matchId = /^[1-9]\d*$/.test(String(game?.matchId)) ? game.matchId : lobby?.matchId;
+  return shapeLiveRoster({match: {match_id: matchId}, teams: sides}, lobby?.accountId);
 }
 
 export function corsHeaders(origin, allowedOrigins = DEFAULT_ALLOWED_ORIGINS) {
