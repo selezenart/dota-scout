@@ -3,7 +3,8 @@
 
 const STEAM_ID64_BASE = 76561197960265728n;
 
-export const DEFAULT_ALLOWED_ORIGINS = ['https://captains-draft.vercel.app', 'http://127.0.0.1:5173'];
+// Production domain of the captains-draft Vercel project. Note: captains-draft.vercel.app is someone else's site.
+export const DEFAULT_ALLOWED_ORIGINS = ['https://captains-draft-three.vercel.app', 'http://127.0.0.1:5173'];
 
 // [A:1:account:instance] → SteamID64 (universe 1, account type 4 = anonymous game server).
 export function anonServerSteamId64(accountId, instance) {

@@ -7,13 +7,13 @@ import {execFileSync} from 'node:child_process';
 import {liveLineup} from '../web/live-roster.js';
 import {
   anonServerSteamId64, serverSteamIdFromLog, localAccountFromLoginUsers, libraryPathsFromVdf,
-  shapeLiveRoster, corsHeaders, isLocalHost, steamKeyFrom, redact,
+  shapeLiveRoster, corsHeaders, isLocalHost, steamKeyFrom, redact, DEFAULT_ALLOWED_ORIGINS,
 } from '../helper/lib.mjs';
 import {createHelperServer, steamFetcher} from '../helper/server.mjs';
 
 const fx = name => readFile(new URL(`./fixtures/helper/${name}`, import.meta.url), 'utf8');
 const root = new URL('..', import.meta.url).pathname;
-const ORIGIN = 'https://captains-draft.vercel.app';
+const ORIGIN = 'https://captains-draft-three.vercel.app';
 const SERVER_ID = '90108373362313221';
 const LOCAL = '39734273';
 
@@ -388,4 +388,22 @@ test('repo: .vercelignore excludes everything and never re-includes helper', asy
   const rules = (await readFile(new URL('../.vercelignore', import.meta.url), 'utf8')).split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
   assert.ok(rules.includes('*'));
   assert.equal(rules.filter(l => l.startsWith('!') && /helper/.test(l)).length, 0);
+});
+
+test('review: the default allowlist trusts the board, not the unrelated captains-draft.vercel.app site', () => {
+  assert.deepEqual(DEFAULT_ALLOWED_ORIGINS, ['https://captains-draft-three.vercel.app', 'http://127.0.0.1:5173']);
+  assert.equal(corsHeaders('https://captains-draft.vercel.app'), null);
+  assert.deepEqual(corsHeaders('https://captains-draft-three.vercel.app'), {'Access-Control-Allow-Origin': 'https://captains-draft-three.vercel.app', 'Vary': 'Origin'});
+});
+
+test('review: with no allowlist configured, the server refuses the unrelated captains-draft.vercel.app site', async () => {
+  await withServer({allowedOrigins: undefined}, async ({port, calls}) => {
+    const foreign = await request({port, headers: {Origin: 'https://captains-draft.vercel.app'}});
+    assert.equal(foreign.status, 403);
+    assert.equal(foreign.headers['access-control-allow-origin'], undefined);
+    assert.equal(calls.fetch, 0);
+    const board = await request({port, headers: {Origin: 'https://captains-draft-three.vercel.app'}});
+    assert.equal(board.status, 200);
+    assert.equal(board.headers['access-control-allow-origin'], 'https://captains-draft-three.vercel.app');
+  });
 });
