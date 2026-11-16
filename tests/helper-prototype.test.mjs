@@ -52,3 +52,14 @@ test('prototype: reads the last lobby from console.log and notices when it ended
   assert.equal(lastLobbyFromLog('nothing here'), null);
   assert.equal(lastLobbyFromLog(null), null);
 });
+
+test('prototype: the loopback close logged right after joining does not end the lobby', () => {
+  const log = [
+    "11/16 04:15:27 LOBBY STATE RUN: lobby 30108445664265595: Player AccountID 42 connecting to MatchID 9092336838 at ServerID [A:1:1496481792:52516] =[A:1:1496481792:52516]",
+    "11/16 04:15:27 [NetSteamConn] Closing Steam Net Connection on socket 'client' to loopback:1, handle #3704546215 (2055 NETWORK_DISCONNECT_LOOPDEACTIVATE)",
+    "11/16 04:15:27 [NetSteamConn] Opened Steam Net Connection on socket 'client' to =[A:1:1496481792:52516], connection #3481704360",
+  ].join('\n');
+  assert.equal(lastLobbyFromLog(log).ended, false);
+  const left = `${log}\n11/16 05:00:35 [NetSteamConn] Closing Steam Net Connection on socket 'client' to =[A:1:1496481792:52516], handle #3481704360 (1002 NETWORK_DISCONNECT_DISCONNECT_BY_USER)`;
+  assert.equal(lastLobbyFromLog(left).ended, true);
+});

@@ -10,8 +10,9 @@ export function lastLobbyFromLog(text) {
     found = {loggedAt: match[1], lobbyId: match[2], accountId: match[3], matchId: match[4], index: match.index};
   }
   if (!found) return null;
-  // The client logs this when it leaves the game server.
-  const ended = /Closing Steam Net Connection on socket 'client'/.test(text.slice(found.index));
+  // The client logs this when it leaves the game server. On joining it also closes its local
+  // "to loopback:1" connection in the same second, which must not count as leaving.
+  const ended = /Closing Steam Net Connection on socket 'client' to =\[/.test(text.slice(found.index));
   const {index, ...lobby} = found;
   return {...lobby, ended};
 }
