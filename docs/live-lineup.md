@@ -61,7 +61,9 @@ The helper then starts in the background whenever you log in to your computer (n
 - **macOS:** `~/Library/Logs/CaptainsDraftHelper.log`
 - **Windows:** `%LOCALAPPDATA%\CaptainsDraftHelper\helper.log`
 
-`npm run autostart-status` shows whether it is on; `npm run autostart-off` turns it off. If you move the repository folder, run `npm run autostart-on` again.
+`npm run autostart-status` shows whether it is on; `npm run autostart-off` turns it off. After moving the repository folder or updating Node.js, run `npm run autostart-on` again.
+
+**macOS:** keep the repository outside Documents, Desktop, Downloads and iCloud Drive (for example `~/dota-scout`). macOS can silently stop background programs from reading those folders; `autostart-on` warns you and checks that the helper really started.
 
 ## Every time you play
 

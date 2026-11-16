@@ -26,19 +26,26 @@ export function dotaRunningCheck(platform = process.platform, runCommand = run) 
 export function createDotaWatch({isDotaRunning, startBot, log = () => {}, graceMs = 120000, now = Date.now}) {
   let bot = null;
   let lastSeen = -Infinity;
+  let warnedUnreadable = false;
 
   async function check() {
     let running;
     try {
       running = await isDotaRunning();
     } catch {
+      if (!warnedUnreadable) log('Could not read the process list; keeping the bot signed in.');
+      warnedUnreadable = true;
       running = true;
     }
     if (running) {
       lastSeen = now();
       if (!bot) {
         log('Dota is running. Signing in the bot account…');
-        bot = startBot();
+        try {
+          bot = startBot();
+        } catch {
+          log('Could not start the bot account; trying again in 15 s.');
+        }
       }
     } else if (bot && now() - lastSeen >= graceMs) {
       log('Dota closed. Signing the bot account out until Dota starts again.');

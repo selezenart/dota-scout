@@ -213,8 +213,6 @@ async function main() {
         startBot: () => startBot({SteamUser, refreshToken: currentToken(), tokenFile, log, onToken: token => secrets.push(token)}),
         log,
       });
-      void bot.check();
-      setInterval(() => void bot.check(), 15000).unref();
     } catch {
       console.error('The bot needs one dependency. Run this once in the helper folder:  npm ci --ignore-scripts');
     }
@@ -254,6 +252,11 @@ async function main() {
     setTimeout(() => process.exit(), 300);
   });
   server.listen(PORT, HOST, async () => {
+    // Only now that this helper owns the port: a second helper must not sign the same bot in.
+    if (bot) {
+      void bot.check();
+      setInterval(() => void bot.check(), 15000).unref();
+    }
     console.log(`Captain's Draft Board helper running at http://${HOST}:${PORT}`);
     console.log(`Allowed sites: ${allowedOrigins.join(', ')}`);
     console.log(`Lineup sources: ${[bot && 'bot account (signs in while Dota is running)', key && 'Steam Web API'].filter(Boolean).join(', ')}.`);

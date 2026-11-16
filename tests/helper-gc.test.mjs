@@ -7,7 +7,7 @@ import http from 'node:http';
 import {lastLobbyFromLog} from '../helper/gc/lobby-log.mjs';
 import {createLobbyLookup} from '../helper/gc/lookup.mjs';
 import {createDotaWatch, dotaInProcessList, dotaRunningCheck} from '../helper/gc/dota-watch.mjs';
-import {launchAgentPlist, windowsStartupScript} from '../helper/autostart.mjs';
+import {launchAgentPlist, protectedFolder, unsafeForWindows, windowsStartupScript} from '../helper/autostart.mjs';
 import {shapeGcRoster} from '../helper/lib.mjs';
 import {createHelperServer} from '../helper/server.mjs';
 import {liveLineup} from '../web/live-roster.js';
@@ -294,4 +294,26 @@ test('autostart: Windows startup script runs node hidden with quoted paths', () 
   assert.match(script, /shell\.Environment\("PROCESS"\)\("HELPER_AUTOSTART"\) = "1"/);
   assert.ok(script.includes('shell.Run "cmd /c """"C:\\Program Files\\nodejs\\node.exe"" server.mjs >> ""C:\\Users\\Me\\AppData\\Local\\CaptainsDraftHelper\\helper.log"" 2>&1""", 0, False'));
   assert.ok(script.includes('\r\n'));
+});
+
+test('autostart (review): flags folders macOS protects and paths cmd would expand', () => {
+  assert.equal(protectedFolder('/Users/me/Documents/dota-scout/helper', '/Users/me'), '/Users/me/Documents');
+  assert.equal(protectedFolder('/Users/me/Library/Mobile Documents/x/helper', '/Users/me'), '/Users/me/Library/Mobile Documents');
+  assert.equal(protectedFolder('/Users/me/dota-scout/helper', '/Users/me'), null);
+  assert.equal(protectedFolder('/Users/me/DocumentsOld/helper', '/Users/me'), null);
+  assert.equal(unsafeForWindows('C:\\Users\\Me\\dota scout & co\\helper'), false);
+  assert.equal(unsafeForWindows('C:\\Users\\%USERNAME%\\helper'), true);
+  assert.equal(unsafeForWindows('line\r\nbreak'), true);
+});
+
+test('dota watch (review): a failing bot start is retried, not thrown', async () => {
+  let attempts = 0;
+  const logs = [];
+  const watch = createDotaWatch({isDotaRunning: async () => true, startBot: () => { attempts++; if (attempts === 1) throw new Error('boom'); return {stop() {}, lookupLobby: async () => null}; }, log: message => logs.push(message)});
+  await watch.check();
+  assert.equal(watch.isActive(), false);
+  await watch.check();
+  assert.equal(watch.isActive(), true);
+  assert.equal(attempts, 2);
+  assert.ok(logs.some(line => line.includes('trying again')));
 });
