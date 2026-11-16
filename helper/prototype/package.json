@@ -1,0 +1,12 @@
+{
+  "name": "captains-draft-gc-lobby-prototype",
+  "private": true,
+  "type": "module",
+  "description": "Prototype: ask the Dota game coordinator for the players of the lobby in console.log.",
+  "scripts": {
+    "start": "node gc-lobby-check.mjs"
+  },
+  "dependencies": {
+    "steam-user": "^5.2.0"
+  }
+}
