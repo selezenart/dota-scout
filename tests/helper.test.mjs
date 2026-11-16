@@ -276,6 +276,22 @@ test('review: Steam 403/429 failures are cached so polling does not hammer Steam
   assert.equal(calls, 1);
 });
 
+test('review: Steam error reasons reach the helper window without the key', async () => {
+  const key = '0123456789ABCDEF0123456789ABCDEF';
+  const fetchImpl = async () => ({ok: false, status: 400, text: async () => `<html><body><h1>Bad Request</h1>Invalid server_steam_id for key=${key}</body></html>`, json: async () => ({})});
+  const fetchStats = steamFetcher(key, fetchImpl);
+  const error = await fetchStats('90108373362313221').catch(caught => caught);
+  assert.equal(error.status, 400);
+  assert.match(error.detail, /Invalid server_steam_id/);
+  assert.ok(!error.detail.includes(key));
+  assert.ok(!error.detail.includes('<'));
+  await withServer({fetchRealtimeStats: async () => { throw error; }}, async ({port, calls}) => {
+    const res = await request({port, headers: {Origin: ORIGIN}});
+    assert.ok(!res.body.includes('Invalid server_steam_id'));
+    assert.ok(calls.logs.some(line => line.includes('HTTP 400') && line.includes('Invalid server_steam_id')));
+  });
+});
+
 test('server: disallowed origin gets 403 and no Steam call', async () => {
   await withServer({}, async ({port, calls}) => {
     const res = await request({port, headers: {Origin: 'https://evil.example'}});

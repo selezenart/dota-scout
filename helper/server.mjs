@@ -33,7 +33,8 @@ export function createHelperServer({readConsoleLog, getLocalAccountId, fetchReal
       stats = await fetchRealtimeStats(serverSteamId);
     } catch (error) {
       const hint = error?.status === 403 ? ' Steam rejected the key; check steam-key.txt.' : '';
-      log(`Steam Web API request failed${error?.status ? ` (HTTP ${error.status})` : ''}.${hint}`);
+      const reason = error?.detail ? ` Steam says: ${error.detail}` : '';
+      log(`Steam Web API request failed${error?.status ? ` (HTTP ${error.status})` : ''}.${hint}${reason}`);
       return {status: 'error', message: 'Steam Web API request failed. Check the helper window.'};
     }
     return shapeLiveRoster(stats, accountId);
@@ -145,7 +146,11 @@ export function steamFetcher(key, fetchImpl = fetch) {
       throw new Error(redact(error?.message || 'network error', key));
     }
     if (!response.ok) {
-      const error = Object.assign(new Error('Steam Web API error'), {status: response.status});
+      // Steam explains rejected requests in the body (HTML or text); keep a short, key-free reason.
+      let reason = '';
+      try { reason = String(await response.text()); } catch { /* no readable body */ }
+      const detail = redact(reason.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), key).slice(0, 200);
+      const error = Object.assign(new Error('Steam Web API error'), {status: response.status, detail});
       if ([403, 429].includes(response.status)) failure = {serverSteamId, at: Date.now(), error};
       throw error;
     }
