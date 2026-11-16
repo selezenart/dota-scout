@@ -70,6 +70,15 @@ test('localAccountFromLoginUsers picks the MostRecent user', async () => {
   assert.equal(localAccountFromLoginUsers(await fx('loginusers.vdf')), '52079950');
 });
 
+test('localAccountFromLoginUsers picks the newest login when Steam writes no MostRecent flag', () => {
+  // Current macOS Steam clients store only a login timestamp per saved account.
+  const user = (id, autoLogin, timestamp) => `\t"${id}"\n\t{\n\t\t"AccountName"\t\t"x"\n\t\t"AutoLogin"\t\t"${autoLogin}"\n\t\t"timestamp"\t\t"${timestamp}"\n\t}\n`;
+  const vdf = `"users"\n{\n${user('76561198000000002', '0', '1794689934')}${user('76561198012345678', '1', '1794780390')}${user('76561198000000001', '0', '1794677237')}}\n`;
+  assert.equal(localAccountFromLoginUsers(vdf), '52079950');
+  const tie = `"users"\n{\n${user('76561198000000002', '0', '5')}${user('76561198000000001', '0', '5')}}\n`;
+  assert.equal(localAccountFromLoginUsers(tie), null);
+});
+
 test('localAccountFromLoginUsers falls back to a single user, else null', () => {
   const one = '"users"\n{\n"76561198000000001"\n{\n"MostRecent" "0"\n}\n}';
   assert.equal(localAccountFromLoginUsers(one), LOCAL);

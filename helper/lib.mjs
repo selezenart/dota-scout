@@ -25,15 +25,19 @@ export function serverSteamIdFromLog(text) {
   return found;
 }
 
-// Account id (32-bit) of the most recent Steam login, from Steam's config/loginusers.vdf.
+// Account id (32-bit) of the most recent Steam login, from Steam's config/loginusers.vdf
+// (MostRecent flag, else the newest login timestamp, else the only saved account).
 export function localAccountFromLoginUsers(vdfText) {
   if (typeof vdfText !== 'string') return null;
   const users = [];
   const block = /"(7656119\d{10})"\s*\{([^{}]*)\}/g;
   for (const [, id64, body] of vdfText.matchAll(block)) {
-    users.push({id64, recent: /"MostRecent"\s*"1"/i.test(body)});
+    users.push({id64, recent: /"MostRecent"\s*"1"/i.test(body), timestamp: Number(body.match(/"timestamp"\s*"(\d+)"/i)?.[1] || 0)});
   }
-  const user = users.find(entry => entry.recent) || (users.length === 1 ? users[0] : null);
+  // Newer Steam clients drop MostRecent and keep only each account's last login time.
+  const newest = Math.max(0, ...users.map(entry => entry.timestamp));
+  const latest = newest ? users.filter(entry => entry.timestamp === newest) : [];
+  const user = users.find(entry => entry.recent) || (latest.length === 1 ? latest[0] : null) || (users.length === 1 ? users[0] : null);
   if (!user) return null;
   const account = BigInt(user.id64) - STEAM_ID64_BASE;
   return account > 0n && account < 4294967296n ? account.toString() : null;
