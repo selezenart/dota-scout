@@ -174,6 +174,17 @@ test('a complete draft keeps its message and review button in one decision dock'
   assert.equal(kids[0].querySelector('button').textContent,'Show draft review');
  }finally{h.w.close();}
 });
+test('slot-in runs for a new local action but not on load or undo',async()=>{
+ const h=await board({state:{actions:[{mode:'ourBan',heroId:1}]}});
+ try{
+  assert.equal(h.q('timeline').querySelectorAll('.tree-row.is-fresh').length,0);
+  if(!h.q('claim-drafter').disabled)await h.click(h.q('claim-drafter'));
+  await h.click(h.q('hero-groups').querySelector('.hero-tile:not(:disabled)'));
+  await h.click(h.q('suggestions').querySelector('button.primary'));
+  assert.equal(h.q('timeline').querySelectorAll('.tree-row.is-fresh').length,1);
+  await h.click(h.q('undo'));assert.equal(h.q('timeline').querySelectorAll('.tree-row.is-fresh').length,0);
+ }finally{h.w.close();}
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}

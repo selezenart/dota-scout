@@ -332,6 +332,7 @@ function renderSeats(){
   onAddEnemy:safe(lobby)
  });
 }
+let freshActionIndex=-1;
 function renderDraftTree(){
  const tree=$('timeline');tree.replaceChildren();$('history-inspect').textContent='Select a recorded hero to inspect the action.';
  CM_ORDER.forEach((step,index)=>{
@@ -341,7 +342,7 @@ function renderDraftTree(){
   row.classList.toggle('phase-start',[0,7,9,12,18,22].includes(index));
   const slot=el('button',null,'tree-row');slot.type='button';slot.id='draft-turn-'+index;
   slot.dataset.action=step.action.toLowerCase();slot.dataset.turn=index;
-  slot.classList.toggle('is-recorded',!!recorded);slot.classList.toggle('is-current',current);
+  slot.classList.toggle('is-recorded',!!recorded);slot.classList.toggle('is-fresh',index===freshActionIndex&&!!recorded);slot.classList.toggle('is-current',current);
   const label=`Turn ${index+1}, ${ours?'our':'enemy'} ${step.action.toLowerCase()}${recorded?', '+heroName(recorded.heroId):current?', select a hero':', waiting'}`;
   slot.setAttribute('aria-label',label);slot.title=label;
   if(current)slot.setAttribute('aria-current','step');
@@ -457,7 +458,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
  let player,position;if(turn.mode==='ourPick'){const used=state.actions.filter(a=>a.mode==='ourPick'),playerLabel=el('label','Assign allied player','player-assignment');player=el('select');player.id='assigned-player';playerLabel.htmlFor=player.id;player.append(new Option('Unassigned',''));for(const p of roster().filter(p=>!used.some(a=>a.playerId===p.id)))player.append(new Option(p.name,p.id));player.value=selected.playerId??rec?.playerId??'';player.onchange=()=>{selected.playerId=player.value;};playerLabel.append(player);const picker=el('fieldset',null,'position-picker'),options=el('div',null,'position-options'),status=el('p',null,'position-status');status.setAttribute('role','status');position=Object.hasOwn(selected,'position')?selected.position:rec?.position??'';if(used.some(a=>+a.position===+position))position='';const update=()=>{status.textContent=position?'P'+position+' · '+roleNames[+position-1]:'Unassigned';};picker.append(el('legend','Assign position'),options);for(let i=1;i<=5;i++){const label=el('label',null,'position-option'),radio=el('input'),copy=el('span',null,'position-copy');radio.type='radio';radio.name='assigned-position';radio.value=String(i);radio.checked=+position===i;radio.disabled=used.some(a=>+a.position===i);radio.onchange=()=>{if(radio.checked){selected.position=position=radio.value;update();}};copy.append(el('strong','P'+i),el('small',roleNames[i-1]));label.append(radio,copy);options.append(label);}button('Unassigned',()=>{selected.position=position='';for(const radio of options.querySelectorAll('input'))radio.checked=false;update();},picker,'position-auto');update();picker.append(status);body.append(playerLabel,picker);}
 
- const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{const a={mode:turn.mode,heroId:selected.id};if(player?.value)a.playerId=player.value;if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;await mutate('append',a);},feature,'primary');confirm.disabled=!write;
+ const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{const a={mode:turn.mode,heroId:selected.id};if(player?.value)a.playerId=player.value;if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;const before=state.actions.length;await mutate('append',a);if(state.actions.length===before+1){freshActionIndex=before;render();freshActionIndex=-1;}},feature,'primary');confirm.disabled=!write;
  button('Clear selection',()=>{selected=null;render();$('hero-search').focus();},feature,'clear-staged');
  if(!write)feature.append(el('p',playerDemo?'Only the captain can confirm picks and bans.':shared?'Become drafter to confirm this action.':'Take the drafter seat to confirm this action.','decision-readonly'));
  dock.append(feature);
