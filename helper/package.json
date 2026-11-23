@@ -5,7 +5,10 @@
   "description": "Local helper that gives Captain's Draft Board the live lineup of your Dota match.",
   "scripts": {
     "start": "node server.mjs",
-    "bot-login": "node bot-login.mjs"
+    "bot-login": "node bot-login.mjs",
+    "autostart-on": "node autostart.mjs on",
+    "autostart-off": "node autostart.mjs off",
+    "autostart-status": "node autostart.mjs status"
   },
   "engines": {
     "node": ">=20"
