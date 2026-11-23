@@ -42,7 +42,6 @@
  #draft-view .analysis{grid-area:analysis}
  #draft-view .decision-panel,#draft-view #suggestions{display:contents}
  #draft-view .draft-layout:has(#analysis:not([hidden])) .decision-panel{display:none}
- #draft-view #suggestions>:not(.best-now){grid-area:dock}
  #draft-view .decision-panel>.panel-heading{display:none}
  #draft-view .best-now{grid-area:best;min-width:0}
  #draft-view .decision-dock{grid-area:dock;align-self:end;position:sticky;bottom:8px;padding:8px;background:var(--wr-s1);border:1px solid var(--wr-line);border-radius:4px}

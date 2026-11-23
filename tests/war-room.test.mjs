@@ -163,6 +163,17 @@ test('war room stylesheet is linked and scouting follows the player rail',async(
  assert.match(css,/\.is-player-dim\{[^}]*opacity:\.26/);
  assert.match(css,/\.is-search-miss\.is-player-hero/);
 });
+test('a complete draft keeps its message and review button in one decision dock',async()=>{
+ const h=await board();
+ try{
+  for(let i=0;i<24;i++){await h.click(h.q('hero-groups').querySelector('.hero-tile:not(:disabled)'));await h.click(h.q('suggestions').querySelector('button.primary'));}
+  const root=h.q('suggestions'),kids=[...root.children];
+  assert.equal(kids.length,1);
+  assert.ok(kids[0].classList.contains('decision-dock'));
+  assert.match(kids[0].querySelector('p').textContent,/All 24 actions recorded/);
+  assert.equal(kids[0].querySelector('button').textContent,'Show draft review');
+ }finally{h.w.close();}
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}
