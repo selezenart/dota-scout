@@ -307,18 +307,20 @@ function seatData(player,side,taken,now){
  const summary=enemySummary(player,{now,heroes:Object.values(heroes)}),state=hasAccount?summary.state:'ready';
  const usable=state==='ready'||(side==='ally'&&!hasAccount);
  const comfort=usable?comfortRows({player,summary,side}):[];
- let banLabel='Ban suggestions',bans='No counter data';
+ let banLabel='Ban suggestions',bans='No counter data',banIds=[];
  if(side==='enemy'){
   banLabel='Ban first';
   const target=usable?enemyBanTarget(summary,taken):null;
   bans=target?`${heroName(target.heroId)} · ${target.winRate}%`:'No clear ban';
+  if(target)banIds=[+target.heroId];
  }else if(comfort[0]){
   requestMatchup(comfort[0].heroId,true);
   const counters=allyCounterBans(comfort[0].heroId,matchups[comfort[0].heroId],taken);
-  if(counters.length)bans=counters.map(row=>heroName(row.heroId)).join(', ');
+  if(counters.length){bans=counters.map(row=>heroName(row.heroId)).join(', ');banIds=counters.map(row=>+row.heroId);}
  }
+ const cup=usable?recentCupGames(player,now):[];
  const position=side==='enemy'?summary.positions?.[0]?.position:player.selfReport.preferredRoles?.[0];
- return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup:usable?recentCupGames(player,now):[]};
+ return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup,heroIds:[...new Set([...comfort.map(row=>+row.heroId),...cup.map(game=>+game.heroId),...banIds])]};
 }
 function renderSeats(){
  const taken=new Set(state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
@@ -356,7 +358,32 @@ function renderDraftTree(){
 }
 
 let heroFilter='all';
+function focusedHeroIds(taken){
+ if(focusedPlayer==null)return null;
+ const now=Math.floor(Date.now()/1000);
+ const seat=[...roster().slice(0,5).map(p=>[p,'ally']),...opponents().slice(0,5).map(p=>[p,'enemy'])].find(([p])=>String(p.id)===focusedPlayer);
+ return seat?new Set(seatData(seat[0],seat[1],taken,now).heroIds):null;
+}
 
+let suggestionCache={key:'',pick:new Set(),ban:new Set()};
+function suggestionSets(){
+ const seats=[...roster(),...opponents()].map(p=>[p.id,p.heroes.length,p.recent.length,p.matches.length,p.selfReport.signatureHeroes,p.selfReport.desiredHeroes]);
+ const key=JSON.stringify([state.actions,state.firstPick,seats,Object.keys(matchups).length,Object.keys(heroes).length]);
+ if(key===suggestionCache.key)return suggestionCache;
+ const input={heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick};
+ const top=mode=>new Set(recommend({...input,mode}).slice(0,8).map(row=>+row.heroId));
+ suggestionCache={key,pick:top('ourPick'),ban:top('ourBan')};
+ return suggestionCache;
+}
+function enemyWinChips(){
+ const chips=new Map(),now=Math.floor(Date.now()/1000),list=Object.values(heroes);
+ for(const player of opponents())for(const row of enemySummary(player,{now,heroes:list}).topHeroes){
+  if(row.winRate==null||row.games<MIN_GAMES||row.winRate<55)continue;
+  const current=chips.get(row.heroId);
+  if(!current||row.winRate>current.winRate)chips.set(row.heroId,{...row,player:player.name});
+ }
+ return chips;
+}
 function renderHeroes(){
  const root=$('hero-groups');root.replaceChildren();
  const ourPick=nextTurn(state.actions,state.firstPick)?.mode==='ourPick';
@@ -365,13 +392,16 @@ function renderHeroes(){
  const wanted=new Set(ourPick?available.flatMap(player=>player.selfReport.desiredHeroes):[]);
  root.setAttribute('aria-label',ourPick?'Team wants first, then public popularity':'Most played first');
  const query=$('hero-search').value.toLowerCase();
- const taken=new Set(state.actions.map(action=>+action.heroId));
+ const takenBy=new Map(state.actions.map(action=>[+action.heroId,action.mode])),suggestions=suggestionSets(),chips=enemyWinChips(),playerHeroes=focusedHeroIds(new Set(takenBy.keys()));
+ const matches=hero=>hero.localized_name.toLowerCase().includes(query);
+ let matched=0;
  const popularity=hero=>Number.isFinite(hero.pub_pick)&&hero.pub_pick>=0?hero.pub_pick:-1;
  for(const [attribute,label] of [['str','Strength'],['agi','Agility'],['int','Intelligence'],['all','Universal']]){
   const attributeFilter=heroFilter==='all-attr'?'all':heroFilter;
   const visibleGroup=heroFilter==='all'||heroFilter==='recommended'||attributeFilter===attribute;
   if(!visibleGroup)continue;
-  const list=Object.values(heroes).filter(hero=>hero.primary_attr===attribute&&hero.localized_name.toLowerCase().includes(query)&&!taken.has(+hero.id)&&(heroFilter!=='recommended'||rankedIds.has(+hero.id)));
+  const list=Object.values(heroes).filter(hero=>hero.primary_attr===attribute&&(heroFilter!=='recommended'||(!takenBy.has(+hero.id)&&rankedIds.has(+hero.id)&&matches(hero))));
+  matched+=list.filter(matches).length;
   list.sort((a,b)=>Number(wanted.has(+b.id))-Number(wanted.has(+a.id))||popularity(b)-popularity(a)||a.localized_name.localeCompare(b.localized_name));
   if(!list.length)continue;
   const section=el('section',null,'hero-group'),grid=el('div',null,'hero-grid'),heading=el('div',null,'attribute-heading');
@@ -383,15 +413,25 @@ function renderHeroes(){
    tile.classList.toggle('is-wanted',wanted.has(+hero.id));tile.classList.toggle('is-recommended',rankedIds.has(+hero.id));
    tile.setAttribute('aria-label',hero.localized_name);tile.setAttribute('aria-pressed',String(selected?.id===+hero.id));
    tile.title=(wanted.has(+hero.id)?'Teammate wants to play · ':'')+(popularity(hero)>=0?'Public picks: '+hero.pub_pick.toLocaleString():'Public picks unavailable');
-   const image=portrait(hero.id);image.alt='';tile.title=hero.localized_name+' · '+tile.title;tile.append(image,el('span',hero.localized_name));
+   const image=portrait(hero.id),takenMode=takenBy.get(+hero.id),mark=tileMark({takenMode,pick:suggestions.pick.has(+hero.id),ban:suggestions.ban.has(+hero.id)}),chip=takenMode?null:chips.get(+hero.id),state_=takenMode?(takenMode.endsWith('Ban')?', banned':', picked'):mark?.kind==='contested'?', contested':mark?.kind==='sug-pick'?', suggested pick':mark?.kind==='sug-ban'?', suggested ban':'';
+   image.alt='';image.onerror=()=>tile.classList.add('is-image-missing');
+   tile.title=hero.localized_name+' · '+tile.title+(chip?' · '+chip.player+' '+chip.winRate+'% over '+chip.games+' games':'');
+   tile.setAttribute('aria-label',hero.localized_name+state_+(chip?', '+chip.player+' '+chip.winRate+'% over '+chip.games+' games':''));
+   tile.disabled=!!takenMode;tile.classList.toggle('is-taken',!!takenMode);tile.classList.toggle('is-search-miss',!!query&&!matches(hero));
+   if(playerHeroes){const own=playerHeroes.has(+hero.id);tile.classList.toggle('is-player-hero',own);tile.classList.toggle('is-player-dim',!own&&!takenMode);}
+   if(mark)tile.classList.add(mark.kind==='banned'?'is-banned':mark.kind==='picked'?'is-picked':'is-'+mark.kind);
+   tile.append(image,el('span',hero.localized_name));
+   if(mark){const badge=el('b',mark.text,'tile-mark');badge.setAttribute('aria-hidden','true');tile.append(badge);}
+   if(chip){const win=el('b',chip.winRate+'%','tile-win');win.setAttribute('aria-hidden','true');tile.append(win);}
   }
   root.append(section);
  }
- if(!root.children.length){const empty=el('p','No heroes match your search or filters. Try another name or All heroes.');empty.setAttribute('role','status');root.append(empty);}
+ if(!root.children.length||(query&&!matched)){root.replaceChildren();const empty=el('p','No heroes match your search or filters. Try another name or All heroes.');empty.setAttribute('role','status');root.append(empty);}
  highlightSearch();
 }
 
-function highlightSearch(){const tiles=[...$('hero-groups').querySelectorAll('button')];searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));tiles.forEach((b,i)=>{b.classList.toggle('is-highlighted',i===searchIndex);b.id='hero-result-'+b.dataset.heroId;});const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
+function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:not(:disabled):not(.is-search-miss)')];}
+function highlightSearch(){const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});tiles[searchIndex]?.classList.add('is-highlighted');const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
 
 function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();root.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},root);return;}const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
@@ -1494,7 +1534,7 @@ $('create-session').onclick=safe(async()=>{if(!user||!team||demo)throw Error('Se
 
 $('join-session').onclick=safe(async()=>{let id=$('session-input').value.trim();try{id=new URL(id).searchParams.get('draft')||id;}catch{}if(!/^[a-f0-9-]{36}$/i.test(id)){$('session-input').setAttribute('aria-invalid','true');throw Error('Enter a valid draft UUID or full session URL.');}$('session-input').removeAttribute('aria-invalid');await openDraft(id);});$('copy-session').onclick=safe(async()=>{if(!shared)return;const url=new URL(location.origin+location.pathname);url.searchParams.set('draft',shared.id);await navigator.clipboard.writeText(url.href);notice('Session link copied. Team membership is required.');});
 
-document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=$('hero-groups').querySelectorAll('button').length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=$('hero-groups').querySelectorAll('button')[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
+document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=heroChoices().length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
 
 for(const control of document.querySelectorAll('[data-hero-filter]'))control.onclick=()=>{heroFilter=control.dataset.heroFilter;searchIndex=0;for(const other of document.querySelectorAll('[data-hero-filter]'))other.setAttribute('aria-pressed',String(other===control));renderHeroes();};
 $('clear-hero-search').onclick=()=>{$('hero-search').value='';searchIndex=0;renderHeroes();$('hero-search').focus();};

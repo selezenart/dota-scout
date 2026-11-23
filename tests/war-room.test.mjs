@@ -62,6 +62,46 @@ test('activating a seat keeps keyboard focus on it',async()=>{
   assert.ok(active.classList.contains('seat-card'));assert.equal(active.dataset.seatId,seat.dataset.seatId);assert.equal(active.getAttribute('aria-pressed'),'true');
  }finally{h.w.close();}
 });
+test('taken heroes stay visible, labeled, and unavailable to keyboard selection',async()=>{
+ const h=await board({state:{actions:[{mode:'ourBan',heroId:1}]}});
+ try{
+  const banned=h.q('hero-groups').querySelector('[data-hero-id="1"]');
+  assert.equal(banned.disabled,true);assert.equal(banned.querySelector('.tile-mark').textContent,'BAN');assert.match(banned.getAttribute('aria-label'),/banned/);
+  const search=h.q('hero-search');search.value='Anti-Mage';search.dispatchEvent(new h.w.Event('input'));
+  assert.equal(h.q('hero-groups').querySelector('[data-hero-id="1"]').classList.contains('is-search-miss'),false);
+  search.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(h.q('suggestions').querySelector('.rec-feature'),null);
+  search.value='';search.dispatchEvent(new h.w.Event('input'));
+  for(let i=0;i<130;i++){search.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));assert.equal(h.q('hero-groups').querySelector('.is-highlighted').disabled,false);}
+ }finally{h.w.close();}
+});
+test('search dims non-matching heroes and keeps the no-result message',async()=>{
+ const h=await board();
+ try{
+  const search=h.q('hero-search');search.value='Axe';search.dispatchEvent(new h.w.Event('input'));
+  assert.equal(h.q('hero-groups').querySelector('[data-hero-id="1"]').classList.contains('is-search-miss'),true);
+  search.value='zzzzzz';search.dispatchEvent(new h.w.Event('input'));assert.match(h.q('hero-groups').textContent,/No heroes match/);
+ }finally{h.w.close();}
+});
+test('enemy comfort shows a win chip and a broken portrait keeps the name visible',async()=>{
+ const h=await board({state:{enemyIds:['900']},players:{900:profile('900',[[109,38,23]])}});
+ try{
+  const tile=h.q('hero-groups').querySelector('[data-hero-id="109"]');assert.equal(tile.querySelector('.tile-win').textContent,'61%');
+  tile.querySelector('img').dispatchEvent(new h.w.Event('error'));assert.equal(tile.classList.contains('is-image-missing'),true);assert.match(tile.textContent,/Terrorblade/);
+ }finally{h.w.close();}
+});
+test('focusing a player highlights their heroes and dims the rest',async()=>{
+ const h=await board({state:{enemyIds:['900']},players:{900:profile('900',[[109,38,23]])}});
+ try{
+  const tiles=()=>h.q('hero-groups').querySelectorAll('.hero-tile');
+  assert.equal(h.q('hero-groups').querySelectorAll('.is-player-hero,.is-player-dim').length,0);
+  await h.click(h.q('player-rail').querySelector('.seat-card.is-enemy'));
+  assert.equal(h.q('hero-groups').querySelector('[data-hero-id="109"]').classList.contains('is-player-hero'),true);
+  assert.equal(h.q('hero-groups').querySelector('[data-hero-id="1"]').classList.contains('is-player-dim'),true);
+  await h.click(h.q('player-rail').querySelector('.seat-card.is-enemy'));
+  assert.equal(h.q('hero-groups').querySelectorAll('.is-player-hero,.is-player-dim').length,0);
+ }finally{h.w.close();}
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}
