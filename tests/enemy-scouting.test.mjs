@@ -152,7 +152,7 @@ test('draft panel shows enemy scouting for open and closed enemies without the T
   assert.equal(doc.getElementById('draft-view').hidden,false);assert.equal(doc.getElementById('team-view').hidden,true);
   const s=doc.getElementById('draft-enemy-scouting');
   assert.ok(s,'#draft-enemy-scouting exists');assert.equal(s.hidden,false);
-  assert.ok(s.closest('aside.decision-panel'),'inside decision panel');
+  assert.equal(s.previousElementSibling.id,'player-rail','right after the player rail');
   assert.equal(s.querySelector('h3').textContent,'Enemy scouting');
   const cards=[...s.querySelectorAll('.draft-enemy')];
   assert.deepEqual(cards.map(c=>c.querySelector('.draft-enemy-name').textContent),['Open Foe','Closed Foe']);
@@ -170,7 +170,7 @@ test('draft panel shows enemy scouting for open and closed enemies without the T
 
 test('draft enemy scouting section is hidden when no enemies are set',async()=>{
  const w=await boot({});
- try{const s=w.document.getElementById('draft-enemy-scouting');assert.ok(s,'section exists');assert.equal(s.hidden,true);assert.ok(s.closest('aside.decision-panel'));}finally{w.close();}
+ try{const s=w.document.getElementById('draft-enemy-scouting');assert.ok(s,'section exists');assert.equal(s.hidden,true);assert.equal(s.previousElementSibling.id,'player-rail');}finally{w.close();}
 });
 
 test('draft enemy scouting shows Loading… while a source is fetching',async()=>{

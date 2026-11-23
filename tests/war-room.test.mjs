@@ -143,6 +143,26 @@ test('win evidence chip needs ten games, names the enemy on bans, and ignores en
   assert.equal(wins(h).filter(t=>t.includes('Player 900')).length,0);
  }finally{h.w.close();}
 });
+test('clicking an enemy opens only that player scouting detail',async()=>{
+ const h=await board({state:{enemyIds:['900','901']},players:{900:profile('900',[[109,38,23]]),901:profile('901',[[74,20,10]])}});
+ try{
+  assert.equal(h.q('draft-enemy-scouting').classList.contains('is-detail-open'),false);
+  await h.click([...h.q('player-rail').querySelectorAll('.seat-card.is-enemy')].find(card=>/Player 900/.test(card.textContent)));
+  assert.equal(h.q('draft-enemy-scouting').classList.contains('is-detail-open'),true);
+  assert.equal(h.q('draft-enemy-list').querySelector('.draft-enemy.is-focused').dataset.playerId,'900');
+ }finally{h.w.close();}
+});
+test('war room stylesheet is linked and scouting follows the player rail',async()=>{
+ const doc=new JSDOM(markup).window.document,css=await readFile('web/war-room.css','utf8');
+ assert.ok(doc.querySelector('link[href="./war-room.css"]'));
+ assert.equal(doc.getElementById('draft-enemy-scouting').previousElementSibling.id,'player-rail');
+ assert.equal(doc.querySelector('.decision-panel #draft-enemy-scouting'),null);
+ assert.match(css,/\.tree-turn\[data-action=pick\]/);
+ assert.match(css,/\.tree-preview\{[^}]*dashed/);
+ assert.match(css,/\.is-player-hero\{[^}]*#fff/);
+ assert.match(css,/\.is-player-dim\{[^}]*opacity:\.26/);
+ assert.match(css,/\.is-search-miss\.is-player-hero/);
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}
