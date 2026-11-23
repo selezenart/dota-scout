@@ -435,17 +435,21 @@ function renderHeroes(){
 function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:not(:disabled):not(.is-search-miss)')];}
 function highlightSearch(){const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});tiles[searchIndex]?.classList.add('is-highlighted');const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
 
-function heroEvidence(heroId){
- const now=Math.floor(Date.now()/1000),list=Object.values(heroes),rows=[];
- for(const player of [...opponents(),...roster()]){
-  const row=enemySummary(player,{now,heroes:list}).topHeroes.find(item=>item.heroId===+heroId);
-  if(row&&row.winRate!=null&&row.games>=MIN_GAMES)rows.push({...row,player:player.name});
+function evidenceSummaries(turn){
+ const now=Math.floor(Date.now()/1000),list=Object.values(heroes),mode=turn.mode,sum=(players,enemy)=>players.map(player=>({player,enemy,summary:enemySummary(player,{now,heroes:list})}));
+ return {ally:mode==='ourPick'||mode==='enemyBan'?sum(roster(),false):[],enemy:mode==='ourBan'||mode==='enemyPick'?sum(opponents(),true):[]};
+}
+function heroEvidence(heroId,sources,playerId){
+ const rows=[];
+ for(const {player,enemy,summary} of [...sources.enemy,...sources.ally]){
+  const row=summary.topHeroes.find(item=>item.heroId===+heroId);
+  if(row&&row.winRate!=null&&row.games>=MIN_GAMES)rows.push({...row,player,enemy});
  }
- const top=rows.sort((a,b)=>b.winRate-a.winRate||b.games-a.games)[0];
- return top?`${top.player} · ${top.winRate}% · ${top.games} games`:'';
+ const pick=list=>list.sort((a,b)=>b.winRate-a.winRate||b.games-a.games)[0],own=playerId!=null&&playerId!==''?rows.filter(r=>String(r.player.id)===String(playerId)):[],top=pick(own.length?own:rows);
+ return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
 }
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();root.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},root);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();root.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},root);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));
@@ -462,7 +466,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
  const candidates=el('div',null,'decision-candidates');candidates.append(el('h3',turn.action==='ban'?'Best bans now':'Best picks now'));best.append(candidates);const more=el('details',null,'more-candidates');more.append(el('summary','More suggestions'));let candidateIndex=0;const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
  if(turn.mode==='ourPick'&&visibleCandidates.length){const legend=el('div',null,'rec-legend');legend.setAttribute('aria-label','Suggestion categories');for(const [cls,label] of [['team','Team'],['counter','Counter'],['meta','Meta'],['all','All three']])legend.append(el('span',label,'rec-badge rec-badge-'+cls));candidates.before(legend);}for(const r of visibleCandidates){const b=button('',()=>stage(r.heroId,r),candidateIndex++<6?candidates:more,'rec-row');const summary=el('span',null,'rec-summary');summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));b.append(portrait(r.heroId),summary);
- const win=heroEvidence(r.heroId);if(win)summary.append(el('span',win,'rec-win'));const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)best.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
+ const win=heroEvidence(r.heroId,evidenceSources,r.playerId);if(win)summary.append(el('span',win,'rec-win'));const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)best.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
  if(visibleCandidates.length>6)best.append(more);
  const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));dock.append(evidence);
  if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();optionalMatchupFailures.clear();refreshScouting();render();},dock);}

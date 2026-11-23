@@ -106,7 +106,7 @@ test('recommendations separate six best actions from the decision dock',async()=
  const h=await board({state:{enemyIds:['900']},players:{900:profile('900',[[109,38,23],[74,30,18],[8,20,12]])}});
  try{
   const best=h.q('suggestions').querySelector('.best-now'),dock=h.q('suggestions').querySelector('.decision-dock');
-  assert.ok(best);assert.ok(dock);assert.ok(best.querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=6);
+  assert.ok(best);assert.ok(dock);{const n=best.querySelector('.decision-candidates').querySelectorAll('.rec-row').length;assert.ok(n>0&&n<=6);}
   await h.click(best.querySelector('.rec-row'));
   assert.ok(h.q('suggestions').querySelector('.decision-dock .rec-feature'));assert.ok(h.q('suggestions').querySelector('.decision-dock button.primary'));
  }finally{h.w.close();}
@@ -124,6 +124,23 @@ test('the current draft slot previews the staged hero without recording it',asyn
   assert.equal(slot.classList.contains('is-recorded'),false);
   await h.click(h.q('suggestions').querySelector('.clear-staged'));
   assert.equal(cur().querySelector('.tree-preview'),null);
+ }finally{h.w.close();}
+});
+test('win evidence chip needs ten games, names the enemy on bans, and ignores enemy stats on our picks',async()=>{
+ const wins=h=>[...h.q('suggestions').querySelectorAll('.best-now .rec-win')].map(n=>n.textContent);
+ let h=await board({state:{enemyIds:['900']},players:{900:profile('900',[[109,10,6],[74,10,6],[8,10,6],[1,10,6],[2,10,6],[3,10,6]])}});
+ try{
+  assert.ok(h.q('suggestions').querySelectorAll('.best-now .rec-row').length>0);
+  const chips=wins(h);assert.ok(chips.length>0);assert.ok(chips.every(t=>/^Enemy Player 900 · 60% · 10 games$/.test(t)),chips.join('|'));
+ }finally{h.w.close();}
+ h=await board({state:{enemyIds:['900']},players:{900:profile('900',[[109,9,6],[74,9,6],[8,9,6],[1,9,6],[2,9,6],[3,9,6]])}});
+ try{assert.ok(h.q('suggestions').querySelectorAll('.best-now .rec-row').length>0);assert.equal(wins(h).length,0);}finally{h.w.close();}
+ const bans=[1,2,3,4,5,6,7].map(heroId=>({mode:'ourBan',heroId}));
+ h=await board({state:{enemyIds:['900'],actions:bans},players:{900:profile('900',[[109,38,23],[74,30,18],[8,20,12],[11,20,12],[12,20,12],[13,20,12]])}});
+ try{
+  assert.equal(h.q('suggestions').querySelector('.best-now h3').textContent,'Best picks now');
+  assert.ok(h.q('suggestions').querySelectorAll('.best-now .rec-row').length>0);
+  assert.equal(wins(h).filter(t=>t.includes('Player 900')).length,0);
  }finally{h.w.close();}
 });
 test('add enemy uses the existing setup flow',async()=>{
