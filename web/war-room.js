@@ -4,9 +4,9 @@ const STATE_TEXT={loading:'Loading…',closed:'Closed account',error:'Stats unav
 function comfortRow(row,{portrait,heroName}){
  const item=make('span','seat-hero tier-'+row.tier),image=portrait(row.heroId),text=make('span','seat-hero-text'),stat=make('span','seat-stat');
  image.alt='';
- const rate=row.winRate==null?'—':(row.tier==='hot'?'▲ ':'')+row.winRate+'%',games=row.games+' games'+(row.tier==='low'?' · low':'');
- stat.append(make('b',null,rate),make('small',null,games));text.append(make('span','seat-hero-name',heroName(row.heroId)),stat);item.append(image,text);
- item.title=`${heroName(row.heroId)}: ${rate} over ${row.games} games in the last 180 days`;
+ const none=!row.games,rate=row.winRate==null?'—':(row.tier==='hot'?'▲ ':'')+row.winRate+'%',games=row.games+' games'+(row.tier==='low'?' · low':'');
+ if(none)stat.append(make('b',null,'No public games'));else stat.append(make('b',null,rate),make('small',null,games));text.append(make('span','seat-hero-name',heroName(row.heroId)),stat);item.append(image,text);
+ item.title=none?`${heroName(row.heroId)}: no public games in the last 180 days`:`${heroName(row.heroId)}: ${rate} over ${row.games} games in the last 180 days`;
  return item;
 }
 

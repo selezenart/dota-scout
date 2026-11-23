@@ -44,8 +44,62 @@
  #draft-view .draft-layout:has(#analysis:not([hidden])) .decision-panel{display:none}
  #draft-view .decision-panel>.panel-heading{display:none}
  #draft-view .best-now{grid-area:best;min-width:0}
- #draft-view .decision-dock{grid-area:dock;align-self:end;position:sticky;bottom:8px;padding:8px;background:var(--wr-s1);border:1px solid var(--wr-line);border-radius:4px}
+ #draft-view .decision-dock{grid-area:dock;padding:8px;background:var(--wr-s1);border:1px solid var(--wr-line);border-radius:4px}
  #draft-view #hero-groups{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+ /* Compact chrome: seat strip and turn bar share one slim row, seat cards and best-now shrink. */
+ #draft-view{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:8px;align-items:stretch}
+ #draft-view>*{grid-column:1/-1;min-width:0}
+ #draft-view>.seat-strip{grid-column:1;grid-row:1;margin:0 0 6px;padding:4px 10px;min-height:0;gap:8px}
+ #draft-view>.match-strip{grid-column:2;grid-row:1;margin:0 0 6px;padding:4px 12px;border-bottom:0;align-self:stretch}
+ #draft-view .turn-heading{display:flex;align-items:center;gap:6px 14px;text-align:left}
+ #draft-view .turn-heading .eyebrow{font-size:10px}
+ #draft-view .turn-heading h1{margin:0;font-size:20px;line-height:1.1;white-space:nowrap}
+ #draft-view .turn-heading p{margin:0;font-size:12px}
+ #draft-view .turn-heading button{margin:0 0 0 auto;min-height:28px;padding:2px 10px}
+ #draft-view .player-rail{margin:0 0 8px;gap:8px}
+ #draft-view .seat-group{gap:4px}
+ #draft-view .seat-card{min-height:0;gap:3px;padding:5px 6px}
+ #draft-view .seat-head{font-size:13px;line-height:1.2}
+ #draft-view .seat-head small,#draft-view .seat-caption,#draft-view .seat-state{font-size:10px;line-height:1.2}
+ #draft-view .seat-comfort{gap:2px}
+ #draft-view .seat-hero{gap:4px;padding:2px}
+ #draft-view .seat-hero img{width:30px;height:30px}
+ #draft-view .seat-hero-name{font-size:11px;line-height:1.2}
+ #draft-view .seat-stat{flex-wrap:nowrap;gap:0 4px;font-size:10px;line-height:1.2;white-space:nowrap}
+ #draft-view .seat-stat b,#draft-view .seat-stat small{font-size:10px}
+ #draft-view .seat-stat small{min-width:0;overflow:hidden;text-overflow:ellipsis}
+ #draft-view .seat-ban{font-size:11px;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+ #draft-view .seat-game img{height:20px}
+ #draft-view .seat-game{font-size:10px;line-height:1.2}
+ #draft-view .best-now .decision-candidates{gap:4px;padding:0;overflow:hidden}
+ #draft-view .best-now .decision-candidates>h3{font-size:13px;line-height:1.2}
+ #draft-view .best-now .rec-row{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:6px;min-width:0;height:auto;max-height:92px;min-height:0;margin:0;padding:5px 6px;overflow:hidden;text-align:left}
+ #draft-view .best-now .rec-row img{width:44px;height:44px;object-fit:cover;object-position:50% 25%}
+ #draft-view .best-now .rec-summary{display:flex;flex-direction:column;min-width:0;gap:1px;line-height:1.2}
+ #draft-view .best-now .rec-summary>*{display:block;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px}
+ #draft-view .best-now .rec-summary>strong{font-size:13px}
+ #draft-view .best-now .rec-summary>small{display:none}
+ #draft-view .draft-layout{gap:8px 12px}
+ #draft-view .history-panel .panel-heading{padding:4px 12px;min-height:0}
+ #draft-view .history-panel .panel-heading h2{font-size:16px}
+ #draft-view .history-panel .tree-key{padding:3px 12px}
+ #draft-view #timeline{padding:0 8px 6px}
+ #draft-view #timeline .tree-turn{min-height:20px}
+ #draft-view #timeline .tree-turn[data-action=pick]{min-height:30px}
+ #draft-view #timeline .tree-turn.phase-start:not(:first-child){margin-top:3px}
+ #draft-view #timeline .tree-turn[data-action=ban] .tree-row{min-height:18px;height:18px;width:52px}
+ #draft-view #timeline .tree-turn[data-action=pick] .tree-row{min-height:28px;height:28px;width:78px}
+ #draft-view .history-panel .history-inspect{min-height:0;padding:4px 12px}
+ #draft-view .decision-dock{position:static;align-self:start}
+ #draft-view .hero-workspace{padding:8px 10px}
+ #draft-view .hero-board-heading{display:flex;align-items:baseline;gap:10px;min-height:0;margin:0 0 4px}
+ #draft-view .hero-board-heading h2{font-size:15px;margin:0}
+ #draft-view .hero-board-heading span{font-size:11px}
+ #draft-view .search-bar{min-height:0;padding:0}
+ #draft-view .search-bar input{min-height:32px;height:32px;padding-top:2px;padding-bottom:2px}
+ #draft-view .search-help{position:absolute;width:1px;height:1px;margin:0;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ #draft-view .hero-filters{gap:4px;margin:4px 0}
+ #draft-view .hero-filters button{min-height:26px;padding:2px 8px;font-size:12px}
  #draft-view #draft-enemy-scouting:not(.is-detail-open){display:none}
  #draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}
 }

@@ -185,6 +185,10 @@ test('slot-in runs for a new local action but not on load or undo',async()=>{
   await h.click(h.q('undo'));assert.equal(h.q('timeline').querySelectorAll('.tree-row.is-fresh').length,0);
  }finally{h.w.close();}
 });
+test('a comfort row with no public games says so instead of a dash and zero games',async()=>{
+ const h=await board({state:{roster:[{id:'ally',displayName:'Ally',signatureHeroes:[1]}]}});
+ try{const row=h.q('player-rail').querySelector('.seat-card.is-ally .seat-hero');assert.match(row.textContent,/No public games/);assert.doesNotMatch(row.textContent,/—|0 games|low/);}finally{h.w.close();}
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}
