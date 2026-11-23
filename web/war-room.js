@@ -12,7 +12,7 @@ function comfortRow(row,{portrait,heroName}){
 
 function seatCard(seat,options){
  const {focusId,portrait,heroName,onToggle}=options;
- const card=make('button','seat-card is-'+seat.side);card.type='button';card.setAttribute('aria-pressed',String(focusId===seat.id));card.classList.toggle('is-focused',focusId===seat.id);card.onclick=()=>onToggle(seat.id);
+ const card=make('button','seat-card is-'+seat.side);card.type='button';card.dataset.seatId=seat.id;card.setAttribute('aria-pressed',String(focusId===seat.id));card.classList.toggle('is-focused',focusId===seat.id);card.onclick=()=>onToggle(seat.id);
  const head=make('span','seat-head');head.append(make('strong',null,seat.name),make('small',null,seat.position?'Pos '+seat.position:'Pos ?'));card.append(head);
  const status=STATE_TEXT[seat.state];
  if(status)card.append(make('span','seat-state',status));
@@ -31,10 +31,12 @@ function emptySeat(side,onAddEnemy){
 }
 
 export function renderPlayerRail(root,options){
+ const focused=root.contains(document.activeElement)?document.activeElement.dataset?.seatId:null;
  root.replaceChildren();
  for(const [side,seats] of [['ally',options.allies],['enemy',options.enemies]]){
   const group=make('div','seat-group');group.setAttribute('role','group');group.setAttribute('aria-label',side==='ally'?'Our players':'Enemy players');
   for(let index=0;index<5;index++)group.append(seats[index]?seatCard(seats[index],options):emptySeat(side,options.onAddEnemy));
   root.append(group);
  }
+ if(focused!=null)[...root.querySelectorAll('[data-seat-id]')].find(node=>node.dataset.seatId===focused)?.focus({preventScroll:true});
 }

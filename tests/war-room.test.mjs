@@ -41,6 +41,27 @@ test('a failed optional comfort matchup does not show the draft-wide retry',asyn
  const h=await board({state:{roster:[{id:'ally',displayName:'Ally',signatureHeroes:[1]}]},request:async()=>{throw Error('offline');}});
  try{assert.equal([...h.q('suggestions').querySelectorAll('button')].some(b=>/Retry unavailable/.test(b.textContent)),false);assert.match(h.q('player-rail').textContent,/No counter data/);}finally{h.w.close();}
 });
+test('a transient optional matchup failure recovers after the retry reset',async()=>{
+ let calls=0;
+ const request=async path=>{calls++;if(calls<=2)throw Error('offline');return path.includes('/heroes/1/')?[{hero_id:2,games_played:30,wins:10}]:[];};
+ const h=await board({state:{actions:[{mode:'ourPick',heroId:5}],roster:[{id:'ally',displayName:'Ally',signatureHeroes:[1]}]},request});
+ try{
+  assert.match(h.q('player-rail').textContent,/No counter data/);
+  const retry=[...h.q('suggestions').querySelectorAll('button')].find(b=>/Retry unavailable/.test(b.textContent));
+  await h.click(retry);
+  assert.match(h.q('player-rail').querySelector('.seat-card.is-ally .seat-ban').textContent,/Axe/);
+  assert.doesNotMatch(h.q('player-rail').querySelector('.seat-card.is-ally .seat-ban').textContent,/No counter data/);
+ }finally{h.w.close();}
+});
+test('activating a seat keeps keyboard focus on it',async()=>{
+ const h=await board({state:{roster:[{id:'ally',displayName:'Ally',signatureHeroes:[1]}]}});
+ try{
+  const seat=h.q('player-rail').querySelector('.seat-card.is-ally');seat.focus();assert.equal(h.w.document.activeElement,seat);
+  await h.click(seat);
+  const active=h.w.document.activeElement;
+  assert.ok(active.classList.contains('seat-card'));assert.equal(active.dataset.seatId,seat.dataset.seatId);assert.equal(active.getAttribute('aria-pressed'),'true');
+ }finally{h.w.close();}
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}

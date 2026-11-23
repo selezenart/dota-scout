@@ -80,7 +80,7 @@ const storageKey=demo?'captain-demo-v1':'captain-practice-v1';
 let heroes=snapshot,state=demo?demoState():initialState(),profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {},backend,user,shared,teams=[],team,selected=null,pending=false,localControl=true,generation=0,polling=false,healthy=true,lastRoster=0;
 
 let observations=new Map(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
-const matchupErrors=new Set();
+const matchupErrors=new Set(),optionalMatchupFailures=new Set();
 
 try {const saved=JSON.parse(localStorage.getItem(storageKey)||'null');if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}}catch{}
 
@@ -111,7 +111,7 @@ function detachWorkspace(){
  stopLiveWatch();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
  state=demo?demoState():initialState();
- observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();reviewVisible=true;
+ observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();optionalMatchupFailures.clear();reviewVisible=true;
 }
 function enterPractice({navigate=true}={}){
  detachWorkspace();restorePractice();
@@ -141,7 +141,6 @@ function opponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p
 
 function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).catch(e=>{if(gen===generation)notice(e.message);});}}
 
-const optionalMatchupFailures=new Set();
 function requestMatchup(id,optional=false){
  if(demo||requestedMatchups.has(id)||matchupErrors.has(id)||(optional&&optionalMatchupFailures.has(id)))return;
  requestedMatchups.add(id);
@@ -414,7 +413,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
  const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)root.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
  if(visibleCandidates.length>3)root.append(more);
  const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));root.append(evidence);
- if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();refreshScouting();render();},root);}
+ if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();optionalMatchupFailures.clear();refreshScouting();render();},root);}
 
 
 }
@@ -677,7 +676,7 @@ async function openDraft(id,{navigate=true}={}){
  const currentUser=user.id,gen=generation,request=++draftOpen;
  let row;try{row=await backend.getDraft(id);}catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
  if(user?.id!==currentUser||gen!==generation||request!==draftOpen)return;
- ++generation;shared=null;observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();pending=false;polling=false;
+ ++generation;shared=null;observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();optionalMatchupFailures.clear();pending=false;polling=false;
  shared=row;team=teams.find(t=>t.id===row.team_id);teamRoster=[];
  selectedTeamIds=(row.state.roster||[]).filter(p=>p&&typeof p==='object').map(p=>p.userId||p.id);
  adopt(row);selected=null;reviewVisible=true;
@@ -1230,7 +1229,7 @@ async function authChanged(session,event){
 
  if(!user)restorePractice();
 
- observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
+ observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();optionalMatchupFailures.clear();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
 
  $('profile-content').replaceChildren();$('notice').textContent='';$('session-input').value='';document.querySelector('[data-manual-entry]')?.replaceChildren();for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
 
