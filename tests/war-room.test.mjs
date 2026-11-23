@@ -102,6 +102,30 @@ test('focusing a player highlights their heroes and dims the rest',async()=>{
   assert.equal(h.q('hero-groups').querySelectorAll('.is-player-hero,.is-player-dim').length,0);
  }finally{h.w.close();}
 });
+test('recommendations separate six best actions from the decision dock',async()=>{
+ const h=await board({state:{enemyIds:['900']},players:{900:profile('900',[[109,38,23],[74,30,18],[8,20,12]])}});
+ try{
+  const best=h.q('suggestions').querySelector('.best-now'),dock=h.q('suggestions').querySelector('.decision-dock');
+  assert.ok(best);assert.ok(dock);assert.ok(best.querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=6);
+  await h.click(best.querySelector('.rec-row'));
+  assert.ok(h.q('suggestions').querySelector('.decision-dock .rec-feature'));assert.ok(h.q('suggestions').querySelector('.decision-dock button.primary'));
+ }finally{h.w.close();}
+});
+test('the current draft slot previews the staged hero without recording it',async()=>{
+ const h=await board();
+ try{
+  const cur=()=>h.q('timeline').querySelector('.tree-row.is-current');
+  assert.equal(cur().querySelector('.tree-preview'),null);
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="1"]'));
+  const slot=cur(),preview=slot.querySelector('.tree-preview');
+  assert.ok(preview);assert.ok(preview.classList.contains('tree-hero'));
+  assert.match(slot.querySelector('.tree-label').textContent,/Anti-Mage/);
+  assert.match(slot.getAttribute('aria-label'),/^Turn 1, .*previewing Anti-Mage/);assert.match(slot.title,/previewing Anti-Mage/);
+  assert.equal(slot.classList.contains('is-recorded'),false);
+  await h.click(h.q('suggestions').querySelector('.clear-staged'));
+  assert.equal(cur().querySelector('.tree-preview'),null);
+ }finally{h.w.close();}
+});
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();
  try{await h.click(h.q('player-rail').querySelector('.seat-add-enemy'));assert.ok(h.w.document.querySelector('dialog[open]'));}finally{h.w.close();}
