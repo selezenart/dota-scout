@@ -7,6 +7,8 @@ import {createWelcome} from './welcome.js';
 import snapshot from './heroes.json';
 
 import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop} from './draft-engine.js';
+import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,MIN_GAMES} from './draft-stats.js';
+import {renderPlayerRail} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
@@ -139,27 +141,30 @@ function opponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p
 
 function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).catch(e=>{if(gen===generation)notice(e.message);});}}
 
+const optionalMatchupFailures=new Set();
+function requestMatchup(id,optional=false){
+ if(demo||requestedMatchups.has(id)||matchupErrors.has(id)||(optional&&optionalMatchupFailures.has(id)))return;
+ requestedMatchups.add(id);
+ const gen=generation;
+ void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
+  if(gen!==generation)return;
+  if(!Array.isArray(rows))throw Error('Invalid matchup response');
+  matchups[id]=rows;
+  optionalMatchupFailures.delete(id);
+  render();
+ }).catch(()=>{
+  if(gen!==generation)return;
+  requestedMatchups.delete(id);
+  if(optional){optionalMatchupFailures.add(id);return;}
+  matchupErrors.add(id);
+  render();
+ });
+}
 function refreshScouting(){
  if(demo)return;
  const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
  scout([...(state.enemyIds||[]),...members.map(p=>p.steamAccountId||p.accountId)]);
- for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){
-  const id=action.heroId;
-  if(requestedMatchups.has(id)||matchupErrors.has(id))continue;
-  requestedMatchups.add(id);
-  const gen=generation;
-  void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
-   if(gen!==generation)return;
-   if(!Array.isArray(rows))throw Error('Invalid matchup response');
-   matchups[id]=rows;
-   render();
-  }).catch(()=>{
-   if(gen!==generation)return;
-   requestedMatchups.delete(id);
-   matchupErrors.add(id);
-   render();
-  });
- }
+ for(const action of state.actions.filter(a=>a.mode.endsWith('Pick')))requestMatchup(action.heroId);
 }
 
 let searchIndex=0,rankedIds=new Set();
@@ -286,7 +291,7 @@ function renderView(){
 
  $('undo').disabled=!write||!state.actions.length;$('reset-draft').disabled=!write;$('first-pick').checked=state.firstPick;$('first-pick').disabled=!write||!!state.actions.length;
 
- renderDraftTree();
+ renderSeats();renderDraftTree();
 
  for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<5;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
 
@@ -297,6 +302,35 @@ function renderView(){
 
 }
 
+let focusedPlayer=null;
+function seatData(player,side,taken,now){
+ const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
+ const summary=enemySummary(player,{now,heroes:Object.values(heroes)}),state=hasAccount?summary.state:'ready';
+ const usable=state==='ready'||(side==='ally'&&!hasAccount);
+ const comfort=usable?comfortRows({player,summary,side}):[];
+ let banLabel='Ban suggestions',bans='No counter data';
+ if(side==='enemy'){
+  banLabel='Ban first';
+  const target=usable?enemyBanTarget(summary,taken):null;
+  bans=target?`${heroName(target.heroId)} · ${target.winRate}%`:'No clear ban';
+ }else if(comfort[0]){
+  requestMatchup(comfort[0].heroId,true);
+  const counters=allyCounterBans(comfort[0].heroId,matchups[comfort[0].heroId],taken);
+  if(counters.length)bans=counters.map(row=>heroName(row.heroId)).join(', ');
+ }
+ const position=side==='enemy'?summary.positions?.[0]?.position:player.selfReport.preferredRoles?.[0];
+ return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup:usable?recentCupGames(player,now):[]};
+}
+function renderSeats(){
+ const taken=new Set(state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
+ renderPlayerRail($('player-rail'),{
+  allies:roster().slice(0,5).map(player=>seatData(player,'ally',taken,now)),
+  enemies:opponents().slice(0,5).map(player=>seatData(player,'enemy',taken,now)),
+  focusId:focusedPlayer,portrait,heroName,
+  onToggle:id=>{focusedPlayer=focusedPlayer===id?null:id;render();},
+  onAddEnemy:safe(lobby)
+ });
+}
 function renderDraftTree(){
  const tree=$('timeline');tree.replaceChildren();$('history-inspect').textContent='Select a recorded hero to inspect the action.';
  CM_ORDER.forEach((step,index)=>{
