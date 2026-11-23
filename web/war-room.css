@@ -24,7 +24,6 @@
 /* Draft order: pick rows are clearly taller than ban rows; portraits fill their slot. */
 #timeline .tree-row[data-action=ban],#timeline .tree-turn[data-action=ban] .tree-row{min-height:26px}
 #timeline .tree-row[data-action=pick],#timeline .tree-turn[data-action=pick] .tree-row{min-height:54px}
-#timeline .tree-row[data-action=pick]>.tree-ally,#timeline .tree-row[data-action=pick]>.tree-enemy{min-height:50px}
 #timeline .tree-row .tree-hero{object-fit:cover;object-position:50% 25%}
 #timeline .tree-row[data-action=ban] .tree-hero{width:28px;height:22px}
 #timeline .tree-row[data-action=pick] .tree-hero{width:52px;height:46px}
@@ -34,7 +33,6 @@
 #draft-view .hero-tile.is-player-dim{opacity:.26}
 #draft-view .hero-tile.is-search-miss.is-player-hero{opacity:.75}
 #draft-view .hero-tile.is-search-miss.is-player-dim{opacity:.26}
-#draft-view .hero-tile.is-player-dim .tile-mark,#draft-view .hero-tile.is-search-miss .tile-mark{opacity:1}
 @media(min-width:900px){
  #draft-view .team-lineup{display:none}
  #draft-view .match-strip{grid-template-columns:1fr}
@@ -43,6 +41,8 @@
  #draft-view .hero-workspace{grid-area:heroes}
  #draft-view .analysis{grid-area:analysis}
  #draft-view .decision-panel,#draft-view #suggestions{display:contents}
+ #draft-view .draft-layout:has(#analysis:not([hidden])) .decision-panel{display:none}
+ #draft-view #suggestions>:not(.best-now){grid-area:dock}
  #draft-view .decision-panel>.panel-heading{display:none}
  #draft-view .best-now{grid-area:best;min-width:0}
  #draft-view .decision-dock{grid-area:dock;align-self:end;position:sticky;bottom:8px;padding:8px;background:var(--wr-s1);border:1px solid var(--wr-line);border-radius:4px}
@@ -51,4 +51,4 @@
  #draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}
 }
 @media(min-width:900px) and (max-width:1279px){#draft-view .draft-layout{grid-template-columns:minmax(0,1fr) 240px}#draft-view #hero-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:899px){.player-rail{grid-template-columns:repeat(2,680px)}#draft-view .best-now .decision-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}body:has(#surface-tree:checked) #draft-view #draft-enemy-scouting,body:has(#surface-players:checked) #draft-view #draft-enemy-scouting{display:none}}
+@media(max-width:899px){.player-rail{grid-template-columns:minmax(0,1fr)}.seat-group{grid-template-columns:repeat(5,132px);overflow-x:auto}#draft-view .best-now .decision-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}body:has(#surface-tree:checked) #draft-view #draft-enemy-scouting,body:has(#surface-players:checked) #draft-view #draft-enemy-scouting{display:none}}
