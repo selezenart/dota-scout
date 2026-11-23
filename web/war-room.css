@@ -104,7 +104,20 @@
  #draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}
 }
 @media(min-width:900px) and (max-width:1279px){#draft-view .draft-layout{grid-template-columns:minmax(0,1fr) 240px}#draft-view #hero-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:899px){.player-rail{grid-template-columns:minmax(0,1fr)}.seat-group{grid-template-columns:repeat(5,132px);overflow-x:auto}#draft-view .best-now .decision-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}#draft-view #draft-enemy-scouting:not(.is-detail-open){display:none}#draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}
+@media(max-width:899px){.player-rail{grid-template-columns:minmax(0,1fr)}.seat-group{grid-template-columns:repeat(5,132px);overflow-x:auto}#draft-view .best-now .decision-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}#draft-view #draft-enemy-scouting{display:none}body:has(#surface-players:checked) #draft-view #draft-enemy-scouting.is-detail-open{display:block}#draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}#draft-view #player-rail{display:none}body:has(#surface-players:checked) #draft-view #player-rail{display:grid}
+ #draft-view>.seat-strip{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0 0 6px;padding:4px 10px}
+ #draft-view>.seat-strip button{min-height:44px}
+ #draft-view>.seat-strip .seat-mark,#draft-view>.seat-strip strong{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ #draft-view>.seat-strip{position:relative;flex-wrap:nowrap}
+ #draft-view>.seat-strip #draft-owner{flex:1;min-width:0;font-size:12px;line-height:1.2}
+ #draft-view>.seat-strip button{flex:none;padding:4px 8px;font-size:12px}
+ #draft-view .team-lineup{display:none}
+ #draft-view>.match-strip{grid-template-columns:1fr}
+ #draft-view>.match-strip{margin:0 0 6px;padding:6px 10px}
+ #draft-view .turn-heading{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;text-align:left}
+ #draft-view .turn-heading h1{margin:0;font-size:20px}
+ #draft-view .turn-heading p{margin:0}
+ #draft-view .turn-heading button{margin:0 0 0 auto;min-height:44px}
  #draft-view .best-now .rec-row{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:center;gap:6px;min-width:0;height:auto;max-height:92px;min-height:44px;margin:0;padding:6px;overflow:hidden;text-align:left}
  #draft-view .best-now .rec-row img{width:40px;height:40px;object-fit:cover;object-position:50% 25%}
  #draft-view .best-now .rec-summary{display:flex;flex-direction:column;min-width:0;gap:1px;line-height:1.2}
