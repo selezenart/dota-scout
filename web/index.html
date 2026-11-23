@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#08070b" />
     <title>Captain’s Draft Board</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./war-room.css" />
     <script type="module" src="./main.js"></script>
   </head>
   <body data-view="welcome">
@@ -352,6 +353,12 @@
             </div>
           </section>
 
+          <section id="player-rail" class="player-rail" aria-label="Draft players"></section>
+          <section id="draft-enemy-scouting" class="draft-enemy-scouting" aria-labelledby="draft-enemy-title" hidden>
+            <h3 id="draft-enemy-title">Enemy scouting</h3>
+            <div id="draft-enemy-list"></div>
+          </section>
+
           <fieldset class="mobile-switch">
             <legend class="sr-only">Draft surface</legend>
             <input
@@ -439,10 +446,6 @@
                 
               </div>
               <div id="suggestions" aria-label="Recommended actions"></div>
-              <section id="draft-enemy-scouting" class="draft-enemy-scouting" aria-labelledby="draft-enemy-title" hidden>
-                <h3 id="draft-enemy-title">Enemy scouting</h3>
-                <div id="draft-enemy-list"></div>
-              </section>
             </aside>
 
             <section

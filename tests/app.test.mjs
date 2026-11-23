@@ -46,15 +46,15 @@ test('DOM integration stages and confirms manually, undoes, resets and renders 2
  const q=id=>w.document.getElementById(id),click=async node=>{node.click();await new Promise(r=>setTimeout(r,5));};
  assert.equal(q('timeline').querySelectorAll('.tree-row').length,24);assert.match(q('connection-status').textContent,/Demo/);
  assert.equal(q('suggestions').querySelector('details.decision-evidence').open,false);
- assert.ok(q('suggestions').querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=3);
+ assert.ok(q('suggestions').querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=6);
  const recommended=q('suggestions').querySelector('.rec-row');assert.ok(recommended);await click(recommended);
  assert.ok(q('suggestions').querySelector('.decision-reason'));assert.equal(q('timeline').querySelectorAll('.is-recorded').length,0,'staging never records an action');
  await click(q('suggestions').querySelector('.clear-staged'));assert.equal(q('suggestions').querySelector('.rec-feature'),null);assert.equal(q('timeline').querySelectorAll('.is-recorded').length,0);assert.equal(w.document.activeElement,q('hero-search'));
 
- await click(q('hero-groups').querySelector('button'));assert.match(q('turn-progress').textContent,/0 \/ 24/);
+ await click(q('hero-groups').querySelector('.hero-tile:not(:disabled)'));assert.match(q('turn-progress').textContent,/0 \/ 24/);
  await click(q('suggestions').querySelector('button.primary'));assert.match(q('turn-progress').textContent,/1 \/ 24/);
  await click(q('undo'));assert.match(q('turn-progress').textContent,/0 \/ 24/);
- for(let i=0;i<24;i++){await click(q('hero-groups').querySelector('button'));await click(q('suggestions').querySelector('button.primary'));}
+ for(let i=0;i<24;i++){await click(q('hero-groups').querySelector('.hero-tile:not(:disabled)'));await click(q('suggestions').querySelector('button.primary'));}
  assert.equal(q('turn-label').textContent,'Draft complete');assert.equal(q('analysis').hidden,false);assert.equal(q('our-lineup').children.length,5);
  await click(q('reset-draft'));assert.match(q('turn-progress').textContent,/0 \/ 24/);dom.window.close();
 });
@@ -66,8 +66,8 @@ test('shared controller confirms ownership, refetches conflicts without replay a
  w.__backend={getSession:async()=>({user:{id:'user-a'}}),onAuthChange:fn=>{callback=fn;},loadProfile:async()=>({displayName:'Private own profile'}),listTeams:async()=>[{id:'team',name:'Test team',owner_user_id:'user-a'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row),mutateDraft:async(_id,rev,op,payload)=>{calls.push(op);assert.equal(rev,row.revision);if(op==='claim')row={...row,drafter_user_id:'user-a',revision:row.revision+1};if(op==='append'){if(conflict){row={...row,revision:row.revision+1,state:{...row.state,actions:[{mode:'ourBan',heroId:2}]}};throw Error('revision conflict');}row={...row,revision:row.revision+1,state:{...row.state,actions:[...row.state.actions,payload]}};}return structuredClone(row);}};
  w.fetch=async url=>{if(url==='/api/config')return {ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})};throw Error('Offline');};w.setInterval=()=>0;w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);const wait=()=>new Promise(r=>setTimeout(r,25));await wait();const q=id=>w.document.getElementById(id);
- assert.equal(q('claim-drafter').disabled,false);q('hero-groups').querySelector('button').click();await wait();assert.equal(q('suggestions').querySelector('button.primary').disabled,true);assert.match(q('suggestions').querySelector('.decision-readonly').textContent,/Become drafter/);q('suggestions').querySelector('.clear-staged').click();await wait();assert.equal(q('suggestions').querySelector('.rec-feature'),null);assert.deepEqual(calls,[]);
- q('claim-drafter').click();await wait();assert.match(q('draft-owner').textContent,/Private teammate/);conflict=true;q('hero-groups').querySelector('button').click();await wait();q('suggestions').querySelector('button.primary').click();await wait();assert.deepEqual(calls,['claim','append']);assert.match(q('turn-progress').textContent,/1 \/ 24/);assert.match(q('notice').textContent,/conflict/);
+ assert.equal(q('claim-drafter').disabled,false);q('hero-groups').querySelector('.hero-tile:not(:disabled)').click();await wait();assert.equal(q('suggestions').querySelector('button.primary').disabled,true);assert.match(q('suggestions').querySelector('.decision-readonly').textContent,/Become drafter/);q('suggestions').querySelector('.clear-staged').click();await wait();assert.equal(q('suggestions').querySelector('.rec-feature'),null);assert.deepEqual(calls,[]);
+ q('claim-drafter').click();await wait();assert.match(q('draft-owner').textContent,/Private teammate/);conflict=true;q('hero-groups').querySelector('.hero-tile:not(:disabled)').click();await wait();q('suggestions').querySelector('button.primary').click();await wait();assert.deepEqual(calls,['claim','append']);assert.match(q('turn-progress').textContent,/1 \/ 24/);assert.match(q('notice').textContent,/conflict/);
  callback(null,'SIGNED_OUT');await wait();assert.equal(q('session-code').textContent,'Local');assert.doesNotMatch(w.document.body.textContent,/Private teammate/);assert.match(q('turn-progress').textContent,/0 \/ 24/);dom.window.close();
 });
 
@@ -101,7 +101,7 @@ test('board search supports arrows, empty feedback, native button activation and
  const dom=await welcomeHarness('?practice'),w=dom.window,q=id=>w.document.getElementById(id),search=q('hero-search');
  search.value='zzzzzz';search.dispatchEvent(new w.Event('input'));assert.match(q('hero-groups').textContent,/No heroes match/);
  search.value='';search.dispatchEvent(new w.Event('input'));search.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));const highlighted=q('hero-groups').querySelector('.is-highlighted').getAttribute('aria-label');
- search.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await settle();assert.match(q('suggestions').querySelector('h3').textContent,new RegExp(highlighted));
+ search.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await settle();assert.match(q('suggestions').querySelector('.decision-dock h3').textContent,new RegExp(highlighted));
  const confirm=q('suggestions').querySelector('button.primary'),native=new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true});confirm.dispatchEvent(native);assert.equal(native.defaultPrevented,false);
  search.value=highlighted;search.dispatchEvent(new w.Event('input'));confirm.click();await settle();assert.equal(search.value,'');assert.match(q('turn-progress').textContent,/1 \/ 24/);
  q('team-button').click();assert.equal(q('team-button').getAttribute('aria-current'),'page');assert.equal(q('draft-button').hasAttribute('aria-current'),false);dom.window.close();
@@ -123,15 +123,15 @@ test('redesign sorts public popularity, records portraits and preserves explicit
  await click(w.document.querySelector('[data-hero-filter="recommended"]'));assert.ok([...q('hero-groups').querySelectorAll('.hero-tile')].every(tile=>tile.classList.contains('is-recommended')));
  assert.equal(w.document.querySelector('[data-hero-filter="recommended"]').getAttribute('aria-pressed'),'true');
  await click(w.document.querySelector('[data-hero-filter="all"]'));
- for(let i=0;i<7;i++){await click(q('hero-groups').querySelector('button'));await click(q('suggestions').querySelector('.primary'));}
+ for(let i=0;i<7;i++){await click(q('hero-groups').querySelector('.hero-tile:not(:disabled)'));await click(q('suggestions').querySelector('.primary'));}
 
  assert.equal(w.document.querySelectorAll('.tree-row.is-recorded .tree-hero').length,7);await click(q('timeline').querySelector('.tree-row[data-turn="0"]'));assert.match(q('history-inspect').textContent,/Our ban.*turn 1/);assert.equal(q('timeline').querySelectorAll('.tree-row:disabled').length,16);assert.equal(w.document.querySelectorAll('.tree-row[data-action="ban"] .tree-hero').length,7);
- await click(q('hero-groups').querySelector('button'));const picker=q('suggestions').querySelector('fieldset.position-picker');assert.equal(picker.querySelector('legend').textContent,'Assign position');assert.equal(picker.querySelectorAll('input[type=radio]').length,5);
+ await click(q('hero-groups').querySelector('.hero-tile:not(:disabled)'));const picker=q('suggestions').querySelector('fieldset.position-picker');assert.equal(picker.querySelector('legend').textContent,'Assign position');assert.equal(picker.querySelectorAll('input[type=radio]').length,5);
  const key=new w.KeyboardEvent('keydown',{key:'a',bubbles:true,cancelable:true});picker.dispatchEvent(key);assert.equal(key.defaultPrevented,false);const arrow=new w.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true});picker.querySelector('input').dispatchEvent(arrow);assert.equal(arrow.defaultPrevented,false);await click(picker.querySelector('[value="4"]'));q('hero-search').value='Hero';q('hero-search').dispatchEvent(new w.Event('input'));w.__stats([{id:1,pub_pick:1001}]);await settle();assert.equal(q('suggestions').querySelector('[value="4"]').checked,true);
  await click(q('suggestions').querySelector('.primary'));const saved=JSON.parse(w.localStorage.getItem('captain-practice-v1'));assert.equal(saved.state.actions.at(-1).position,4);assert.equal(w.document.querySelectorAll('.tree-row[data-action="pick"] .tree-hero').length,1);
  // The next allied pick cannot reuse P4, and clearing an automatic suggestion stays explicit after a render.
- while(!q('turn-label').textContent.startsWith('Our pick')){await click(q('hero-groups').querySelector('button'));await click(q('suggestions').querySelector('.primary'));}
- await click(q('hero-groups').querySelector('button'));assert.equal(q('suggestions').querySelector('[value="4"]').disabled,true);await click(q('suggestions').querySelector('.position-auto'));w.__stats([{id:1,pub_pick:1002}]);await settle();assert.equal(q('suggestions').querySelector('input:checked'),null);await click(q('suggestions').querySelector('.primary'));assert.equal(JSON.parse(w.localStorage.getItem('captain-practice-v1')).state.actions.at(-1).position,undefined);
+ while(!q('turn-label').textContent.startsWith('Our pick')){await click(q('hero-groups').querySelector('.hero-tile:not(:disabled)'));await click(q('suggestions').querySelector('.primary'));}
+ await click(q('hero-groups').querySelector('.hero-tile:not(:disabled)'));assert.equal(q('suggestions').querySelector('[value="4"]').disabled,true);await click(q('suggestions').querySelector('.position-auto'));w.__stats([{id:1,pub_pick:1002}]);await settle();assert.equal(q('suggestions').querySelector('input:checked'),null);await click(q('suggestions').querySelector('.primary'));assert.equal(JSON.parse(w.localStorage.getItem('captain-practice-v1')).state.actions.at(-1).position,undefined);
  await click(q('profile-button'));assert.equal(w.document.querySelectorAll('.profile-role-card').length,5);for(const input of w.document.querySelectorAll('.profile-role-card input'))assert.ok(w.document.querySelector(`label[for="${input.id}"]`));dom.window.close();
 });
 

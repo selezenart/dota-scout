@@ -109,6 +109,20 @@ const boot=async(saved,setup)=>{
 };
 const items=(el,sel)=>[...el.querySelectorAll(sel)].map(x=>x.textContent);
 
+test('saved matches with no enemy IDs keep the report and side controls reachable',async()=>{
+ const w=await boot();
+ try{
+  const d=w.document;d.getElementById('setup-button').click();await flush();
+  d.getElementById('enemy-match-input').value='8002';
+  [...d.querySelectorAll('button')].find(b=>b.textContent==='Load matches').click();await flush();
+  [...d.querySelectorAll('button')].find(b=>b.textContent==='Save and scout enemies').click();await flush();
+  const section=d.getElementById('draft-enemy-scouting'),report=section.querySelector('.draft-enemy-matches');
+  assert.ok(report);assert.equal(section.hidden,false);
+  assert.equal(section.classList.contains('has-match-report'),true);assert.equal(section.classList.contains('is-detail-open'),false);
+  assert.ok([...report.querySelectorAll('button')].some(b=>/Enemy was (Radiant|Dire)|Switch side/.test(b.textContent)));
+  assert.equal(section.querySelectorAll('.draft-enemy').length,0);
+ }finally{w.close();}
+});
 test('Setup has match input and draft panel shows Battle Cup matches with side resolution',async()=>{
  const w=await boot(null,true),d=w.document;
  try{
