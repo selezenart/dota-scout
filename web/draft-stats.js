@@ -7,6 +7,22 @@ export function winTier(winRate,games){
  return winRate>=HOT_RATE?'hot':winRate>=WARN_RATE?'warm':'normal';
 }
 
+export function heroStatRows(heroes){
+ return (Array.isArray(heroes)?heroes:[]).filter(h=>+h.games>0)
+  .map(h=>({heroId:+h.hero_id,games:+h.games,wins:h.win==null?null:Math.max(0,+h.win||0)}))
+  .sort((a,b)=>b.games-a.games||(b.wins??0)-(a.wins??0))
+  .map(h=>({...h,winRate:h.wins==null?null:Math.round(100*h.wins/h.games)}));
+}
+
+// 'ok' when every named source answered; players without source tracking count as answered.
+export function sourceStatus(player={},keys=[]){
+ const sources=player.sources||{};
+ if(!Object.keys(sources).length)return 'ok';
+ const statuses=keys.map(key=>sources[key]?.status);
+ if(statuses.includes('fetching'))return 'loading';
+ return statuses.every(status=>status==='updated'||status==='empty')?'ok':'error';
+}
+
 export function comfortRows({player={},summary={},side}){
  const top=summary.topHeroes||[],stats=new Map(top.map(row=>[+row.heroId,row]));
  const self=player.selfReport||{};
@@ -33,7 +49,7 @@ export function allyCounterBans(heroId,rows,takenIds=new Set()){
 
 export function recentCupGames(player={},now=Date.now()/1000){
  const seen=new Set(),games=[];
- for(const match of [...(player.recent||[]),...(player.matches||[])]){
+ for(const match of [player.recent,player.cupMatches].flatMap(rows=>Array.isArray(rows)?rows:[])){
   const age=(now-Number(match.start_time))/DAY,key=String(match.match_id);
   if(match.match_id==null||match.hero_id==null||+match.lobby_type!==CUP_LOBBY||!(age>=0&&age<=WINDOW_DAYS)||seen.has(key))continue;
   seen.add(key);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {winTier,comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark} from '../web/draft-stats.js';
+import {winTier,comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus} from '../web/draft-stats.js';
 
 test('win tiers use minimum games and displayed rate',()=>{
  assert.equal(winTier(63,9),'low');assert.equal(winTier(54,10),'normal');assert.equal(winTier(55,10),'warm');
@@ -27,8 +27,35 @@ test('ally counters sort by worst matchup and require enough games',()=>{
 });
 test('recent cup games dedupe, filter, sort, and keep unknown results',()=>{
  const now=1_000_000_000,day=86400,row=(id,age,extra={})=>({match_id:id,hero_id:id,lobby_type:9,start_time:now-age*day,player_slot:1,radiant_win:true,...extra});
- const games=recentCupGames({recent:[row(1,1)],matches:[row(1,1),row(2,3,{radiant_win:null}),row(3,2,{player_slot:130}),row(4,200),row(5,1,{lobby_type:7})]},now);
+ const games=recentCupGames({recent:[row(1,1)],cupMatches:[row(1,1),row(2,3,{radiant_win:null}),row(3,2,{player_slot:130}),row(4,200),row(5,1,{lobby_type:7})]},now);
  assert.deepEqual(games.map(g=>[g.matchId,g.won]),[[1,true],[3,false],[2,null]]);
+});
+test('recent cup games read cupMatches and ignore the scoring matches list',()=>{
+ const now=1_000_000_000,row={match_id:9,hero_id:4,lobby_type:9,start_time:now-86400,player_slot:1,radiant_win:true};
+ assert.deepEqual(recentCupGames({recent:[],matches:[row],cupMatches:[]},now),[]);
+ assert.deepEqual(recentCupGames({recent:[],matches:[],cupMatches:[row]},now).map(g=>g.matchId),[9]);
+ assert.deepEqual(recentCupGames({recent:[],cupMatches:'bad'},now),[]);
+});
+test('hero stat rows keep every played hero with summary rounding',()=>{
+ const rows=heroStatRows([{hero_id:'2',games:3,win:2},{hero_id:1,games:40,win:32},{hero_id:3,games:0,win:0},{hero_id:4,games:5}]);
+ assert.deepEqual(rows,[{heroId:1,games:40,wins:32,winRate:80},{heroId:4,games:5,wins:null,winRate:null},{heroId:2,games:3,wins:2,winRate:67}]);
+ assert.deepEqual(heroStatRows(undefined),[]);
+});
+test('full hero stats expose a sixth-ranked ban target and ally signature',()=>{
+ const heroes=[[1,100,50],[2,90,45],[3,80,40],[4,70,35],[5,60,30],[6,40,32]].map(([hero_id,games,win])=>({hero_id,games,win}));
+ const topHeroes=heroStatRows(heroes);
+ assert.equal(enemyBanTarget({topHeroes},new Set([1,2,3,4,5])).heroId,6);
+ assert.deepEqual(comfortRows({player:{},summary:{topHeroes},side:'enemy'}).map(r=>r.heroId),[1,2]);
+ const [ally]=comfortRows({player:{selfReport:{signatureHeroes:[6]}},summary:{topHeroes},side:'ally'});
+ assert.deepEqual([ally.heroId,ally.games,ally.winRate,ally.tier],[6,40,80,'hot']);
+});
+test('source status separates success, loading, and failure',()=>{
+ const player=sources=>({sources});
+ assert.equal(sourceStatus(player({recent:{status:'empty'},matches:{status:'updated'}}),['recent','matches']),'ok');
+ assert.equal(sourceStatus(player({recent:{status:'fetching'},matches:{status:'error'}}),['recent','matches']),'loading');
+ assert.equal(sourceStatus(player({recent:{status:'updated'},matches:{status:'error'}}),['recent','matches']),'error');
+ assert.equal(sourceStatus(player({recent:{status:'updated'}}),['recent','matches']),'error');
+ assert.equal(sourceStatus({},['heroes']),'ok');
 });
 test('tile marks prefer draft state over suggestions',()=>{
  assert.deepEqual(tileMark({takenMode:'ourBan',pick:true,ban:true}),{text:'BAN',kind:'banned'});

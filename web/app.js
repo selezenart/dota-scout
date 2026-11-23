@@ -7,7 +7,7 @@ import {createWelcome} from './welcome.js';
 import snapshot from './heroes.json';
 
 import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop} from './draft-engine.js';
-import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,MIN_GAMES} from './draft-stats.js';
+import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES} from './draft-stats.js';
 import {renderPlayerRail} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
@@ -80,7 +80,9 @@ const storageKey=demo?'captain-demo-v1':'captain-practice-v1';
 let heroes=snapshot,state=demo?demoState():initialState(),profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {},backend,user,shared,teams=[],team,selected=null,pending=false,localControl=true,generation=0,polling=false,healthy=true,lastRoster=0;
 
 let observations=new Map(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
-const matchupErrors=new Set(),optionalMatchupFailures=new Set();
+// Optional seat data: kept apart from `matchups`, which recommend() reads.
+let allyCounterMatchups={},focusedPlayer=null,suggestionCache={key:'',pick:new Set(),ban:new Set()};
+const matchupErrors=new Set(),allyCounterRequests=new Set(),allyCounterFailures=new Set();
 
 try {const saved=JSON.parse(localStorage.getItem(storageKey)||'null');if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}}catch{}
 
@@ -107,11 +109,12 @@ function restorePractice(){
  try{const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');if(saved){state={...initialState(),...saved.state};if(!user)profile=saved.profile||{};return;}}catch{}
  if(user)state.roster=[{...profile,id:user.id}];
 }
+function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();suggestionCache={key:'',pick:new Set(),ban:new Set()};focusedPlayer=null;}
 function detachWorkspace(){
  stopLiveWatch();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
  state=demo?demoState():initialState();
- observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();optionalMatchupFailures.clear();reviewVisible=true;
+ resetDraftData();reviewVisible=true;
 }
 function enterPractice({navigate=true}={}){
  detachWorkspace();restorePractice();
@@ -141,22 +144,35 @@ function opponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p
 
 function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).catch(e=>{if(gen===generation)notice(e.message);});}}
 
-function requestMatchup(id,optional=false){
- if(demo||requestedMatchups.has(id)||matchupErrors.has(id)||(optional&&optionalMatchupFailures.has(id)))return;
+function requestMatchup(id){
+ if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
  requestedMatchups.add(id);
  const gen=generation;
  void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
   if(gen!==generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
   matchups[id]=rows;
-  optionalMatchupFailures.delete(id);
   render();
  }).catch(()=>{
   if(gen!==generation)return;
   requestedMatchups.delete(id);
-  if(optional){optionalMatchupFailures.add(id);return;}
   matchupErrors.add(id);
   render();
+ });
+}
+function requestAllyCounters(id){
+ if(demo||allyCounterRequests.has(id)||allyCounterFailures.has(id))return;
+ allyCounterRequests.add(id);
+ const gen=generation;
+ void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
+  if(gen!==generation)return;
+  if(!Array.isArray(rows))throw Error('Invalid matchup response');
+  allyCounterMatchups[id]=rows;
+  render();
+ }).catch(()=>{
+  if(gen!==generation)return;
+  allyCounterRequests.delete(id);
+  allyCounterFailures.add(id);
  });
 }
 function refreshScouting(){
@@ -301,26 +317,35 @@ function renderView(){
 
 }
 
-let focusedPlayer=null;
+const SEAT_STATUS={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'};
 function seatData(player,side,taken,now){
  const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
  const summary=enemySummary(player,{now,heroes:Object.values(heroes)}),state=hasAccount?summary.state:'ready';
  const usable=state==='ready'||(side==='ally'&&!hasAccount);
- const comfort=usable?comfortRows({player,summary,side}):[];
+ const stats={topHeroes:heroStatRows(player.heroes)};
+ // An absence label is only true once the sources behind it have answered.
+ const absence=(keys,empty)=>{
+  if(!hasAccount)return empty;
+  if(state!=='ready')return SEAT_STATUS[state];
+  const status=sourceStatus(player,keys);
+  return status==='ok'?empty:SEAT_STATUS[status];
+ };
+ const heroesKnown=!hasAccount||sourceStatus(player,['heroes'])==='ok';
+ const comfort=usable?comfortRows({player,summary:stats,side}).map(row=>heroesKnown||row.games?row:{...row,unavailable:true}):[];
  let banLabel='Ban suggestions',bans='No counter data',banIds=[];
  if(side==='enemy'){
   banLabel='Ban first';
-  const target=usable?enemyBanTarget(summary,taken):null;
-  bans=target?`${heroName(target.heroId)} · ${target.winRate}%`:'No clear ban';
+  const target=usable?enemyBanTarget(stats,taken):null;
+  bans=target?`${heroName(target.heroId)} · ${target.winRate}%`:absence(['heroes'],'No clear ban');
   if(target)banIds=[+target.heroId];
  }else if(comfort[0]){
-  requestMatchup(comfort[0].heroId,true);
-  const counters=allyCounterBans(comfort[0].heroId,matchups[comfort[0].heroId],taken);
+  requestAllyCounters(comfort[0].heroId);
+  const counters=allyCounterBans(comfort[0].heroId,allyCounterMatchups[comfort[0].heroId],taken);
   if(counters.length){bans=counters.map(row=>heroName(row.heroId)).join(', ');banIds=counters.map(row=>+row.heroId);}
  }
  const cup=usable?recentCupGames(player,now):[];
  const position=side==='enemy'?summary.positions?.[0]?.position:player.selfReport.preferredRoles?.[0];
- return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup,heroIds:[...new Set([...comfort.map(row=>+row.heroId),...cup.map(game=>+game.heroId),...banIds])]};
+ return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup,cupEmpty:absence(['recent','matches'],'No recent cups'),heroIds:[...new Set([...comfort.map(row=>+row.heroId),...cup.map(game=>+game.heroId),...banIds])]};
 }
 function renderSeats(){
  const taken=new Set(state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
@@ -368,10 +393,9 @@ function focusedHeroIds(taken){
  return seat?new Set(seatData(seat[0],seat[1],taken,now).heroIds):null;
 }
 
-let suggestionCache={key:'',pick:new Set(),ban:new Set()};
 function suggestionSets(){
- const seats=[...roster(),...opponents()].map(p=>[p.id,p.heroes.length,p.recent.length,p.matches.length,p.selfReport.signatureHeroes,p.selfReport.desiredHeroes]);
- const key=JSON.stringify([state.actions,state.firstPick,seats,Object.keys(matchups).length,Object.keys(heroes).length]);
+ const seats=[...roster(),...opponents()].map(p=>[p.id,p.availability,p.selfReport,p.heroes,p.recent,p.matches]);
+ const key=JSON.stringify([state.actions,state.firstPick,seats,matchups,Object.keys(heroes).length]);
  if(key===suggestionCache.key)return suggestionCache;
  const input={heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick};
  const top=mode=>new Set(recommend({...input,mode}).slice(0,8).map(row=>+row.heroId));
@@ -379,8 +403,8 @@ function suggestionSets(){
  return suggestionCache;
 }
 function enemyWinChips(){
- const chips=new Map(),now=Math.floor(Date.now()/1000),list=Object.values(heroes);
- for(const player of opponents())for(const row of enemySummary(player,{now,heroes:list}).topHeroes){
+ const chips=new Map();
+ for(const player of opponents())for(const row of heroStatRows(player.heroes)){
   if(row.winRate==null||row.games<MIN_GAMES||row.winRate<55)continue;
   const current=chips.get(row.heroId);
   if(!current||row.winRate>current.winRate)chips.set(row.heroId,{...row,player:player.name});
@@ -437,13 +461,13 @@ function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:
 function highlightSearch(){const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});tiles[searchIndex]?.classList.add('is-highlighted');const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
 
 function evidenceSummaries(turn){
- const now=Math.floor(Date.now()/1000),list=Object.values(heroes),mode=turn.mode,sum=(players,enemy)=>players.map(player=>({player,enemy,summary:enemySummary(player,{now,heroes:list})}));
+ const mode=turn.mode,sum=(players,enemy)=>players.map(player=>({player,enemy,stats:heroStatRows(player.heroes)}));
  return {ally:mode==='ourPick'||mode==='enemyBan'?sum(roster(),false):[],enemy:mode==='ourBan'||mode==='enemyPick'?sum(opponents(),true):[]};
 }
 function heroEvidence(heroId,sources,playerId){
  const rows=[];
- for(const {player,enemy,summary} of [...sources.enemy,...sources.ally]){
-  const row=summary.topHeroes.find(item=>item.heroId===+heroId);
+ for(const {player,enemy,stats} of [...sources.enemy,...sources.ally]){
+  const row=stats.find(item=>item.heroId===+heroId);
   if(row&&row.winRate!=null&&row.games>=MIN_GAMES)rows.push({...row,player,enemy});
  }
  const pick=list=>list.sort((a,b)=>b.winRate-a.winRate||b.games-a.games)[0],own=playerId!=null&&playerId!==''?rows.filter(r=>String(r.player.id)===String(playerId)):[],top=pick(own.length?own:rows);
@@ -470,7 +494,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
  const win=heroEvidence(r.heroId,evidenceSources,r.playerId);if(win)summary.append(el('span',win,'rec-win'));const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)best.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
  if(visibleCandidates.length>6)best.append(more);
  const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));dock.append(evidence);
- if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();optionalMatchupFailures.clear();refreshScouting();render();},dock);}
+ if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();allyCounterFailures.clear();refreshScouting();render();},dock);}
 
 
 }
@@ -681,7 +705,7 @@ function renderDraftEnemies(){
  // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
  // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
  if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
- const enemies=opponents();list.replaceChildren();section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));section.hidden=!renderEnemyMatches(section)&&!enemies.length;
+ const enemies=opponents();list.replaceChildren();section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));const hasReport=renderEnemyMatches(section);section.classList.toggle('has-match-report',hasReport);section.hidden=!hasReport&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
@@ -733,7 +757,7 @@ async function openDraft(id,{navigate=true}={}){
  const currentUser=user.id,gen=generation,request=++draftOpen;
  let row;try{row=await backend.getDraft(id);}catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
  if(user?.id!==currentUser||gen!==generation||request!==draftOpen)return;
- ++generation;shared=null;observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();optionalMatchupFailures.clear();pending=false;polling=false;
+ ++generation;shared=null;resetDraftData();pending=false;polling=false;
  shared=row;team=teams.find(t=>t.id===row.team_id);teamRoster=[];
  selectedTeamIds=(row.state.roster||[]).filter(p=>p&&typeof p==='object').map(p=>p.userId||p.id);
  adopt(row);selected=null;reviewVisible=true;
@@ -1286,7 +1310,7 @@ async function authChanged(session,event){
 
  if(!user)restorePractice();
 
- observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();optionalMatchupFailures.clear();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
+ resetDraftData();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
 
  $('profile-content').replaceChildren();$('notice').textContent='';$('session-input').value='';document.querySelector('[data-manual-entry]')?.replaceChildren();for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
 
@@ -1572,9 +1596,9 @@ if(imageId!==null){
  $('identity-download').hidden=false;
 } else {showTeamInvitation();render();refreshScouting();if(demo&&new URLSearchParams(location.search).has('profile'))profileDialog();}
 
-if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));render();}).catch(()=>{});
+if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));suggestionCache.key='';render();}).catch(()=>{});
 
-if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};render();}).catch(()=>{});
+if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};suggestionCache.key='';render();}).catch(()=>{});
 
 if(imageId!==null)void (async()=>{
  const root=$('identity-download');
