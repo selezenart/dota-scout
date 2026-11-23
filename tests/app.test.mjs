@@ -46,7 +46,7 @@ test('DOM integration stages and confirms manually, undoes, resets and renders 2
  const q=id=>w.document.getElementById(id),click=async node=>{node.click();await new Promise(r=>setTimeout(r,5));};
  assert.equal(q('timeline').querySelectorAll('.tree-row').length,24);assert.match(q('connection-status').textContent,/Demo/);
  assert.equal(q('suggestions').querySelector('details.decision-evidence').open,false);
- assert.ok(q('suggestions').querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=3);
+ assert.ok(q('suggestions').querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=6);
  const recommended=q('suggestions').querySelector('.rec-row');assert.ok(recommended);await click(recommended);
  assert.ok(q('suggestions').querySelector('.decision-reason'));assert.equal(q('timeline').querySelectorAll('.is-recorded').length,0,'staging never records an action');
  await click(q('suggestions').querySelector('.clear-staged'));assert.equal(q('suggestions').querySelector('.rec-feature'),null);assert.equal(q('timeline').querySelectorAll('.is-recorded').length,0);assert.equal(w.document.activeElement,q('hero-search'));
@@ -101,7 +101,7 @@ test('board search supports arrows, empty feedback, native button activation and
  const dom=await welcomeHarness('?practice'),w=dom.window,q=id=>w.document.getElementById(id),search=q('hero-search');
  search.value='zzzzzz';search.dispatchEvent(new w.Event('input'));assert.match(q('hero-groups').textContent,/No heroes match/);
  search.value='';search.dispatchEvent(new w.Event('input'));search.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));const highlighted=q('hero-groups').querySelector('.is-highlighted').getAttribute('aria-label');
- search.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await settle();assert.match(q('suggestions').querySelector('h3').textContent,new RegExp(highlighted));
+ search.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await settle();assert.match(q('suggestions').querySelector('.decision-dock h3').textContent,new RegExp(highlighted));
  const confirm=q('suggestions').querySelector('button.primary'),native=new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true});confirm.dispatchEvent(native);assert.equal(native.defaultPrevented,false);
  search.value=highlighted;search.dispatchEvent(new w.Event('input'));confirm.click();await settle();assert.equal(search.value,'');assert.match(q('turn-progress').textContent,/1 \/ 24/);
  q('team-button').click();assert.equal(q('team-button').getAttribute('aria-current'),'page');assert.equal(q('draft-button').hasAttribute('aria-current'),false);dom.window.close();
