@@ -104,7 +104,15 @@
  #draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}
 }
 @media(min-width:900px) and (max-width:1279px){#draft-view .draft-layout{grid-template-columns:minmax(0,1fr) 240px}#draft-view #hero-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:899px){.player-rail{grid-template-columns:minmax(0,1fr)}.seat-group{grid-template-columns:repeat(5,132px);overflow-x:auto}#draft-view .best-now .decision-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}body:has(#surface-tree:checked) #draft-view #draft-enemy-scouting,body:has(#surface-players:checked) #draft-view #draft-enemy-scouting{display:none}}
+@media(max-width:899px){.player-rail{grid-template-columns:minmax(0,1fr)}.seat-group{grid-template-columns:repeat(5,132px);overflow-x:auto}#draft-view .best-now .decision-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}#draft-view #draft-enemy-scouting:not(.is-detail-open){display:none}#draft-view #draft-enemy-scouting.is-detail-open .draft-enemy:not(.is-focused){display:none}
+ #draft-view .best-now .rec-row{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:center;gap:6px;min-width:0;height:auto;max-height:92px;min-height:44px;margin:0;padding:6px;overflow:hidden;text-align:left}
+ #draft-view .best-now .rec-row img{width:40px;height:40px;object-fit:cover;object-position:50% 25%}
+ #draft-view .best-now .rec-summary{display:flex;flex-direction:column;min-width:0;gap:1px;line-height:1.2}
+ #draft-view .best-now .rec-summary>*{display:block;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px}
+ #draft-view .best-now .rec-summary>strong{font-size:13px}
+ #draft-view .best-now .rec-summary>small{display:none}
+}
+#draft-view .hero-filters button[aria-pressed=true]{background:var(--brass);border-color:var(--brass);color:#1a1127}
 #draft-view .tree-row.is-current{animation:wr-pulse 1.5s ease-in-out infinite}
 #draft-view .tree-row.is-fresh{animation:wr-slot .36s cubic-bezier(.2,1.3,.4,1)}
 #draft-view #draft-enemy-scouting.is-detail-open{animation:wr-reveal .18s ease}
