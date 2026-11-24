@@ -5,6 +5,7 @@ import {buildBoard as build} from './build-board.js';
 import {JSDOM} from 'jsdom';
 import * as engine from '../web/draft-engine.js';
 import {loadPlayer} from '../web/data.js';
+import {recentCupGames} from '../web/draft-stats.js';
 
 const now=1_700_000_000,day=86400;
 const heroes=[{id:1,localized_name:'Anti-Mage',roles:['Carry']},{id:2,localized_name:'Axe',roles:['Initiator']},{id:3,localized_name:'Crystal Maiden',roles:['Support']},{id:53,localized_name:"Nature's Prophet",roles:['Carry','Pusher']}];
@@ -14,6 +15,21 @@ const player=(over={})=>engine.normalizeProfile({id:'1',name:'Foe',heroes:[],rec
 const match=(match_id,hero_id,days,extra={})=>({match_id,hero_id,start_time:now-days*day,radiant_win:true,player_slot:0,...extra});
 const summary=(p,extra={})=>engine.enemySummary(p,{now,heroes,...extra});
 
+test('loadPlayer keeps start_time out of scoring matches and in cupMatches',async()=>{
+ const now=1_700_000_000,requested=[];
+ const rows=[{match_id:1,hero_id:5,lobby_type:9,start_time:now-86400,lane_role:2,player_slot:1,radiant_win:true},{match_id:2,hero_id:6,lobby_type:7,start_time:now-86400,lane_role:1,player_slot:1,radiant_win:false}];
+ const queue={request:async path=>{requested.push(path);return path.includes('/matches?')?rows:path.endsWith('/recentMatches')||path.includes('/heroes')?[]:{profile:{personaname:'P'}};}};
+ const player=await loadPlayer('123',()=>{},queue);
+ assert.ok(requested.find(path=>path.includes('/matches?')).includes('project=start_time'));
+ assert.ok(player.matches.every(row=>!('start_time' in row)));
+ assert.deepEqual(player.matches.map(row=>row.match_id),[1,2]);
+ assert.deepEqual(player.cupMatches.map(row=>[row.match_id,row.start_time]),[[1,now-86400]]);
+ const normalized=engine.normalizeProfile(player);assert.deepEqual(normalized.cupMatches,player.cupMatches);
+ assert.deepEqual(recentCupGames(normalized,now).map(game=>game.matchId),[1]);
+ const {cupMatches,...withoutCup}=normalized;
+ assert.deepEqual(engine.enemySummary(normalized,{now}),engine.enemySummary(withoutCup,{now}));
+ assert.deepEqual(engine.enemySummary(normalized,{now}).cup,[]);
+});
 test('loadPlayer asks OpenDota to project hero_id for matches',async()=>{
  const paths=[];
  const queue={request:async path=>{paths.push(path);return path.includes('/heroes')||path.includes('/matches')||path.includes('/recentMatches')?[]:{profile:{personaname:'X'}};},getSourceInfo:()=>null};
@@ -152,7 +168,7 @@ test('draft panel shows enemy scouting for open and closed enemies without the T
   assert.equal(doc.getElementById('draft-view').hidden,false);assert.equal(doc.getElementById('team-view').hidden,true);
   const s=doc.getElementById('draft-enemy-scouting');
   assert.ok(s,'#draft-enemy-scouting exists');assert.equal(s.hidden,false);
-  assert.ok(s.closest('aside.decision-panel'),'inside decision panel');
+  assert.equal(s.previousElementSibling.id,'player-rail','right after the player rail');
   assert.equal(s.querySelector('h3').textContent,'Enemy scouting');
   const cards=[...s.querySelectorAll('.draft-enemy')];
   assert.deepEqual(cards.map(c=>c.querySelector('.draft-enemy-name').textContent),['Open Foe','Closed Foe']);
@@ -170,7 +186,7 @@ test('draft panel shows enemy scouting for open and closed enemies without the T
 
 test('draft enemy scouting section is hidden when no enemies are set',async()=>{
  const w=await boot({});
- try{const s=w.document.getElementById('draft-enemy-scouting');assert.ok(s,'section exists');assert.equal(s.hidden,true);assert.ok(s.closest('aside.decision-panel'));}finally{w.close();}
+ try{const s=w.document.getElementById('draft-enemy-scouting');assert.ok(s,'section exists');assert.equal(s.hidden,true);assert.equal(s.previousElementSibling.id,'player-rail');}finally{w.close();}
 });
 
 test('draft enemy scouting shows Loading… while a source is fetching',async()=>{

@@ -31,8 +31,8 @@ export class PublicQueue {
 }
 export const publicData=new PublicQueue();
 export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
- const player={id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]};
- const sources=[['profile','',1],['recent','/recentMatches',2],['heroes','/heroes?date=180',3],['matches','/matches?date=180&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id',4]];
+ const player={id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[],cupMatches:[]};
+ const sources=[['profile','',1],['recent','/recentMatches',2],['heroes','/heroes?date=180',3],['matches','/matches?date=180&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id&project=start_time',4]];
  await Promise.all(sources.map(async([key,suffix,priority])=>{
   player.sources[key]={status:'fetching'};
   onUpdate(player);
@@ -41,6 +41,8 @@ export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
    const value=await queue.request(path,{priority});
    const source=queue.getSourceInfo?.(path);
    player[key]=value;
+   // start_time stays out of `matches`: scoring and summaries must see the same rows as before.
+   if(key==='matches'&&Array.isArray(value)){player.matches=value.map(({start_time,...row})=>row);player.cupMatches=value.filter(row=>+row.lobby_type===9);}
    if(key==='profile')player.name=value.profile?.personaname||String(id);
    player.sources[key]={
     status:key==='profile'&&!value.profile?'private':Array.isArray(value)&&!value.length?'empty':'updated',

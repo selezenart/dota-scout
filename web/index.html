@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#08070b" />
+    <meta name="theme-color" content="#0f1115" />
     <title>Captain’s Draft Board</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./war-room.css" />
     <script type="module" src="./main.js"></script>
   </head>
   <body data-view="welcome">
@@ -352,6 +353,12 @@
             </div>
           </section>
 
+          <section id="player-rail" class="player-rail" aria-label="Draft players"></section>
+          <section id="draft-enemy-scouting" class="draft-enemy-scouting" aria-labelledby="draft-enemy-title" hidden>
+            <h3 id="draft-enemy-title">Enemy scouting</h3>
+            <div id="draft-enemy-list"></div>
+          </section>
+
           <fieldset class="mobile-switch">
             <legend class="sr-only">Draft surface</legend>
             <input
@@ -399,7 +406,7 @@
             >
               <div class="hero-board-heading">
                 <h2>Hero pool</h2>
-                <span>Most played first <small>OpenDota public picks</small></span>
+                <span>A–Z by attribute</span>
               </div>
               <div class="search-bar">
                 <label class="sr-only" for="hero-search">Search heroes</label>
@@ -413,7 +420,6 @@
                   aria-controls="hero-groups"
                   aria-describedby="search-help"
                 />
-                <kbd aria-hidden="true">/</kbd>
               </div>
               <p id="search-help" class="search-help">
                 ↑ ↓ Select <span>Enter Select hero</span><span>Esc Clear</span>
@@ -427,6 +433,11 @@
                 <button type="button" data-hero-filter="all-attr" aria-pressed="false">Universal</button>
                 <button type="button" id="clear-hero-search">Clear search</button>
               </div>
+              <div class="tile-legend" aria-label="Hero badge meanings">
+                <span><b class="legend-pick">P</b> Suggested pick</span>
+                <span><b class="legend-ban">B</b> Suggested ban</span>
+                <span><b class="legend-both">P+B</b> Contested</span>
+              </div>
               <div id="hero-groups"></div>
             </section>
 
@@ -439,10 +450,6 @@
                 
               </div>
               <div id="suggestions" aria-label="Recommended actions"></div>
-              <section id="draft-enemy-scouting" class="draft-enemy-scouting" aria-labelledby="draft-enemy-title" hidden>
-                <h3 id="draft-enemy-title">Enemy scouting</h3>
-                <div id="draft-enemy-list"></div>
-              </section>
             </aside>
 
             <section

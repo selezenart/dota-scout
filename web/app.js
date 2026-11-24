@@ -7,6 +7,8 @@ import {createWelcome} from './welcome.js';
 import snapshot from './heroes.json';
 
 import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop} from './draft-engine.js';
+import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES} from './draft-stats.js';
+import {renderPlayerRail} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
@@ -78,7 +80,9 @@ const storageKey=demo?'captain-demo-v1':'captain-practice-v1';
 let heroes=snapshot,state=demo?demoState():initialState(),profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {},backend,user,shared,teams=[],team,selected=null,pending=false,localControl=true,generation=0,polling=false,healthy=true,lastRoster=0;
 
 let observations=new Map(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
-const matchupErrors=new Set();
+// Optional seat data: kept apart from `matchups`, which recommend() reads.
+let allyCounterMatchups={},focusedPlayer=null,suggestionCache={key:'',pick:new Set(),ban:new Set()};
+const matchupErrors=new Set(),allyCounterRequests=new Set(),allyCounterFailures=new Set();
 
 try {const saved=JSON.parse(localStorage.getItem(storageKey)||'null');if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}}catch{}
 
@@ -105,11 +109,12 @@ function restorePractice(){
  try{const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');if(saved){state={...initialState(),...saved.state};if(!user)profile=saved.profile||{};return;}}catch{}
  if(user)state.roster=[{...profile,id:user.id}];
 }
+function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();suggestionCache={key:'',pick:new Set(),ban:new Set()};focusedPlayer=null;}
 function detachWorkspace(){
  stopLiveWatch();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
  state=demo?demoState():initialState();
- observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();reviewVisible=true;
+ resetDraftData();reviewVisible=true;
 }
 function enterPractice({navigate=true}={}){
  detachWorkspace();restorePractice();
@@ -139,27 +144,42 @@ function opponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p
 
 function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).catch(e=>{if(gen===generation)notice(e.message);});}}
 
+function requestMatchup(id){
+ if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
+ requestedMatchups.add(id);
+ const gen=generation;
+ void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
+  if(gen!==generation)return;
+  if(!Array.isArray(rows))throw Error('Invalid matchup response');
+  matchups[id]=rows;
+  render();
+ }).catch(()=>{
+  if(gen!==generation)return;
+  requestedMatchups.delete(id);
+  matchupErrors.add(id);
+  render();
+ });
+}
+function requestAllyCounters(id){
+ if(demo||allyCounterRequests.has(id)||allyCounterFailures.has(id))return;
+ allyCounterRequests.add(id);
+ const gen=generation;
+ void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
+  if(gen!==generation)return;
+  if(!Array.isArray(rows))throw Error('Invalid matchup response');
+  allyCounterMatchups[id]=rows;
+  render();
+ }).catch(()=>{
+  if(gen!==generation)return;
+  allyCounterRequests.delete(id);
+  allyCounterFailures.add(id);
+ });
+}
 function refreshScouting(){
  if(demo)return;
  const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
  scout([...(state.enemyIds||[]),...members.map(p=>p.steamAccountId||p.accountId)]);
- for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){
-  const id=action.heroId;
-  if(requestedMatchups.has(id)||matchupErrors.has(id))continue;
-  requestedMatchups.add(id);
-  const gen=generation;
-  void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
-   if(gen!==generation)return;
-   if(!Array.isArray(rows))throw Error('Invalid matchup response');
-   matchups[id]=rows;
-   render();
-  }).catch(()=>{
-   if(gen!==generation)return;
-   requestedMatchups.delete(id);
-   matchupErrors.add(id);
-   render();
-  });
- }
+ for(const action of state.actions.filter(a=>a.mode.endsWith('Pick')))requestMatchup(action.heroId);
 }
 
 let searchIndex=0,rankedIds=new Set();
@@ -286,17 +306,58 @@ function renderView(){
 
  $('undo').disabled=!write||!state.actions.length;$('reset-draft').disabled=!write;$('first-pick').checked=state.firstPick;$('first-pick').disabled=!write||!!state.actions.length;
 
- renderDraftTree();
+ renderSeats();renderDraftTree();
 
  for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<5;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
 
- renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();const poolOrder=document.querySelector('.hero-board-heading>span');if(poolOrder)poolOrder.textContent=turn?.mode==='ourPick'?'Team wants first · then popularity':'Most played first · OpenDota';
+ renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();
 
  $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick');n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);}n.append(el('p','Traits: '+[...new Set(picks.flatMap(a=>heroes[a.heroId]?.roles||[]))].join(', ')));}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
 }
 
+const SEAT_STATUS={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'};
+function seatData(player,side,taken,now){
+ const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
+ const summary=enemySummary(player,{now,heroes:Object.values(heroes)}),state=hasAccount?summary.state:'ready';
+ const usable=state==='ready'||(side==='ally'&&!hasAccount);
+ const stats={topHeroes:heroStatRows(player.heroes)};
+ // An absence label is only true once the sources behind it have answered.
+ const absence=(keys,empty)=>{
+  if(!hasAccount)return empty;
+  if(state!=='ready')return SEAT_STATUS[state];
+  const status=sourceStatus(player,keys);
+  return status==='ok'?empty:SEAT_STATUS[status];
+ };
+ const heroesKnown=!hasAccount||sourceStatus(player,['heroes'])==='ok';
+ const comfort=usable?comfortRows({player,summary:stats,side}).map(row=>heroesKnown||row.games?row:{...row,unavailable:true}):[];
+ let banLabel='Ban suggestions',bans='No counter data',banIds=[];
+ if(side==='enemy'){
+  banLabel='Ban first';
+  const target=usable?enemyBanTarget(stats,taken):null;
+  bans=target?`${heroName(target.heroId)} · ${target.winRate}%`:absence(['heroes'],'No clear ban');
+  if(target)banIds=[+target.heroId];
+ }else if(comfort[0]){
+  requestAllyCounters(comfort[0].heroId);
+  const counters=allyCounterBans(comfort[0].heroId,allyCounterMatchups[comfort[0].heroId],taken);
+  if(counters.length){bans=counters.map(row=>heroName(row.heroId)).join(', ');banIds=counters.map(row=>+row.heroId);}
+ }
+ const cup=usable?recentCupGames(player,now):[];
+ const position=side==='enemy'?summary.positions?.[0]?.position:player.selfReport.preferredRoles?.[0];
+ return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup,cupEmpty:absence(['recent','matches'],'No recent cups'),heroIds:[...new Set([...comfort.map(row=>+row.heroId),...cup.map(game=>+game.heroId),...banIds])]};
+}
+function renderSeats(){
+ const taken=new Set(state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
+ renderPlayerRail($('player-rail'),{
+  allies:roster().slice(0,5).map(player=>seatData(player,'ally',taken,now)),
+  enemies:opponents().slice(0,5).map(player=>seatData(player,'enemy',taken,now)),
+  focusId:focusedPlayer,portrait,heroName,
+  onToggle:id=>{focusedPlayer=focusedPlayer===id?null:id;render();},
+  onAddEnemy:safe(lobby)
+ });
+}
+let freshActionIndex=-1;
 function renderDraftTree(){
  const tree=$('timeline');tree.replaceChildren();$('history-inspect').textContent='Select a recorded hero to inspect the action.';
  CM_ORDER.forEach((step,index)=>{
@@ -306,11 +367,13 @@ function renderDraftTree(){
   row.classList.toggle('phase-start',[0,7,9,12,18,22].includes(index));
   const slot=el('button',null,'tree-row');slot.type='button';slot.id='draft-turn-'+index;
   slot.dataset.action=step.action.toLowerCase();slot.dataset.turn=index;
-  slot.classList.toggle('is-recorded',!!recorded);slot.classList.toggle('is-current',current);
+  slot.classList.toggle('is-recorded',!!recorded);slot.classList.toggle('is-fresh',index===freshActionIndex&&!!recorded);slot.classList.toggle('is-current',current);
   const label=`Turn ${index+1}, ${ours?'our':'enemy'} ${step.action.toLowerCase()}${recorded?', '+heroName(recorded.heroId):current?', select a hero':', waiting'}`;
   slot.setAttribute('aria-label',label);slot.title=label;
   if(current)slot.setAttribute('aria-current','step');
-  if(recorded){const img=portrait(recorded.heroId);img.className='tree-hero';slot.append(img,el('span',heroName(recorded.heroId),'tree-label'));}
+  const preview=current&&selected&&heroes[selected.id]&&!state.actions.some(a=>+a.heroId===+selected.id)?selected.id:null;
+  if(preview!=null){const text=label+', previewing '+heroName(preview);slot.setAttribute('aria-label',text);slot.title=text;const img=portrait(preview);img.className='tree-hero tree-preview';slot.append(img);}
+  else if(recorded){const img=portrait(recorded.heroId);img.className='tree-hero';slot.append(img);}
   else{const placeholder=el('span',null,'tree-placeholder'),icon=el('span',current?step.action.toUpperCase():'');icon.setAttribute('aria-hidden','true');placeholder.append(icon);slot.append(placeholder);}
   slot.disabled=!recorded&&!current;
   slot.onclick=()=>{
@@ -323,23 +386,50 @@ function renderDraftTree(){
 }
 
 let heroFilter='all';
+function focusedHeroIds(taken){
+ if(focusedPlayer==null)return null;
+ const now=Math.floor(Date.now()/1000);
+ const seat=[...roster().slice(0,5).map(p=>[p,'ally']),...opponents().slice(0,5).map(p=>[p,'enemy'])].find(([p])=>String(p.id)===focusedPlayer);
+ return seat?new Set(seatData(seat[0],seat[1],taken,now).heroIds):null;
+}
 
+function suggestionSets(){
+ const seats=[...roster(),...opponents()].map(p=>[p.id,p.availability,p.selfReport,p.heroes,p.recent,p.matches]);
+ const key=JSON.stringify([state.actions,state.firstPick,seats,matchups,Object.keys(heroes).length]);
+ if(key===suggestionCache.key)return suggestionCache;
+ const input={heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick};
+ const top=mode=>new Set(recommend({...input,mode}).slice(0,8).map(row=>+row.heroId));
+ suggestionCache={key,pick:top('ourPick'),ban:top('ourBan')};
+ return suggestionCache;
+}
+function enemyWinChips(){
+ const chips=new Map();
+ for(const player of opponents())for(const row of heroStatRows(player.heroes)){
+  if(row.winRate==null||row.games<MIN_GAMES||row.winRate<55)continue;
+  const current=chips.get(row.heroId);
+  if(!current||row.winRate>current.winRate)chips.set(row.heroId,{...row,player:player.name});
+ }
+ return chips;
+}
 function renderHeroes(){
  const root=$('hero-groups');root.replaceChildren();
  const ourPick=nextTurn(state.actions,state.firstPick)?.mode==='ourPick';
  const assigned=new Set(state.actions.filter(action=>action.mode==='ourPick').map(action=>action.playerId).filter(Boolean));
  const available=roster().filter(player=>!assigned.has(player.id)&&player.selfReport.availability!=='unavailable');
  const wanted=new Set(ourPick?available.flatMap(player=>player.selfReport.desiredHeroes):[]);
- root.setAttribute('aria-label',ourPick?'Team wants first, then public popularity':'Most played first');
+ root.setAttribute('aria-label','Heroes by attribute, A to Z');
  const query=$('hero-search').value.toLowerCase();
- const taken=new Set(state.actions.map(action=>+action.heroId));
+ const takenBy=new Map(state.actions.map(action=>[+action.heroId,action.mode])),suggestions=suggestionSets(),chips=enemyWinChips(),playerHeroes=focusedHeroIds(new Set(takenBy.keys()));
+ const matches=hero=>hero.localized_name.toLowerCase().includes(query);
+ let matched=0;
  const popularity=hero=>Number.isFinite(hero.pub_pick)&&hero.pub_pick>=0?hero.pub_pick:-1;
  for(const [attribute,label] of [['str','Strength'],['agi','Agility'],['int','Intelligence'],['all','Universal']]){
   const attributeFilter=heroFilter==='all-attr'?'all':heroFilter;
   const visibleGroup=heroFilter==='all'||heroFilter==='recommended'||attributeFilter===attribute;
   if(!visibleGroup)continue;
-  const list=Object.values(heroes).filter(hero=>hero.primary_attr===attribute&&hero.localized_name.toLowerCase().includes(query)&&!taken.has(+hero.id)&&(heroFilter!=='recommended'||rankedIds.has(+hero.id)));
-  list.sort((a,b)=>Number(wanted.has(+b.id))-Number(wanted.has(+a.id))||popularity(b)-popularity(a)||a.localized_name.localeCompare(b.localized_name));
+  const list=Object.values(heroes).filter(hero=>hero.primary_attr===attribute&&(heroFilter!=='recommended'||(!takenBy.has(+hero.id)&&rankedIds.has(+hero.id)&&matches(hero))));
+  matched+=list.filter(matches).length;
+  list.sort((a,b)=>a.localized_name.localeCompare(b.localized_name));
   if(!list.length)continue;
   const section=el('section',null,'hero-group'),grid=el('div',null,'hero-grid'),heading=el('div',null,'attribute-heading');
   section.dataset.attribute=attribute;
@@ -350,17 +440,41 @@ function renderHeroes(){
    tile.classList.toggle('is-wanted',wanted.has(+hero.id));tile.classList.toggle('is-recommended',rankedIds.has(+hero.id));
    tile.setAttribute('aria-label',hero.localized_name);tile.setAttribute('aria-pressed',String(selected?.id===+hero.id));
    tile.title=(wanted.has(+hero.id)?'Teammate wants to play · ':'')+(popularity(hero)>=0?'Public picks: '+hero.pub_pick.toLocaleString():'Public picks unavailable');
-   const image=portrait(hero.id);image.alt='';tile.title=hero.localized_name+' · '+tile.title;tile.append(image,el('span',hero.localized_name));
+   const image=portrait(hero.id),takenMode=takenBy.get(+hero.id),mark=tileMark({takenMode,pick:suggestions.pick.has(+hero.id),ban:suggestions.ban.has(+hero.id)}),chip=takenMode?null:chips.get(+hero.id),state_=takenMode?(takenMode.endsWith('Ban')?', banned':', picked'):mark?.kind==='contested'?', contested':mark?.kind==='sug-pick'?', suggested pick':mark?.kind==='sug-ban'?', suggested ban':'';
+   image.alt='';image.onerror=()=>tile.classList.add('is-image-missing');
+   tile.title=hero.localized_name+' · '+tile.title+(chip?' · '+chip.player+' '+chip.winRate+'% over '+chip.games+' games':'');
+   tile.setAttribute('aria-label',hero.localized_name+state_+(chip?', '+chip.player+' '+chip.winRate+'% over '+chip.games+' games':''));
+   tile.disabled=!!takenMode;tile.classList.toggle('is-taken',!!takenMode);tile.classList.toggle('is-search-miss',!!query&&!matches(hero));
+   if(playerHeroes){const own=playerHeroes.has(+hero.id);tile.classList.toggle('is-player-hero',own);tile.classList.toggle('is-player-dim',!own&&!takenMode);}
+   if(mark)tile.classList.add(mark.kind==='banned'?'is-banned':mark.kind==='picked'?'is-picked':'is-'+mark.kind);
+   tile.append(image,el('span',hero.localized_name));
+   if(mark){const badge=el('b',mark.text,'tile-mark');badge.setAttribute('aria-hidden','true');tile.append(badge);}
+   if(chip){const win=el('b',chip.winRate+'%','tile-win');win.setAttribute('aria-hidden','true');tile.append(win);}
   }
   root.append(section);
  }
- if(!root.children.length){const empty=el('p','No heroes match your search or filters. Try another name or All heroes.');empty.setAttribute('role','status');root.append(empty);}
+ if(!root.children.length||(query&&!matched)){root.replaceChildren();const empty=el('p','No heroes match your search or filters. Try another name or All heroes.');empty.setAttribute('role','status');root.append(empty);}
  highlightSearch();
 }
 
-function highlightSearch(){const tiles=[...$('hero-groups').querySelectorAll('button')];searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));tiles.forEach((b,i)=>{b.classList.toggle('is-highlighted',i===searchIndex);b.id='hero-result-'+b.dataset.heroId;});const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
+function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:not(:disabled):not(.is-search-miss)')];}
+function highlightSearch(){const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});tiles[searchIndex]?.classList.add('is-highlighted');const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();root.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},root);return;}const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function evidenceSummaries(turn){
+ const mode=turn.mode,sum=(players,enemy)=>players.map(player=>({player,enemy,stats:heroStatRows(player.heroes)}));
+ return {ally:mode==='ourPick'||mode==='enemyBan'?sum(roster(),false):[],enemy:mode==='ourBan'||mode==='enemyPick'?sum(opponents(),true):[]};
+}
+function heroEvidence(heroId,sources,playerId){
+ const rows=[];
+ for(const {player,enemy,stats} of [...sources.enemy,...sources.ally]){
+  const row=stats.find(item=>item.heroId===+heroId);
+  if(row&&row.winRate!=null&&row.games>=MIN_GAMES)rows.push({...row,player,enemy});
+ }
+ const pick=list=>list.sort((a,b)=>b.winRate-a.winRate||b.games-a.games)[0],own=playerId!=null&&playerId!==''?rows.filter(r=>String(r.player.id)===String(playerId)):[],top=pick(own.length?own:rows);
+ return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
+}
+
+function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));
@@ -368,19 +482,19 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
  let player,position;if(turn.mode==='ourPick'){const used=state.actions.filter(a=>a.mode==='ourPick'),playerLabel=el('label','Assign allied player','player-assignment');player=el('select');player.id='assigned-player';playerLabel.htmlFor=player.id;player.append(new Option('Unassigned',''));for(const p of roster().filter(p=>!used.some(a=>a.playerId===p.id)))player.append(new Option(p.name,p.id));player.value=selected.playerId??rec?.playerId??'';player.onchange=()=>{selected.playerId=player.value;};playerLabel.append(player);const picker=el('fieldset',null,'position-picker'),options=el('div',null,'position-options'),status=el('p',null,'position-status');status.setAttribute('role','status');position=Object.hasOwn(selected,'position')?selected.position:rec?.position??'';if(used.some(a=>+a.position===+position))position='';const update=()=>{status.textContent=position?'P'+position+' · '+roleNames[+position-1]:'Unassigned';};picker.append(el('legend','Assign position'),options);for(let i=1;i<=5;i++){const label=el('label',null,'position-option'),radio=el('input'),copy=el('span',null,'position-copy');radio.type='radio';radio.name='assigned-position';radio.value=String(i);radio.checked=+position===i;radio.disabled=used.some(a=>+a.position===i);radio.onchange=()=>{if(radio.checked){selected.position=position=radio.value;update();}};copy.append(el('strong','P'+i),el('small',roleNames[i-1]));label.append(radio,copy);options.append(label);}button('Unassigned',()=>{selected.position=position='';for(const radio of options.querySelectorAll('input'))radio.checked=false;update();},picker,'position-auto');update();picker.append(status);body.append(playerLabel,picker);}
 
- const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{const a={mode:turn.mode,heroId:selected.id};if(player?.value)a.playerId=player.value;if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;await mutate('append',a);},feature,'primary');confirm.disabled=!write;
+ const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{const a={mode:turn.mode,heroId:selected.id};if(player?.value)a.playerId=player.value;if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;const before=state.actions.length;await mutate('append',a);if(state.actions.length===before+1){freshActionIndex=before;render();freshActionIndex=-1;}},feature,'primary');confirm.disabled=!write;
  button('Clear selection',()=>{selected=null;render();$('hero-search').focus();},feature,'clear-staged');
  if(!write)feature.append(el('p',playerDemo?'Only the captain can confirm picks and bans.':shared?'Become drafter to confirm this action.':'Take the drafter seat to confirm this action.','decision-readonly'));
- root.append(feature);
+ dock.append(feature);
 
- }else root.append(el('p','Choose a suggested hero or browse the pool. Review your selection here before confirming.','decision-empty'));
+ }else dock.append(el('p','Choose a suggested hero or browse the pool. Review your selection here before confirming.','decision-empty'));
 
- const candidates=el('div',null,'decision-candidates');candidates.append(el('h3',turn.action==='ban'?'Suggested bans':'Suggested picks'));root.append(candidates);const more=el('details',null,'more-candidates');more.append(el('summary','More suggestions'));let candidateIndex=0;const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
- if(turn.mode==='ourPick'&&visibleCandidates.length){const legend=el('div',null,'rec-legend');legend.setAttribute('aria-label','Suggestion categories');for(const [cls,label] of [['team','Team'],['counter','Counter'],['meta','Meta'],['all','All three']])legend.append(el('span',label,'rec-badge rec-badge-'+cls));candidates.before(legend);}for(const r of visibleCandidates){const b=button('',()=>stage(r.heroId,r),candidateIndex++<3?candidates:more,'rec-row');const summary=el('span',null,'rec-summary');summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));b.append(portrait(r.heroId),summary);
- const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)root.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
- if(visibleCandidates.length>3)root.append(more);
- const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));root.append(evidence);
- if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();refreshScouting();render();},root);}
+ const candidates=el('div',null,'decision-candidates');candidates.append(el('h3',turn.action==='ban'?'Best bans now':'Best picks now'));best.append(candidates);const more=el('details',null,'more-candidates');more.append(el('summary','More suggestions'));let candidateIndex=0;const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
+ if(turn.mode==='ourPick'&&visibleCandidates.length){const legend=el('div',null,'rec-legend');legend.setAttribute('aria-label','Suggestion categories');for(const [cls,label] of [['team','Team'],['counter','Counter'],['meta','Meta'],['all','All three']])legend.append(el('span',label,'rec-badge rec-badge-'+cls));candidates.before(legend);}for(const r of visibleCandidates){const b=button('',()=>stage(r.heroId,r),candidateIndex++<6?candidates:more,'rec-row');const summary=el('span',null,'rec-summary');summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));b.append(portrait(r.heroId),summary);
+ const win=heroEvidence(r.heroId,evidenceSources,r.playerId);if(win)summary.append(el('span',win,'rec-win'));const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)best.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
+ if(visibleCandidates.length>6)best.append(more);
+ const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));dock.append(evidence);
+ if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();allyCounterFailures.clear();refreshScouting();render();},dock);}
 
 
 }
@@ -591,10 +705,10 @@ function renderDraftEnemies(){
  // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
  // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
  if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
- const enemies=opponents();list.replaceChildren();section.hidden=!renderEnemyMatches(section)&&!enemies.length;
+ const enemies=opponents();list.replaceChildren();section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));const hasReport=renderEnemyMatches(section);section.classList.toggle('has-match-report',hasReport);section.hidden=!hasReport&&!enemies.length;
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
-  const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');
+  const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
   const meta={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'}[s.state]
    ||(s.positions.length?s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown');
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
@@ -643,7 +757,7 @@ async function openDraft(id,{navigate=true}={}){
  const currentUser=user.id,gen=generation,request=++draftOpen;
  let row;try{row=await backend.getDraft(id);}catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
  if(user?.id!==currentUser||gen!==generation||request!==draftOpen)return;
- ++generation;shared=null;observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();pending=false;polling=false;
+ ++generation;shared=null;resetDraftData();pending=false;polling=false;
  shared=row;team=teams.find(t=>t.id===row.team_id);teamRoster=[];
  selectedTeamIds=(row.state.roster||[]).filter(p=>p&&typeof p==='object').map(p=>p.userId||p.id);
  adopt(row);selected=null;reviewVisible=true;
@@ -1196,7 +1310,7 @@ async function authChanged(session,event){
 
  if(!user)restorePractice();
 
- observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
+ resetDraftData();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
 
  $('profile-content').replaceChildren();$('notice').textContent='';$('session-input').value='';document.querySelector('[data-manual-entry]')?.replaceChildren();for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
 
@@ -1461,7 +1575,7 @@ $('create-session').onclick=safe(async()=>{if(!user||!team||demo)throw Error('Se
 
 $('join-session').onclick=safe(async()=>{let id=$('session-input').value.trim();try{id=new URL(id).searchParams.get('draft')||id;}catch{}if(!/^[a-f0-9-]{36}$/i.test(id)){$('session-input').setAttribute('aria-invalid','true');throw Error('Enter a valid draft UUID or full session URL.');}$('session-input').removeAttribute('aria-invalid');await openDraft(id);});$('copy-session').onclick=safe(async()=>{if(!shared)return;const url=new URL(location.origin+location.pathname);url.searchParams.set('draft',shared.id);await navigator.clipboard.writeText(url.href);notice('Session link copied. Team membership is required.');});
 
-document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=$('hero-groups').querySelectorAll('button').length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=$('hero-groups').querySelectorAll('button')[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
+document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=heroChoices().length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
 
 for(const control of document.querySelectorAll('[data-hero-filter]'))control.onclick=()=>{heroFilter=control.dataset.heroFilter;searchIndex=0;for(const other of document.querySelectorAll('[data-hero-filter]'))other.setAttribute('aria-pressed',String(other===control));renderHeroes();};
 $('clear-hero-search').onclick=()=>{$('hero-search').value='';searchIndex=0;renderHeroes();$('hero-search').focus();};
@@ -1482,9 +1596,9 @@ if(imageId!==null){
  $('identity-download').hidden=false;
 } else {showTeamInvitation();render();refreshScouting();if(demo&&new URLSearchParams(location.search).has('profile'))profileDialog();}
 
-if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));render();}).catch(()=>{});
+if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));suggestionCache.key='';render();}).catch(()=>{});
 
-if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};render();}).catch(()=>{});
+if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};suggestionCache.key='';render();}).catch(()=>{});
 
 if(imageId!==null)void (async()=>{
  const root=$('identity-download');

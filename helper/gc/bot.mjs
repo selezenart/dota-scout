@@ -91,6 +91,12 @@ export function startBot({SteamUser, refreshToken, tokenFile, log, onToken = () 
 
   return {
     lookupLobby: lobbies.lookup,
-    stop: () => { disconnect(); user.logOff(); },
+    stop: () => {
+      disconnect();
+      // Silence the old session: late events must not log or touch the next one.
+      user.removeAllListeners();
+      user.on('error', () => {});
+      user.logOff();
+    },
   };
 }
