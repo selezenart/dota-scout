@@ -108,15 +108,15 @@ test('board search supports arrows, empty feedback, native button activation and
 });
 
 
-test('redesign sorts public popularity, records portraits and preserves explicit role choices',async()=>{
+test('redesign sorts heroes alphabetically, records portraits and preserves explicit role choices',async()=>{
  const fixture={1:{id:1,name:'npc_dota_hero_antimage',localized_name:'Alpha',primary_attr:'agi',pub_pick:20},2:{id:2,name:'npc_dota_hero_axe',localized_name:'Zulu',primary_attr:'agi',pub_pick:900},3:{id:3,name:'npc_dota_hero_bane',localized_name:'Beta',primary_attr:'agi',pub_pick:20},4:{id:4,name:'npc_dota_hero_bloodseeker',localized_name:'Absent',primary_attr:'agi'},5:{id:5,name:'npc_dota_hero_crystal_maiden',localized_name:'Strength low',primary_attr:'str',pub_pick:1},6:{id:6,name:'npc_dota_hero_drow_ranger',localized_name:'Strength high',primary_attr:'str',pub_pick:100}};
  for(let id=7;id<=20;id++)fixture[id]={...fixture[1],id,primary_attr:'all',localized_name:'Hero '+id};
  const result=await build({logLevel:'silent',plugins:[{name:'popularity-fixture',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/web/data.js'))return `export const publicData={request:()=>({then(fn){globalThis.__stats=fn;return {catch(){}};}})};export const loadHeroes=()=>new Promise(resolve=>globalThis.__constants=resolve);export const loadPlayer=async()=>({});`;if(id.replaceAll('\\','/').endsWith('/web/heroes.json'))return JSON.stringify(fixture);}}],build:{write:false,minify:false}});
  const dom=new JSDOM(await readFile('web/index.html','utf8'),{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
  w.fetch=async()=>{throw Error('Offline');};w.setInterval=()=>0;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);await settle();const q=id=>w.document.getElementById(id),click=async n=>{n.click();await settle();},ids=attr=>[...w.document.querySelectorAll(`[data-attribute="${attr}"] .hero-tile`)].map(n=>+n.dataset.heroId);
- assert.deepEqual(ids('agi'),[2,1,3,4]);assert.deepEqual(ids('str'),[6,5]);
- w.__stats([{id:1,pub_pick:1000}]);await settle();w.__constants(Object.fromEntries(Object.entries(fixture).map(([id,h])=>{const {pub_pick,...constant}=h;return [id,constant];})));await settle();assert.deepEqual(ids('agi'),[1,2,3,4]);assert.match(w.document.querySelector('[data-hero-id="1"]').title,/1[,. ]000/);
+ assert.deepEqual(ids('agi'),[4,1,3,2]);assert.deepEqual(ids('str'),[6,5]);
+ w.__stats([{id:1,pub_pick:1000}]);await settle();w.__constants(Object.fromEntries(Object.entries(fixture).map(([id,h])=>{const {pub_pick,...constant}=h;return [id,constant];})));await settle();assert.deepEqual(ids('agi'),[4,1,3,2]);assert.match(w.document.querySelector('[data-hero-id="1"]').title,/1[,. ]000/);
  assert.equal(w.document.querySelectorAll('.tree-row').length,24);const turns=[...q('timeline').querySelectorAll('.tree-row')].map(row=>row.getAttribute('aria-label')).sort((a,b)=>Number(a.match(/^Turn (\d+)/)[1])-Number(b.match(/^Turn (\d+)/)[1]));CM_ORDER.forEach((step,index)=>assert.match(turns[index],new RegExp('^Turn '+(index+1)+', '+(step.team==='A'?'our':'enemy')+' '+step.action.toLowerCase())));assert.equal(q('timeline').querySelectorAll('.tree-turn.phase-start').length,6);const orderedRows=[...q('timeline').querySelectorAll('.tree-turn')];assert.equal(orderedRows.length,24);CM_ORDER.forEach((step,index)=>{const row=orderedRows[index];assert.equal(row.dataset.side,step.team==='A'?'our':'enemy');assert.match(row.querySelector('.tree-row').getAttribute('aria-label'),new RegExp('^Turn '+(index+1)+','));assert.equal(Number(row.querySelector('.tree-number').textContent),index+1);});assert.equal(w.document.querySelectorAll('.is-current').length,1);assert.ok(w.document.querySelector('.tree-placeholder [aria-hidden="true"]'));
  await click(w.document.querySelector('[data-hero-filter="str"]'));assert.deepEqual(ids('str'),[6,5]);assert.equal(ids('agi').length,0);
  await click(w.document.querySelector('[data-hero-filter="all-attr"]'));assert.equal(ids('all').length,14);assert.equal(ids('str').length,0);
@@ -144,13 +144,14 @@ test('allied picks prioritize available unassigned teammates wanted heroes withi
  try{
   w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);await settle();const q=id=>w.document.getElementById(id),click=async node=>{assert.ok(node);node.click();await settle();};
   const ids=()=>[...q('hero-groups').querySelectorAll('.hero-tile')].map(tile=>+tile.dataset.heroId);
-  assert.deepEqual(ids().slice(0,4),[10,8,9,11]);assert.equal(q('hero-groups').querySelector('[data-hero-id="11"]').classList.contains('is-wanted'),false);
+  const names=()=>[...q('hero-groups').querySelectorAll('.hero-tile>span')].map(n=>n.textContent),assertAlphabetical=()=>assert.deepEqual(names(),[...names()].sort((a,b)=>a.localeCompare(b)));
+  assertAlphabetical();assert.equal(q('hero-groups').querySelector('[data-hero-id="8"]').classList.contains('is-wanted'),true);assert.equal(q('hero-groups').querySelector('[data-hero-id="11"]').classList.contains('is-wanted'),false);
   await click(q('hero-groups').querySelector('[data-hero-id="8"]'));const reasons=q('suggestions').querySelector('details.decision-reasons');assert.ok(reasons);assert.equal(reasons.open,false);assert.match(reasons.querySelector('summary').textContent,/Why this hero/);reasons.open=true;assert.ok(reasons.querySelectorAll('p').length>0);
   const player=q('assigned-player');player.value='waiting';player.dispatchEvent(new w.Event('change'));
   await click(q('suggestions').querySelector('.primary'));
-  assert.equal(ids()[0],9,'enemy turns use public popularity');
+  assertAlphabetical();
   for(const heroId of [30,29,28,27,26]){await click(q('hero-groups').querySelector('[data-hero-id="'+heroId+'"]'));await click(q('suggestions').querySelector('.primary'));}
-  assert.match(q('turn-label').textContent,/Our pick/);assert.equal(ids()[0],9);assert.equal(q('hero-groups').querySelector('[data-hero-id="10"]').classList.contains('is-wanted'),false,'assigned player no longer boosts remaining wishlist');
+  assert.match(q('turn-label').textContent,/Our pick/);assertAlphabetical();assert.equal(q('hero-groups').querySelector('[data-hero-id="10"]').classList.contains('is-wanted'),false,'assigned player no longer boosts remaining wishlist');
   const roster=q('team-roster');assert.ok([...roster.querySelectorAll('h2')].some(h=>h.textContent==='Our team'));assert.ok(roster.querySelector('img'));
  }finally{w.close();}
 });

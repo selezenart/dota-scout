@@ -406,7 +406,7 @@
             >
               <div class="hero-board-heading">
                 <h2>Hero pool</h2>
-                <span>Most played first <small>OpenDota public picks</small></span>
+                <span>A–Z by attribute</span>
               </div>
               <div class="search-bar">
                 <label class="sr-only" for="hero-search">Search heroes</label>
@@ -433,6 +433,11 @@
                 <button type="button" data-hero-filter="int" aria-pressed="false">Intelligence</button>
                 <button type="button" data-hero-filter="all-attr" aria-pressed="false">Universal</button>
                 <button type="button" id="clear-hero-search">Clear search</button>
+              </div>
+              <div class="tile-legend" aria-label="Hero badge meanings">
+                <span><b class="legend-pick">P</b> Suggested pick</span>
+                <span><b class="legend-ban">B</b> Suggested ban</span>
+                <span><b class="legend-both">P+B</b> Contested</span>
               </div>
               <div id="hero-groups"></div>
             </section>
