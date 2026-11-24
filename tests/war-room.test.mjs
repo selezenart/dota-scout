@@ -159,7 +159,7 @@ test('war room stylesheet is linked and scouting follows the player rail',async(
  assert.equal(doc.querySelector('.decision-panel #draft-enemy-scouting'),null);
  assert.match(css,/\.tree-turn\[data-action=pick\]/);
  assert.match(css,/\.tree-preview\{[^}]*dashed/);
- assert.match(css,/\.is-player-hero\{[^}]*#fff/);
+ assert.match(css,/\.is-player-hero\{[^}]*var\(--text\)/);
  assert.match(css,/\.is-player-dim\{[^}]*opacity:\.26/);
  assert.match(css,/\.is-search-miss\.is-player-hero/);
 });
