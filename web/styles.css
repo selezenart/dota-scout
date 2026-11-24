@@ -4843,9 +4843,9 @@ button, select, textarea, input:not([type=checkbox], [type=radio]) {
   background: var(--raised);
 }
 .signup-progress [data-complete] > span:first-child {color: var(--ally);}
-.steam-auth-link {display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:12px 20px;border:1px solid var(--pick);border-radius:12px;color:var(--text);background:linear-gradient(110deg,var(--surface) 0%,color-mix(in srgb, var(--pick) 22%, var(--surface)) 65%,var(--accent) 100%);font-size:var(--text-md);font-weight:600;text-decoration:none;box-shadow:0 4px 14px color-mix(in srgb, var(--bg) 20%, transparent);transition:background .15s,border-color .15s;}
+.steam-auth-link {display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:12px 20px;border:1px solid var(--pick);border-radius:12px;color:var(--text);background:linear-gradient(110deg,var(--surface),color-mix(in srgb, var(--accent) 30%, var(--surface)));font-size:var(--text-md);font-weight:600;text-decoration:none;box-shadow:0 4px 14px color-mix(in srgb, var(--bg) 20%, transparent);transition:background .15s,border-color .15s;}
 .steam-auth-link svg {width:26px;height:26px;fill:currentColor;flex:none;}
-.steam-auth-link:hover {color:var(--text);border-color:var(--accent);background:linear-gradient(110deg,var(--raised),var(--accent));text-decoration:none;}
+.steam-auth-link:hover {color:var(--text);border-color:var(--accent);background:linear-gradient(110deg,var(--raised),color-mix(in srgb, var(--accent) 35%, var(--raised)));text-decoration:none;}
 .steam-auth-link:focus-visible {outline:3px solid var(--accent);outline-offset:3px;}
 .steam-auth-link:active {background:var(--surface);}
 .google-auth {display:grid;gap:8px;width:100%;}
@@ -5054,7 +5054,7 @@ body:has(#identity-download:not([hidden])) {min-height:100vh;background-repeat:n
 .team-home-card[data-captain="true"] {transform:scale(1.06);z-index:1;border-color:var(--brass);box-shadow:0 26px 62px color-mix(in srgb, var(--bg) 73%, transparent);}
 .team-home-stage[data-count="1"] .team-home-card {transform:none;flex-basis:250px;}
 .team-home-card img,.team-home-placeholder {display:block;width:100%;aspect-ratio:4/5;object-fit:cover;}
-.team-home-placeholder {display:grid;place-items:center;background:linear-gradient(150deg,var(--accent),var(--bg));font-size:var(--text-3xl);color:var(--accent);}
+.team-home-placeholder {display:grid;place-items:center;background:linear-gradient(150deg,color-mix(in srgb, var(--accent) 35%, var(--bg)),var(--bg));font-size:var(--text-3xl);color:var(--text);}
 .team-home-card h2 {margin:12px 12px 4px;font-size:var(--text-xl);overflow-wrap:anywhere;}
 .team-home-card p {margin:0 12px 12px;color:var(--muted);font-size:var(--text-sm);}
 .team-home-actions {display:flex;flex-wrap:wrap;justify-content:center;gap:10px;}
@@ -5078,7 +5078,7 @@ body:has(#identity-download:not([hidden])) {min-height:100vh;background-repeat:n
 
 /* Enemy scouting inside the Next decision panel. */
 .draft-enemy-scouting{border-top:1px solid var(--line);margin-top:14px;padding:12px 14px 4px}
-.draft-enemy-scouting h3{font-size:var(--text-sm);letter-spacing:.05em;text-transform:uppercase;margin:0 0 8px;color:var(--enemy,var(--enemy))}
+.draft-enemy-scouting h3{font-size:var(--text-sm);letter-spacing:.05em;text-transform:uppercase;margin:0 0 8px;color:var(--enemy)}
 .draft-enemy{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .draft-enemy:last-child{border-bottom:none}
 .draft-enemy-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--text-sm)}
