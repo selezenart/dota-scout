@@ -119,7 +119,7 @@ test('the current draft slot previews the staged hero without recording it',asyn
   await h.click(h.q('hero-groups').querySelector('[data-hero-id="1"]'));
   const slot=cur(),preview=slot.querySelector('.tree-preview');
   assert.ok(preview);assert.ok(preview.classList.contains('tree-hero'));
-  assert.match(slot.querySelector('.tree-label').textContent,/Anti-Mage/);
+  assert.equal(slot.querySelector('.tree-label'),null);
   assert.match(slot.getAttribute('aria-label'),/^Turn 1, .*previewing Anti-Mage/);assert.match(slot.title,/previewing Anti-Mage/);
   assert.equal(slot.classList.contains('is-recorded'),false);
   await h.click(h.q('suggestions').querySelector('.clear-staged'));
@@ -282,6 +282,26 @@ test('stylesheet keeps saved match reports reachable at every width',async()=>{
  assert.match(css,/body:has\(#surface-players:checked\) #draft-view #draft-enemy-scouting:is\(\.is-detail-open,\.has-match-report\)\{display:block\}/);
  assert.equal((css.match(/#draft-enemy-scouting \.draft-enemy:not\(\.is-focused\)\{display:none\}/g)||[]).length,2);
  assert.doesNotMatch(css,/\.is-detail-open \.draft-enemy:not/);
+});
+test('heroes stay alphabetical in each attribute and taken draft slots show icons only',async()=>{
+ const h=await board({state:{actions:[{mode:'ourBan',heroId:1}],roster:[{id:'ally',displayName:'Ally',desiredHeroes:[120]}]}});
+ try{
+  for(const group of h.q('hero-groups').querySelectorAll('.hero-group')){
+   const names=[...group.querySelectorAll('.hero-tile>span')].map(n=>n.textContent);
+   assert.deepEqual(names,[...names].sort((a,b)=>a.localeCompare(b)));
+  }
+  assert.match(h.w.document.querySelector('.hero-board-heading>span').textContent,/A.Z/);
+  const slot=h.q('timeline').querySelector('.tree-row.is-recorded');
+  assert.ok(slot.querySelector('img'));assert.equal(slot.querySelector('.tree-label'),null);assert.equal(slot.textContent.trim(),'');
+  assert.match(slot.getAttribute('aria-label'),/Anti-Mage/);
+ }finally{h.w.close();}
+});
+test('hero grid explains suggestion badges',async()=>{
+ const h=await board();
+ try{
+  const legend=h.w.document.querySelector('.tile-legend').textContent;
+  for(const text of ['P','Suggested pick','B','Suggested ban','P+B','Contested'])assert.ok(legend.includes(text),text);
+ }finally{h.w.close();}
 });
 test('add enemy uses the existing setup flow',async()=>{
  const h=await board();

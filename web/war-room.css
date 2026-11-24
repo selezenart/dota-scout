@@ -13,13 +13,14 @@
 #draft-view .hero-grid>button.hero-tile:hover:not(:disabled),#draft-view .hero-grid>button.hero-tile:focus-visible{z-index:2;transform:scale(1.1)}
 #draft-view .hero-tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
 #draft-view .hero-tile>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-#draft-view .hero-tile.is-image-missing img{display:none}#draft-view .hero-tile.is-image-missing>span{position:absolute;inset:2px;display:flex;align-items:center;justify-content:center;width:auto;height:auto;clip-path:none;font-size:9px;line-height:1.05;text-align:center}
+#draft-view .hero-tile.is-image-missing img{display:none}#draft-view .hero-tile.is-image-missing>span{position:absolute;inset:2px;display:flex;align-items:center;justify-content:center;width:auto;height:auto;clip-path:none;font-size:11px;line-height:1.05;text-align:center}
 .tile-mark,.tile-win{position:absolute;z-index:1;padding:1px 3px;font-size:10px;line-height:1.1;background:rgba(10,14,20,.92)}.tile-mark{top:0;right:0}.tile-win{bottom:0;left:0;color:#ffc2cc}
 #draft-view .hero-tile.is-sug-pick{border-color:var(--wr-pick);border-width:3px}#draft-view .hero-tile.is-sug-pick .tile-mark{background:var(--wr-pick);color:#07131f}
 #draft-view .hero-tile.is-sug-ban{border-color:var(--wr-ban);border-width:3px}#draft-view .hero-tile.is-sug-ban .tile-mark{background:var(--wr-ban);color:#241006}
 #draft-view .hero-tile.is-contested{border-color:var(--wr-both);border-width:3px}#draft-view .hero-tile.is-contested .tile-mark{background:var(--wr-both);color:#241f05}
 #draft-view .hero-tile[aria-pressed=true]{z-index:3;outline:2px solid #fff;outline-offset:1px}#draft-view .hero-tile.is-highlighted{box-shadow:0 0 0 2px #fff}#draft-view .hero-tile.is-search-miss{opacity:.24}
 #draft-view .hero-tile.is-taken{cursor:default;opacity:1}#draft-view .hero-tile.is-taken img{filter:grayscale(.85) brightness(.72)}#draft-view .hero-tile.is-taken::after{content:"";position:absolute;left:-12%;top:50%;width:124%;height:2px;background:var(--wr-ban);transform:rotate(-38deg)}#draft-view .hero-tile.is-taken .tile-mark{background:#e8edf2;color:#101418}
+.tile-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 8px;color:var(--wr-muted);font-size:12px}.tile-legend span{display:inline-flex;align-items:center;gap:5px}.tile-legend b{min-width:18px;padding:1px 4px;border-radius:2px;font-size:11px;font-weight:700;line-height:1.2;text-align:center}.legend-pick{background:var(--wr-pick);color:#07131f}.legend-ban{background:var(--wr-ban);color:#241006}.legend-both{background:var(--wr-both);color:#241f05}
 .best-now .decision-candidates{display:grid;grid-template-columns:repeat(6,minmax(128px,1fr));gap:6px;overflow-x:auto;padding:3px}.best-now .decision-candidates>h3{grid-column:1/-1;margin:0;font:700 16px var(--heading);text-transform:uppercase}.rec-win{display:block;color:var(--wr-ink);font-size:11px}
 /* Draft order: pick rows are clearly taller than ban rows; portraits fill their slot. */
 #timeline .tree-row[data-action=ban],#timeline .tree-turn[data-action=ban] .tree-row{min-height:26px}
@@ -52,7 +53,7 @@
  #draft-view>.seat-strip{grid-column:1;grid-row:1;margin:0 0 6px;padding:4px 10px;min-height:0;gap:8px}
  #draft-view>.match-strip{grid-column:2;grid-row:1;margin:0 0 6px;padding:4px 12px;border-bottom:0;align-self:stretch}
  #draft-view .turn-heading{display:flex;align-items:center;gap:6px 14px;text-align:left}
- #draft-view .turn-heading .eyebrow{font-size:10px}
+ #draft-view .turn-heading .eyebrow{font-size:11px}
  #draft-view .turn-heading h1{margin:0;font-size:20px;line-height:1.1;white-space:nowrap}
  #draft-view .turn-heading p{margin:0;font-size:12px}
  #draft-view .turn-heading button{margin:0 0 0 auto;min-height:28px;padding:2px 10px}
@@ -60,17 +61,17 @@
  #draft-view .seat-group{gap:4px}
  #draft-view .seat-card{min-height:0;gap:3px;padding:5px 6px}
  #draft-view .seat-head{font-size:13px;line-height:1.2}
- #draft-view .seat-head small,#draft-view .seat-caption,#draft-view .seat-state{font-size:10px;line-height:1.2}
+ #draft-view .seat-head small,#draft-view .seat-caption,#draft-view .seat-state{font-size:11px;line-height:1.2}
  #draft-view .seat-comfort{gap:2px}
  #draft-view .seat-hero{gap:4px;padding:2px}
  #draft-view .seat-hero img{width:30px;height:30px}
  #draft-view .seat-hero-name{font-size:11px;line-height:1.2}
- #draft-view .seat-stat{flex-wrap:nowrap;gap:0 4px;font-size:10px;line-height:1.2;white-space:nowrap}
- #draft-view .seat-stat b,#draft-view .seat-stat small{font-size:10px}
+ #draft-view .seat-stat{flex-wrap:nowrap;gap:0 4px;font-size:11px;line-height:1.2;white-space:nowrap}
+ #draft-view .seat-stat b,#draft-view .seat-stat small{font-size:11px}
  #draft-view .seat-stat small{min-width:0;overflow:hidden;text-overflow:ellipsis}
  #draft-view .seat-ban{font-size:11px;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
  #draft-view .seat-game img{height:20px}
- #draft-view .seat-game{font-size:10px;line-height:1.2}
+ #draft-view .seat-game{font-size:11px;line-height:1.2}
  #draft-view .best-now .decision-candidates{gap:4px;padding:0;overflow:hidden}
  #draft-view .best-now .decision-candidates>h3{font-size:13px;line-height:1.2}
  #draft-view .best-now .rec-row{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:6px;min-width:0;height:auto;max-height:92px;min-height:0;margin:0;padding:5px 6px;overflow:hidden;text-align:left}

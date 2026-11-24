@@ -310,7 +310,7 @@ function renderView(){
 
  for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<5;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
 
- renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();const poolOrder=document.querySelector('.hero-board-heading>span');if(poolOrder)poolOrder.textContent=turn?.mode==='ourPick'?'Team wants first · then popularity':'Most played first · OpenDota';
+ renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();
 
  $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick');n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);}n.append(el('p','Traits: '+[...new Set(picks.flatMap(a=>heroes[a.heroId]?.roles||[]))].join(', ')));}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
@@ -372,8 +372,8 @@ function renderDraftTree(){
   slot.setAttribute('aria-label',label);slot.title=label;
   if(current)slot.setAttribute('aria-current','step');
   const preview=current&&selected&&heroes[selected.id]&&!state.actions.some(a=>+a.heroId===+selected.id)?selected.id:null;
-  if(preview!=null){const text=label+', previewing '+heroName(preview);slot.setAttribute('aria-label',text);slot.title=text;const img=portrait(preview);img.className='tree-hero tree-preview';slot.append(img,el('span',heroName(preview),'tree-label'));}
-  else if(recorded){const img=portrait(recorded.heroId);img.className='tree-hero';slot.append(img,el('span',heroName(recorded.heroId),'tree-label'));}
+  if(preview!=null){const text=label+', previewing '+heroName(preview);slot.setAttribute('aria-label',text);slot.title=text;const img=portrait(preview);img.className='tree-hero tree-preview';slot.append(img);}
+  else if(recorded){const img=portrait(recorded.heroId);img.className='tree-hero';slot.append(img);}
   else{const placeholder=el('span',null,'tree-placeholder'),icon=el('span',current?step.action.toUpperCase():'');icon.setAttribute('aria-hidden','true');placeholder.append(icon);slot.append(placeholder);}
   slot.disabled=!recorded&&!current;
   slot.onclick=()=>{
@@ -417,7 +417,7 @@ function renderHeroes(){
  const assigned=new Set(state.actions.filter(action=>action.mode==='ourPick').map(action=>action.playerId).filter(Boolean));
  const available=roster().filter(player=>!assigned.has(player.id)&&player.selfReport.availability!=='unavailable');
  const wanted=new Set(ourPick?available.flatMap(player=>player.selfReport.desiredHeroes):[]);
- root.setAttribute('aria-label',ourPick?'Team wants first, then public popularity':'Most played first');
+ root.setAttribute('aria-label','Heroes by attribute, A to Z');
  const query=$('hero-search').value.toLowerCase();
  const takenBy=new Map(state.actions.map(action=>[+action.heroId,action.mode])),suggestions=suggestionSets(),chips=enemyWinChips(),playerHeroes=focusedHeroIds(new Set(takenBy.keys()));
  const matches=hero=>hero.localized_name.toLowerCase().includes(query);
@@ -429,7 +429,7 @@ function renderHeroes(){
   if(!visibleGroup)continue;
   const list=Object.values(heroes).filter(hero=>hero.primary_attr===attribute&&(heroFilter!=='recommended'||(!takenBy.has(+hero.id)&&rankedIds.has(+hero.id)&&matches(hero))));
   matched+=list.filter(matches).length;
-  list.sort((a,b)=>Number(wanted.has(+b.id))-Number(wanted.has(+a.id))||popularity(b)-popularity(a)||a.localized_name.localeCompare(b.localized_name));
+  list.sort((a,b)=>a.localized_name.localeCompare(b.localized_name));
   if(!list.length)continue;
   const section=el('section',null,'hero-group'),grid=el('div',null,'hero-grid'),heading=el('div',null,'attribute-heading');
   section.dataset.attribute=attribute;
