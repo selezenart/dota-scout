@@ -153,6 +153,98 @@ test('review: OpenDota matchup still counts for enemy picks without STRATZ rows'
  const r=engine2.recommend({heroes,draft,matchups,stratz:only2,mode:'ourPick'}).find(x=>x.heroId===1);
  assert.ok(r.components.stratzCounter>0,'STRATZ edge vs hero 2');assert.ok(r.components.matchup>0,'OpenDota edge vs hero 3 kept');
 });
+const rl = o => engine2.reviewLineup({heroes,...o});
+const notesOf = (r,side,id) => r[side].heroes.find(x=>x.heroId===id).notes;
+test('reviewLineup: hard and strong matchup notes with exact text and tone',()=>{
+ const draft=[act('ourPick',1),act('enemyPick',2),act('enemyPick',3),act('ourBan',9)];
+ const stratz={1:{heroId:1,vs:[row(2,120,0.43,-5),row(3,60,0.56,4.5)],with:[]}};
+ const n=notesOf(rl({draft,stratz}),'our',1);
+ assert.deepEqual(n.slice(0,2),[{text:'Hard time vs Hero2: wins 43% (120 games)',tone:'warn'},{text:'Strong vs Hero3: wins 56% (60 games)',tone:'good'}]);
+});
+test('reviewLineup: weak and good pair notes with signed one-decimal points',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('ourPick',3)];
+ const stratz={1:{heroId:1,vs:[],with:[row(2,80,0.5,-2.54),row(3,80,0.5,3.26)]}};
+ assert.deepEqual(notesOf(rl({draft,stratz}),'our',1),[{text:'Weak pair with Hero2: -2.5',tone:'warn'},{text:'Pairs well with Hero3: +3.3',tone:'good'}]);
+});
+test('reviewLineup: notes come in order hard, strong, weak pair, good pair',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('ourPick',3),act('enemyPick',4),act('enemyPick',5)];
+ const stratz={1:{heroId:1,vs:[row(4,90,0.4,-6),row(5,90,0.6,6)],with:[row(2,90,0.5,-3),row(3,90,0.5,3)]}};
+ assert.deepEqual(notesOf(rl({draft,stratz}),'our',1).map(x=>x.tone),['warn','good','warn','good']);
+ assert.match(notesOf(rl({draft,stratz}),'our',1)[0].text,/^Hard time vs Hero4/);
+});
+test('reviewLineup: picks the lowest and highest rows only',()=>{
+ const draft=[act('ourPick',1),act('enemyPick',2),act('enemyPick',3),act('enemyPick',4)];
+ const stratz={1:{heroId:1,vs:[row(2,100,0.45,-3),row(3,100,0.4,-7),row(4,100,0.5,0)],with:[]}};
+ const n=notesOf(rl({draft,stratz}),'our',1);assert.equal(n.length,1);assert.match(n[0].text,/Hero3/);
+});
+test('reviewLineup: thresholds are inclusive at exactly 2 and silent just inside',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('enemyPick',3),act('enemyPick',4)];
+ const at={1:{heroId:1,vs:[row(3,100,0.48,-2),row(4,100,0.52,2)],with:[row(2,100,0.5,-2)]}};
+ assert.deepEqual(notesOf(rl({draft,stratz:at}),'our',1).map(x=>x.text.split(' ').slice(0,2).join(' ')),['Hard time','Strong vs','Weak pair']);
+ const inside={1:{heroId:1,vs:[row(3,100,0.49,-1.9),row(4,100,0.51,1.9)],with:[row(2,100,0.5,1.9)]}};
+ assert.deepEqual(notesOf(rl({draft,stratz:inside}),'our',1),[{text:'No strong matchups or pairs (Divine+)',tone:'info'}]);
+ const goodAt={1:{heroId:1,vs:[],with:[row(2,100,0.5,2)]}};
+ assert.deepEqual(notesOf(rl({draft,stratz:goodAt}),'our',1),[{text:'Pairs well with Hero2: +2.0',tone:'good'}]);
+});
+test('reviewLineup: rows with fewer than 50 games are ignored',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('enemyPick',3)];
+ const stratz={1:{heroId:1,vs:[row(3,49,0.2,-9)],with:[row(2,49,0.5,9)]}};
+ const r=rl({draft,stratz});
+ assert.deepEqual(notesOf(r,'our',1),[{text:'No STRATZ data for this hero',tone:'info'}]);assert.equal(r.our.edge,null);assert.equal(r.our.pairs,0);
+ const edge=rl({draft,stratz:{1:{heroId:1,vs:[row(3,50,0.4,-3)],with:[]}}});assert.match(notesOf(edge,'our',1)[0].text,/Hard time vs Hero3: wins 40% \(50 games\)/);
+});
+test('reviewLineup: falls back to the opponent list, converting s and w',()=>{
+ const draft=[act('ourPick',1),act('enemyPick',2)];
+ const stratz={2:{heroId:2,vs:[row(1,200,0.7,6)],with:[]}};
+ const r=rl({draft,stratz});
+ assert.deepEqual(notesOf(r,'our',1),[{text:'Hard time vs Hero2: wins 30% (200 games)',tone:'warn'}]);
+ assert.deepEqual(notesOf(r,'enemy',2),[{text:'Strong vs Hero1: wins 70% (200 games)',tone:'good'}]);
+ assert.equal(r.our.edge,-6);assert.equal(r.enemy.edge,6);
+});
+test('reviewLineup: own row wins over the opponent fallback, and a thin own row falls back',()=>{
+ const draft=[act('ourPick',1),act('enemyPick',2)];
+ const own={1:{heroId:1,vs:[row(2,100,0.55,3)],with:[]},2:{heroId:2,vs:[row(1,100,0.55,3)],with:[]}};
+ assert.match(notesOf(rl({draft,stratz:own}),'our',1)[0].text,/^Strong vs Hero2: wins 55%/);
+ const thin={1:{heroId:1,vs:[row(2,10,0.9,9)],with:[]},2:{heroId:2,vs:[row(1,100,0.6,4)],with:[]}};
+ assert.match(notesOf(rl({draft,stratz:thin}),'our',1)[0].text,/^Hard time vs Hero2: wins 40% \(100 games\)/);
+});
+test('reviewLineup: synergy falls back to the teammate list unchanged',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2)];
+ const stratz={2:{heroId:2,vs:[],with:[row(1,90,0.5,-4)]}};
+ const r=rl({draft,stratz});
+ assert.deepEqual(notesOf(r,'our',1),[{text:'Weak pair with Hero2: -4.0',tone:'warn'}]);
+ assert.deepEqual(notesOf(r,'our',2),[{text:'Weak pair with Hero1: -4.0',tone:'warn'}]);
+});
+test('reviewLineup: info notes for heroes with and without data',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('enemyPick',3)];
+ const stratz={1:{heroId:1,vs:[row(3,100,0.5,0.5)],with:[]}};
+ const r=rl({draft,stratz});
+ assert.deepEqual(notesOf(r,'our',1),[{text:'No strong matchups or pairs (Divine+)',tone:'info'}]);
+ assert.deepEqual(notesOf(r,'our',2),[{text:'No STRATZ data for this hero',tone:'info'}]);
+});
+test('reviewLineup: edge is the rounded mean of s over counted rows and pairs counts them',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('enemyPick',3),act('enemyPick',4)];
+ const stratz={1:{heroId:1,vs:[row(3,100,0.5,1),row(4,100,0.5,2)],with:[]},2:{heroId:2,vs:[row(3,100,0.5,2)],with:[]}};
+ const r=rl({draft,stratz});
+ assert.equal(r.our.pairs,3);assert.equal(r.our.edge,1.7);
+ assert.equal(r.enemy.pairs,3);assert.equal(r.enemy.edge,-1.7);
+ assert.deepEqual(r.our.heroes.map(x=>x.heroId),[1,2]);
+});
+test('reviewLineup: heroes given as an object keyed by id use localized_name',()=>{
+ const draft=[act('ourPick',1),act('enemyPick',2)];
+ const stratz={1:{heroId:1,vs:[row(2,100,0.4,-4)],with:[]}};
+ const byId={1:{id:1,localized_name:'Anti-Mage'},2:{id:2,localized_name:'Axe'}};
+ const r=engine2.reviewLineup({draft,stratz,heroes:byId});
+ assert.equal(notesOf(r,'our',1)[0].text,'Hard time vs Axe: wins 40% (100 games)');
+});
+test('reviewLineup: empty input, bans ignored, names fall back to ids, roles unused',()=>{
+ const e=engine2.reviewLineup();assert.deepEqual(e,{our:{edge:null,pairs:0,heroes:[]},enemy:{edge:null,pairs:0,heroes:[]}});
+ const draft=[act('ourPick',1),act('enemyPick',77),act('enemyBan',3),act('ourBan',4)];
+ const stratz={1:{heroId:1,vs:[row(77,100,0.4,-4),row(3,100,0.4,-9)],with:[]}};
+ const r=engine2.reviewLineup({draft,stratz,heroes:[{id:1,localized_name:'Hero1',roles:['Carry']}]});
+ assert.equal(notesOf(r,'our',1)[0].text,'Hard time vs 77: wins 40% (100 games)');assert.equal(r.our.pairs,1);
+ assert.equal(JSON.stringify(rl({draft,stratz})),JSON.stringify(engine2.reviewLineup({draft,stratz,heroes:heroes.map(h=>({...h,roles:['Support']}))})));
+});
 test('review: a ban based only on STRATZ is not attributed to a known enemy player',()=>{
  const draft=[act('ourPick',2),act('ourPick',3)];
  const s={2:{heroId:2,vs:[row(7,100,0.3,-8)],with:[]},3:{heroId:3,vs:[row(7,100,0.3,-8)],with:[]}};
@@ -189,6 +281,32 @@ test('review: the visible suggestion list uses STRATZ and credits it once',async
  }finally{w.close();}
 });
 
+test('board: the draft review shows STRATZ notes and matchup edge instead of Traits',async()=>{
+ const our=[1,4,5,6,7],enemy=[2,3,8,9,10];let o=0,e=0,ban=20;
+ const actions=engine2.CM_ORDER.map(({team,action})=>{const side=team==='A'?'our':'enemy';return {mode:side+action,heroId:action==='Pick'?(side==='our'?our[o++]:enemy[e++]):ban++};});
+ const w=new JSDOM(boardMarkup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
+ w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{actions,firstPick:true,enemyIds:[]},profile:{}}));
+ w.__heroes=JSON.parse(await readFile('web/heroes.json','utf8'));
+ w.__stratz={1:{heroId:1,vs:[row(2,200,0.4,-6),row(3,200,0.55,3)],with:[row(4,100,0.5,-4),row(5,100,0.5,4)]},4:{heroId:4,vs:[],with:[]},2:{heroId:2,vs:[],with:[]}};
+ try{w.eval(boardCode);await settle();
+  const btn=[...w.document.querySelectorAll('button')].find(b=>b.textContent==='Show draft review');assert.ok(btn,'review button');
+  btn.click();await settle();
+  const review=w.document.getElementById('analysis');
+  assert.equal(review.hidden,false);assert.doesNotMatch(review.textContent,/Traits:/);
+  const rows=[...review.querySelectorAll('.review-player')];assert.equal(rows.length,10);
+  for(const r of rows){const n=r.nextElementSibling;assert.ok(n&&n.classList.contains('review-notes'),'notes follow each player row');assert.ok(n.querySelectorAll('li').length>=1);}
+  const first=rows[0].nextElementSibling;
+  assert.ok(first.querySelector('.review-note-warn'));assert.ok(first.querySelector('.review-note-good'));
+  assert.match(first.textContent,/Hard time vs [A-Za-z]/);assert.doesNotMatch(first.textContent,/vs \d+:/);assert.doesNotMatch(first.textContent,/with \d+:/);assert.match(first.textContent,/Weak pair with /);
+  assert.ok(review.querySelector('.review-note-info'),'heroes without data get an info note');
+  const edges=[...review.querySelectorAll('p')].map(p=>p.textContent).filter(t=>t.startsWith('Matchup edge (Divine+): '));
+  assert.equal(edges.length,2);
+  for(const t of edges)assert.match(t,/^Matchup edge \(Divine\+\): ([+-]?\d+(\.\d)? per matchup across \d+ matchups|no data)$/);
+  assert.equal(review.querySelectorAll('.stratz-credit').length,1);assert.match(review.querySelector('.stratz-credit').textContent,/Powered by STRATZ/);
+ }finally{w.close();}
+});
 test('board: a failed STRATZ load is retried after the backoff without another draft action',async()=>{
  const n=engine2.CM_ORDER.findIndex((t,i)=>i>8&&t.team==='A'&&t.action==='Pick');
  let our=0,en=0,ban=20;const actions=engine2.CM_ORDER.slice(0,n).map(({team,action})=>{const side=team==='A'?'our':'enemy';return {mode:side+action,heroId:action==='Pick'?(side==='our'?[1,4][our++]:[2,3][en++]):ban++};});
