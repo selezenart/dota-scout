@@ -1,5 +1,22 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "functions": {
+    "api/stratz-refresh.js": {
+      "maxDuration": 300
+    }
+  },
+  "schedules": {
+    "stratz-refresh-prod": {
+      "schedule": "0 4 * * *",
+      "path": "/api/stratz-refresh?slot=prod",
+      "requestMethod": "GET"
+    },
+    "stratz-refresh-preview": {
+      "schedule": "0 16 * * *",
+      "path": "/api/stratz-refresh?slot=preview",
+      "requestMethod": "GET"
+    }
+  }
 }

@@ -168,8 +168,8 @@ function requestStratz(id){
  if(demo||stratzRequested.has(String(id)))return;
  stratzRequested.add(String(id));
  void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;render();}})
-  // Back off: 1, 2, 4… minutes, at most 15, so failures do not keep hitting STRATZ.
-  .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>stratzRequested.delete(String(id)),Math.min(900000,60000*2**(n-1)));});
+  // Back off 1, 2, 4… minutes (at most 15), then retry on its own while the hero is still picked.
+  .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>{stratzRequested.delete(String(id));if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);},Math.min(900000,60000*2**(n-1)));});
 }
 function requestMatchup(id){
  if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
