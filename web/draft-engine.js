@@ -355,8 +355,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   for (const hero of pool) {
     const heroId = +hero.id;
     if (taken.has(heroId)) continue;
-    // Meta only shapes picks; ban suggestions stay evidence-based.
-    const meta = picking ? heroMeta(hero, totals) : null, metaReason = meta ? metaText(meta) : '';
+    // Meta shapes picks, and gives every ban turn suggestions: heroes strong in Divine+ and pro games.
+    const meta = heroMeta(hero, totals), metaReason = meta ? metaText(meta) : '';
     // Divine+ counters (vs the opposing picks) and synergy (with this side's picks).
     const nameOf = id => byId.get(id)?.localized_name || String(id);
     const vsRows = stratzRows(stratz, draft.filter(a => a.mode === opposing), heroId, 'vs');
@@ -382,8 +382,10 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       if (experienceText(h)) evidence.push(experienceText(h));
       if (components.signature) reasons.push('Reported signature hero');
       if (s?.desiredHeroes.includes(heroId)) reasons.push(components.desired ? 'Wants to play' : 'Also wants to play (signature already counted)');
-      if (!picking && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2) continue;
+      const metaBan = !picking && (meta?.score ?? 0) >= 1;
+      if (!picking && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2 && !metaBan) continue;
       reasons.push(...stratzReasons);
+      if (metaBan) reasons.push(metaReason);
       const slot = bestSlot(player,hero,open,penalties.get(player));
       let likelyPosition = null;
       let roleSample = 0;

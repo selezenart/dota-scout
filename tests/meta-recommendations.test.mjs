@@ -83,16 +83,19 @@ test('higher meta score ranks first when everything else is equal',()=>{
   const rec = pickRec([{id:1,roles:['Carry']},{id:2,roles:['Carry'],'7_pick':1000,'7_win':560},{id:3,roles:['Carry'],'7_pick':1000,'7_win':400}]);
   assert.deepEqual(rec.map(r=>r.heroId),[2,1,3]);
 });
-test('ban turns ignore meta',()=>{
-  const heroes = [{...strong,id:2},{...weak,id:3}];
+test('ban turns add meta but evidence still leads',()=>{
+  const weakBan = {id:3,roles:['Carry'],'7_pick':200,'7_win':80};
+  const heroes = [{...strong,id:2},weakBan];
+  const totals = metaTotals(heroes);
+  assert.ok(heroMeta(weakBan,totals).score < 1);
   const allies = [{id:1,selfReport:{signatureHeroes:[2]}}];
   const opponents = [{id:9,heroes:[{hero_id:2,games:100,last_played:now-3600}]}];
   for (const [mode,extra] of [['enemyBan',{allies}],['ourBan',{opponents}]]) {
     const rec = recommend({heroes,now,mode,...extra}), r = rec.find(r=>r.heroId===2);
-    assert.ok(r,mode);
-    assert.equal(r.components.meta,0);
-    assert.ok(!rec.some(x=>x.reasons.some(t=>t.startsWith('Meta: '))));
-    assert.equal(r.details.find(d=>d.category==='meta').contribution,0);
+    assert.equal(rec[0].heroId,2,mode);
+    assert.equal(r.components.meta,heroMeta(heroes[0],totals).score);
+    assert.ok(r.reasons.some(t=>t.startsWith('Meta: ')));
+    assert.ok(!rec.some(x=>x.heroId===3),'weak-meta hero without evidence is not suggested');
   }
 });
 
