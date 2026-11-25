@@ -139,3 +139,11 @@ test('a 429 in one tab pauses the other same-origin tabs too',async()=>{
  assert.equal(fetchedB.length,0,'tab B waits out tab A\'s pause');
  assert.deepEqual(sleepB.calls,[14000]);
 });
+test('both running jobs wait out another tab\'s pause, capped at a minute',async()=>{
+ const shared=memory();shared.setItem('od-public-pause-v1',String(1000+600000));
+ const fetched=[],sleeper=parked();
+ const q=new PublicQueue({fetcher:async u=>{fetched.push(u);return reply(200);},now:()=>1000,sleep:sleeper.sleep,storage:shared});
+ void q.request('/players/1/heroes');void q.request('/players/2/heroes');await tick();
+ assert.equal(fetched.length,0,'neither job fetches during the pause');
+ assert.deepEqual(sleeper.calls,[60000]);
+});

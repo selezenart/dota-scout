@@ -48,7 +48,8 @@ export class PublicQueue {
    if(this.pause){const pause=this.pause;await pause;if(this.pause===pause)this.pause=null;continue;}
    const now=this.now();
    let until=0;try{until=Number(this.storage?.getItem('od-public-pause-v1'))||0;}catch{}
-   if(until>now&&until!==this.sharedPauseSeen){this.sharedPauseSeen=until;await this.sleep(until-now);continue;}
+   // Adopt the other tab's pause as this tab's shared pause, so every running job waits.
+   if(until>now&&until!==this.sharedPauseSeen){this.sharedPauseSeen=until;this.pause=this.sleep(Math.min(until-now,60000)).then(()=>{});continue;}
    let list=this.starts,shared=false;
    // A storage that cannot be written (full, private mode) falls back to this tab's own budget.
    if(!this.localOnly)try{if(this.storage){const saved=JSON.parse(this.storage.getItem(key)||'[]');list=Array.isArray(saved)?saved:[];shared=true;}}catch{list=this.starts;shared=false;}
