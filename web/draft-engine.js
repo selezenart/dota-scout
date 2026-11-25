@@ -46,6 +46,8 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
   const state = statuses.includes('fetching') || !statuses.length && !hasData ? 'loading'
     : sources.profile?.status === 'private' ? 'closed'
     : hasData ? 'ready'
+    // Rate-limited or about to be retried: not a final failure.
+    : Object.values(sources).some(s => s?.status === 'waiting' || s?.status === 'error' && (s.rateLimited || s.retrying)) ? 'waiting'
     : statuses.includes('error') ? 'error' : 'closed';
   const topHeroes = heroRows.filter(h => +h.games > 0)
     .map(h => ({heroId: +h.hero_id, games: +h.games, wins: h.win == null ? null : Math.max(0, +h.win || 0)}))

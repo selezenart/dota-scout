@@ -142,7 +142,19 @@ function roster(){return (Array.isArray(state.roster)?state.roster:[]).filter(p=
 
 function opponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));}
 
-function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).catch(e=>{if(gen===generation)notice(e.message);});}}
+// Failed loads (often OpenDota's per-IP rate limit, shared by every open board) are
+// retried a few times per draft; meanwhile the card says it is waiting.
+const scoutRetries=new Map();
+function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).then(p=>{
+ if(gen!==generation)return;
+ const failed=Object.values(p.sources||{}).filter(s=>s?.status==='error');if(!failed.length)return;
+ const tries=scoutRetries.get(gen+':'+key)||0;if(tries>=3)return;
+ scoutRetries.set(gen+':'+key,tries+1);
+ const sources=Object.fromEntries(Object.entries(p.sources).map(([k,s])=>[k,s?.status==='error'?{...s,retrying:true}:s]));
+ observations.set(key,{...p,sources});render();
+ // Re-scout through refreshScouting so a player removed meanwhile is not fetched again.
+ setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?20000:8000);
+}).catch(e=>{if(gen===generation)notice(e.message);});}}
 
 function requestMatchup(id){
  if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
@@ -317,7 +329,7 @@ function renderView(){
 
 }
 
-const SEAT_STATUS={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'};
+const SEAT_STATUS={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
 function seatData(player,side,taken,now){
  const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
  const summary=enemySummary(player,{now,heroes:Object.values(heroes)}),state=hasAccount?summary.state:'ready';
@@ -503,7 +515,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 function enemyDetails(card,p){
  const s=enemySummary(p,{now:Math.floor(Date.now()/1000),heroes:Object.values(heroes)});
  const seen=seenAgainstUs(p);if(seen)card.append(el('p',seen,'enemy-seen'));
- if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
+ if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',waiting:'Waiting for OpenDota…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
  card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
  const strip=(title,cls,rows,label,empty)=>{
   card.append(el('h4',title));const root=el('div',null,'roster-hero-strip '+cls);
@@ -709,7 +721,7 @@ function renderDraftEnemies(){
  const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
-  const meta={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'}[s.state]
+  const meta={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'}[s.state]
    ||(s.positions.length?s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown');
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
   if(s.state==='ready'){

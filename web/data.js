@@ -2,9 +2,9 @@ import snapshot from './heroes.json' with {type:'json'};
 const BASE='https://api.opendota.com/api';
 export const PRIORITY={constants:0,profile:1,recent:2,heroes:3,history:4,matchups:5};
 export class PublicQueue {
- constructor({fetcher=(...args)=>globalThis.fetch(...args),now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),storage=globalThis.localStorage,limit=45,windowMs=60000,timeout=12000}={}){Object.assign(this,{fetcher,now,sleep,storage,limit,windowMs,timeout});this.jobs=[];this.running=0;this.starts=[];this.inflight=new Map();this.cache=new Map();this.sourceInfo=new Map();this.waking=false;}
+ constructor({fetcher=(...args)=>globalThis.fetch(...args),now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),storage=globalThis.localStorage,limit=45,windowMs=60000,timeout=12000}={}){Object.assign(this,{fetcher,now,sleep,storage,limit,windowMs,timeout});this.jobs=[];this.running=0;this.starts=[];this.inflight=new Map();this.cache=new Map();this.sourceInfo=new Map();this.waking=false;this.pause=null;this.localOnly=false;this.sharedPauseSeen=0;}
  getSourceInfo(path){return this.sourceInfo.get(path);}
- request(path,{priority=3,ttl=300000,transform}={}){
+ request(path,{priority=3,ttl=300000,transform,onWait}={}){
   if(!/^\/(?:constants\/heroes|heroStats|matches\/\d+|players\/\d+(?:\/(?:heroes|recentMatches|matches))?|heroes\/\d+\/matchups)(?:\?|$)/.test(path)||/[#]/.test(path))return Promise.reject(new Error('Unsupported public endpoint'));
   if(this.inflight.has(path))return this.inflight.get(path);
   let cached=this.cache.get(path);try{cached ||= JSON.parse(this.storage?.getItem('od-public-v1:'+path)||'null');}catch{}
@@ -12,13 +12,28 @@ export class PublicQueue {
    this.sourceInfo.set(path,{at:cached.at,cached:true});
    return Promise.resolve(cached.value);
   }
-  const promise=new Promise((resolve,reject)=>{this.jobs.push({path,priority,transform,resolve,reject});this.jobs.sort((a,b)=>a.priority-b.priority);});this.inflight.set(path,promise);this.pump();return promise;
+  const promise=new Promise((resolve,reject)=>{this.jobs.push({path,priority,transform,onWait,resolve,reject});this.jobs.sort((a,b)=>a.priority-b.priority);});this.inflight.set(path,promise);this.pump();return promise;
  }
  async execute(job){
   try{let value;for(let attempt=0;attempt<3;attempt++){
    await this.reserve();const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),this.timeout);let response;
    try{response=await this.fetcher(BASE+job.path,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});}finally{clearTimeout(timer);}
-   if(response.status===429&&attempt<2){const retry=response.headers.get('Retry-After');const delay=Number.isFinite(Number(retry))&&retry!==null?Number(retry)*1000:Date.parse(retry)-this.now();await this.sleep(Math.max(1000,delay||2000*(attempt+1)));continue;}
+   // OpenDota's limit is per IP, shared by every open board: pause the whole queue
+   // instead of firing more requests, and report the wait.
+   if(response.status===429){
+    job.onWait?.();
+    const retry=response.headers.get('Retry-After');
+    const asked=retry!==null&&retry!==''&&Number.isFinite(Number(retry))?Number(retry)*1000:Date.parse(retry)-this.now();
+    // Capped: a far-off Retry-After must not freeze every request for long.
+    const delay=Math.min(60000,Math.max(1000,Number.isFinite(asked)?asked:15000));
+    // One shared pause: every waiting job resumes when it ends.
+    this.pause=this.sleep(delay).then(()=>{});
+    // Other same-origin tabs read this and wait too.
+    const until=this.now()+delay;this.sharedPauseSeen=until;
+    try{this.storage?.setItem('od-public-pause-v1',String(until));}catch{}
+    if(attempt<2)continue;
+    const error=new Error('OpenDota rate limit reached');error.rateLimited=true;throw error;
+   }
    if(!response.ok)throw new Error('OpenDota HTTP '+response.status);value=await response.json();if(job.transform)value=job.transform(value);break;
   }
   const entry={at:this.now(),value};this.cache.set(job.path,entry);this.sourceInfo.set(job.path,{at:entry.at,cached:false});while(this.cache.size>80)this.cache.delete(this.cache.keys().next().value);
@@ -26,7 +41,27 @@ export class PublicQueue {
   job.resolve(value);
   }catch(error){job.reject(error);}finally{this.inflight.delete(job.path);this.running--;this.pump();}
  }
- async reserve(){while(true){const now=this.now();this.starts=this.starts.filter(t=>now-t<this.windowMs);if(this.starts.length<this.limit){this.starts.push(now);return;}await this.sleep(Math.max(1,this.windowMs-(now-this.starts[0])));}}
+ // Same-origin tabs share the per-minute budget through storage.
+ async reserve(){
+  const key='od-public-starts-v1';
+  while(true){
+   if(this.pause){const pause=this.pause;await pause;if(this.pause===pause)this.pause=null;continue;}
+   const now=this.now();
+   let until=0;try{until=Number(this.storage?.getItem('od-public-pause-v1'))||0;}catch{}
+   // Adopt the other tab's pause as this tab's shared pause, so every running job waits.
+   if(until>now&&until!==this.sharedPauseSeen){this.sharedPauseSeen=until;this.pause=this.sleep(Math.min(until-now,60000)).then(()=>{});continue;}
+   let list=this.starts,shared=false;
+   // A storage that cannot be written (full, private mode) falls back to this tab's own budget.
+   if(!this.localOnly)try{if(this.storage){const saved=JSON.parse(this.storage.getItem(key)||'[]');list=Array.isArray(saved)?saved:[];shared=true;}}catch{list=this.starts;shared=false;}
+   list=list.filter(t=>Number.isFinite(t)&&now-t<this.windowMs);
+   if(list.length<this.limit){
+    list.push(now);this.starts=list;
+    if(shared)try{this.storage.setItem(key,JSON.stringify(list));}catch{this.localOnly=true;}
+    return;
+   }
+   await this.sleep(Math.max(1,this.windowMs-(now-Math.min(...list))));
+  }
+ }
  pump(){while(this.running<2&&this.jobs.length){this.running++;void this.execute(this.jobs.shift());}}
 }
 export const publicData=new PublicQueue();
@@ -38,7 +73,7 @@ export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
   onUpdate(player);
   try{
    const path='/players/'+id+suffix;
-   const value=await queue.request(path,{priority});
+   const value=await queue.request(path,{priority,onWait:()=>{player.sources[key]={status:'waiting'};onUpdate(player);}});
    const source=queue.getSourceInfo?.(path);
    player[key]=value;
    // start_time stays out of `matches`: scoring and summaries must see the same rows as before.
@@ -50,7 +85,7 @@ export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
     cached:source?.cached??false
    };
   }catch(error){
-   player.sources[key]={status:'error',message:error.message};
+   player.sources[key]={status:'error',message:error.message,...(error.rateLimited?{rateLimited:true}:{})};
   }
   onUpdate(player);
  }));

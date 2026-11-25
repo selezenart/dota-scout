@@ -1,5 +1,5 @@
 const make=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!=null)node.textContent=text;return node;};
-const STATE_TEXT={loading:'Loading…',closed:'Closed account',error:'Stats unavailable'};
+const STATE_TEXT={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
 
 function comfortRow(row,{portrait,heroName,side}){
  const item=make('span','seat-hero tier-'+row.tier),image=portrait(row.heroId),text=make('span','seat-hero-text'),stat=make('span','seat-stat');
