@@ -23,6 +23,7 @@
 !api/config.js
 !api/steam.js
 !api/stratz.js
+!api/stratz-refresh.js
 !package.json
 !package-lock.json
 !vite.config.js

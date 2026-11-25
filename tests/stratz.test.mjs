@@ -14,11 +14,13 @@ const upstream = {data:{heroStats:{heroVsHeroMatchup:{advantage:[{heroId:1,match
   vs:[{heroId1:1,heroId2:94,matchCount:451,winCount:259,synergy:11.353,winRateHeroId1:0.57,winRateHeroId2:0.43,winsAverage:0.5743},{heroId1:1,heroId2:0,matchCount:30,synergy:1},{heroId1:1,heroId2:5,matchCount:0,synergy:1}],
   with:[{heroId1:1,heroId2:7,matchCount:80,winCount:44,synergy:-2.26,winsAverage:0.5}]}]}}}};
 const fakeRes = () => ({statusCode:200,headers:{},body:undefined,status(c){this.statusCode=c;return this;},setHeader(k,v){this.headers[k]=v;},json(b){this.body=b;return this;}});
-const call = async (query,{env={STRATZ_API_TOKEN:'sekret'},fetcher}={}) => {
-  const res = fakeRes(), calls = [];
-  const f = fetcher || (async(...a)=>{calls.push(a);return {ok:true,status:200,json:async()=>upstream};});
-  await api.createHandler({fetcher:async(...a)=>{calls.push(a);return f(...a);},env})({query},res);
-  return {res,calls};
+const rowsOf = (data,error=null) => { const log = {}; const createClient = (url,key) => { log.url = url; log.key = key; log.created = (log.created||0)+1; return {from:table => { log.table = table; return {select:cols => { log.cols = cols; return {eq:(col,val) => { log.col = col; log.val = val; return {maybeSingle:async()=>{ if (error === 'throw') throw new Error('boom'); return {data,error}; }}; }}; }}; }}; }; return {log,createClient}; };
+const ENV = {SUPABASE_URL:'https://db.example',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'svc',STRATZ_API_TOKEN:'sekret'};
+const call = async (url,{env=ENV,data={hero_id:1,vs:[row(94,451,0.574,11.4)],with:[row(7,80,0.5,-2.3)]},error=null}={}) => {
+  const res = fakeRes(), {log,createClient} = rowsOf(data,error); let fetched = 0;
+  const prev = globalThis.fetch; globalThis.fetch = async()=>{fetched++;throw new Error('no fetch');};
+  try { await api.createHandler({createClient,env})({url,query:Object.fromEntries(new URL(url,'https://x.invalid').searchParams)},res); } finally { globalThis.fetch = prev; }
+  return {res,log,fetched};
 };
 
 test('compactMatchup compacts rows and drops invalid ones', () => {
@@ -29,35 +31,43 @@ test('compactMatchup returns null for missing/invalid json', () => {
   for (const j of [null,undefined,{},{data:null},'x',{data:{heroStats:{}}}]) assert.equal(api.compactMatchup(j,1),null);
 });
 test('handler rejects bad hero ids with 400', async () => {
-  for (const hero of [undefined,'abc','0','301','1.5','-2']) {
-    const {res,calls} = await call({hero});
-    assert.equal(res.statusCode,400); assert.ok(res.body.error); assert.equal(calls.length,0);
+  for (const hero of [undefined,'abc','0','301','1.5','-2','01','1&x=1','250','24']) {
+    const {res,log} = await call(hero===undefined?'/api/stratz':'/api/stratz?hero='+hero);
+    assert.equal(res.statusCode,400); assert.deepEqual(res.body,{error:'Invalid hero'}); assert.equal(res.headers['Cache-Control'],'no-store'); assert.equal(log.created,undefined);
+  }
+  for (const url of ['/api/stratz?hero=1&','/api/stratz?&hero=1','/api/stratz?%68ero=1','/api/stratz?hero=%31','/api/stratz?hero=1&&&']) {
+    const {res,log} = await call(url); assert.equal(res.statusCode,400,url); assert.equal(log.created,undefined);
   }
 });
-test('handler returns 503 without token', async () => {
-  const {res,calls} = await call({hero:'1'},{env:{}});
-  assert.equal(res.statusCode,503); assert.equal(res.body.error,'STRATZ is not configured'); assert.equal(calls.length,0);
+test('handler returns 503 cacheable when Supabase env is missing', async () => {
+  for (const env of [{},{SUPABASE_URL:'https://db.example'},{SUPABASE_ANON_KEY:'anon'}]) {
+    const {res,log} = await call('/api/stratz?hero=1',{env});
+    assert.equal(res.statusCode,503); assert.equal(res.headers['Cache-Control'],'public, s-maxage=300'); assert.equal(res.headers['Retry-After'],'300'); assert.equal(log.created,undefined);
+  }
 });
-test('handler posts the expected GraphQL request and caches success', async () => {
-  const {res,calls} = await call({hero:'1'});
-  const [url,init] = calls[0];
-  assert.equal(url,'https://api.stratz.com/graphql'); assert.equal(init.method,'POST');
-  assert.equal(init.headers.Authorization,'Bearer sekret'); assert.equal(init.headers['User-Agent'],'STRATZ_API');
-  assert.equal(init.headers['Content-Type'],'application/json');
-  assert.ok(JSON.parse(init.body).query.includes('heroVsHeroMatchup(heroId: 1, bracketBasicIds: [DIVINE_IMMORTAL], take: 200)'));
-  assert.equal(res.statusCode,200); assert.equal(res.body.heroId,1);
+test('handler reads stratz_matchups with the anon key only and never calls STRATZ', async () => {
+  const {res,log,fetched} = await call('/api/stratz?hero=1');
+  assert.equal(log.url,'https://db.example'); assert.equal(log.key,'anon'); assert.equal(log.table,'stratz_matchups');
+  assert.equal(log.cols,'hero_id,vs,with'); assert.equal(log.col,'hero_id'); assert.equal(log.val,1); assert.equal(fetched,0);
+  assert.equal(res.statusCode,200); assert.deepEqual(res.body,{heroId:1,vs:[row(94,451,0.574,11.4)],with:[row(7,80,0.5,-2.3)]});
   assert.equal(res.headers['Cache-Control'],'public, s-maxage=21600, stale-while-revalidate=86400');
-  assert.ok(!JSON.stringify(res.body).includes('sekret'));
+  assert.ok(!JSON.stringify([res.body,res.headers,log]).includes('sekret')); assert.notEqual(log.key,'svc');
 });
-test('handler maps STRATZ HTTP errors and GraphQL errors to 502 no-store without leaking token', async () => {
-  for (const f of [async()=>({ok:false,status:403,json:async()=>({})}),async()=>({ok:true,status:200,json:async()=>({errors:[{message:'sekret boom'}]})})]) {
-    const {res} = await call({hero:'1'},{fetcher:f});
-    assert.equal(res.statusCode,502); assert.ok(res.body.error); assert.equal(res.headers['Cache-Control'],'no-store');
-    assert.ok(!JSON.stringify(res.body).includes('sekret'));
+test('handler answers 404 cacheable when there is no row', async () => {
+  for (const data of [null]) {
+    const {res} = await call('/api/stratz?hero=1',{data});
+    assert.equal(res.statusCode,404); assert.deepEqual(res.body,{error:'No STRATZ data yet'}); assert.equal(res.headers['Cache-Control'],'public, s-maxage=600'); assert.equal(res.headers['Retry-After'],'600');
   }
 });
-test('.vercelignore allows api/stratz.js', async () => {
-  assert.ok((await readFile('.vercelignore','utf8')).split('\n').map(l=>l.trim()).includes('!api/stratz.js'));
+test('handler maps Supabase errors and thrown errors to 502 no-store', async () => {
+  for (const o of [{data:null,error:{message:'rls sekret'}},{data:null,error:'throw'}]) {
+    const {res} = await call('/api/stratz?hero=1',o);
+    assert.equal(res.statusCode,502); assert.equal(res.headers['Cache-Control'],'no-store'); assert.ok(!JSON.stringify(res.body).includes('sekret'));
+  }
+});
+test('.vercelignore allows the reader and the refresh job', async () => {
+  const lines = (await readFile('.vercelignore','utf8')).split('\n').map(l=>l.trim());
+  assert.ok(lines.includes('!api/stratz.js')); assert.ok(lines.includes('!api/stratz-refresh.js'));
 });
 
 test('loadStratz fetches, caches for 12h, refetches after, throws on non-OK', async () => {
@@ -136,19 +146,6 @@ import * as api2 from '../api/stratz.js';
 const resOf=()=>({statusCode:0,headers:{},body:null,status(c){this.statusCode=c;return this;},setHeader(k,v){this.headers[k.toLowerCase()]=v;},json(b){this.body=b;return this;}});
 const okFetch=async()=>({ok:true,status:200,json:async()=>({data:{heroStats:{heroVsHeroMatchup:{advantage:[{heroId:1,vs:[{heroId2:2,matchCount:100,winsAverage:0.5,synergy:1}],with:[]}]}}}})});
 
-test('review: only canonical, real hero ids reach STRATZ',async()=>{
- let calls=0;const h=api2.createHandler({fetcher:async(...a)=>{calls++;return okFetch(...a);},env:{STRATZ_API_TOKEN:'t'}});
- for(const url of ['/api/stratz?hero=01','/api/stratz?hero=1&x=1','/api/stratz?hero=250','/api/stratz?hero=24','/api/stratz?hero=1&','/api/stratz?&hero=1','/api/stratz?hero=1&&&','/api/stratz?%68ero=1','/api/stratz?hero=%31']){const r=resOf();await h({url},r);assert.equal(r.statusCode,400,url);}
- const r=resOf();await h({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,200);assert.equal(calls,1);
-});
-test('review: after a STRATZ rate limit the function stops calling STRATZ for a while; no data is a cacheable 404',async()=>{
- let calls=0;const limited=api2.createHandler({fetcher:async()=>{calls++;return {ok:false,status:429,json:async()=>({})};},env:{STRATZ_API_TOKEN:'t'}});
- let r=resOf();await limited({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,502);assert.ok(r.headers['retry-after']);
- r=resOf();await limited({url:'/api/stratz?hero=2'},r);assert.equal(r.statusCode,502);assert.equal(calls,1,'cooling down: STRATZ not called again');
- const empty=api2.createHandler({fetcher:async()=>({ok:true,status:200,json:async()=>({data:{heroStats:{heroVsHeroMatchup:{advantage:[]}}}})}),env:{STRATZ_API_TOKEN:'t'}});
- r=resOf();await empty({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,404);assert.match(r.headers['cache-control'],/s-maxage=\d+/);
- const none=api2.createHandler({env:{}});r=resOf();await none({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,503);assert.match(r.headers['cache-control'],/s-maxage=\d+/);
-});
 test('review: OpenDota matchup still counts for enemy picks without STRATZ rows',()=>{
  const draft=[act('enemyPick',2),act('enemyPick',3)];
  const matchups={1:[{hero_id:3,games_played:200,wins:140}]};
@@ -172,7 +169,7 @@ test('review: loadStratz stores only valid bodies and keeps at most 40 heroes ca
 const boardBuilt=await buildBoard({logLevel:'silent',plugins:[{name:'stratz-boundaries',enforce:'pre',load(id){
  const p=id.replaceAll('\\','/');
  if(p.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(p.endsWith('/web/data.js'))return 'export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async id=>({id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]});export const loadStratz=async id=>globalThis.__stratz[id];';
+ if(p.endsWith('/web/data.js'))return 'export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async id=>({id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]});export const loadStratz=async id=>globalThis.__stratzLoad?globalThis.__stratzLoad(id):globalThis.__stratz[id];';
 }}],build:{write:false,minify:false}});
 const boardCode=boardBuilt.output.find(o=>o.type==='chunk'&&o.isEntry).code,boardMarkup=await readFile('web/index.html','utf8');
 const settle=async()=>{for(let i=0;i<12;i++){await new Promise(r=>setTimeout(r,0));await new Promise(r=>setImmediate(r));}};
@@ -189,5 +186,23 @@ test('review: the visible suggestion list uses STRATZ and credits it once',async
   const text=w.document.getElementById('suggestions').textContent;
   assert.match(text,/Counters /,'a STRATZ counter reason is visible');
   assert.equal(w.document.querySelectorAll('.stratz-credit').length,1,'credit shown once');
+ }finally{w.close();}
+});
+
+test('board: a failed STRATZ load is retried after the backoff without another draft action',async()=>{
+ const n=engine2.CM_ORDER.findIndex((t,i)=>i>8&&t.team==='A'&&t.action==='Pick');
+ let our=0,en=0,ban=20;const actions=engine2.CM_ORDER.slice(0,n).map(({team,action})=>{const side=team==='A'?'our':'enemy';return {mode:side+action,heroId:action==='Pick'?(side==='our'?[1,4][our++]:[2,3][en++]):ban++};});
+ const w=new JSDOM(boardMarkup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
+ const timers=[];w.setTimeout=(fn,ms)=>{timers.push({fn,ms});return timers.length;};
+ w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{actions,firstPick:true,enemyIds:[]},profile:{}}));
+ w.__heroes=JSON.parse(await readFile('web/heroes.json','utf8'));
+ const strong={h:5,m:400,w:0.35,s:-9};const good={2:{heroId:2,vs:[strong],with:[]},3:{heroId:3,vs:[{...strong}],with:[]},1:{heroId:1,vs:[],with:[]},4:{heroId:4,vs:[],with:[]}};
+ let down=true;w.__stratzLoad=async id=>{if(down)throw new Error('down');return good[id];};
+ try{w.eval(boardCode);await settle();
+  assert.doesNotMatch(w.document.getElementById('suggestions').textContent,/Counters /);
+  down=false;for(const t of timers.filter(t=>t.ms>=60000))t.fn();await settle();
+  assert.match(w.document.getElementById('suggestions').textContent,/Counters /,'retried and rendered without a new pick');
  }finally{w.close();}
 });
