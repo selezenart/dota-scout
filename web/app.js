@@ -158,11 +158,18 @@ function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){co
  setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?20000:8000);
 }).catch(e=>{if(gen===generation)notice(e.message);});}}
 
+// Credit for STRATZ counter and synergy data, shown once whenever it is in use.
+function appendStratzCredit(){
+ const root=$('suggestions');if(!root||root.querySelector('.stratz-credit')||!state.actions.some(a=>stratz[a.heroId]))return;
+ const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';root.append(credit);
+}
+const stratzFailures=new Map();
 function requestStratz(id){
  if(demo||stratzRequested.has(String(id)))return;
  stratzRequested.add(String(id));
  void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;render();}})
-  .catch(()=>{setTimeout(()=>stratzRequested.delete(String(id)),60000);});
+  // Back off: 1, 2, 4… minutes, at most 15, so failures do not keep hitting STRATZ.
+  .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>stratzRequested.delete(String(id)),Math.min(900000,60000*2**(n-1)));});
 }
 function requestMatchup(id){
  if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
@@ -330,7 +337,7 @@ function renderView(){
 
  for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<5;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
 
- renderRecommendations(turn,write);renderHeroes();renderRoster();renderDraftEnemies();
+ renderRecommendations(turn,write);appendStratzCredit();renderHeroes();renderRoster();renderDraftEnemies();
 
  $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick');n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);}n.append(el('p','Traits: '+[...new Set(picks.flatMap(a=>heroes[a.heroId]?.roles||[]))].join(', ')));}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
@@ -494,9 +501,7 @@ function heroEvidence(heroId,sources,playerId){
  return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
 }
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();
- // Credit for STRATZ counter and synergy data, shown whenever it is in use.
- if(state.actions.some(a=>stratz[a.heroId])){const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';queueMicrotask(()=>root.append(credit));}if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));

@@ -120,6 +120,12 @@ export async function loadStratz(heroId,{fetcher=(...args)=>globalThis.fetch(...
  const response=await fetcher('/api/stratz?hero='+encodeURIComponent(heroId),{credentials:'same-origin',headers:{Accept:'application/json'}});
  if(!response.ok)throw new Error('STRATZ HTTP '+response.status);
  const value=await response.json();
- try{storage?.setItem(key,JSON.stringify({at:now(),value}));}catch{}
+ if(!Array.isArray(value?.vs)||!Array.isArray(value?.with))throw new Error('Invalid STRATZ response');
+ try{
+  storage?.setItem(key,JSON.stringify({at:now(),value}));
+  // Keep at most 40 heroes so the board's own storage never fills up.
+  const keys=[];for(let i=0;i<(storage?.length||0);i++){const k=storage.key(i);if(k?.startsWith('stratz-v1:'))keys.push(k);}
+  if(keys.length>40){const aged=keys.map(k=>{try{return [k,JSON.parse(storage.getItem(k))?.at||0];}catch{return [k,0];}}).sort((a,b)=>a[1]-b[1]);for(const [k] of aged.slice(0,keys.length-40))storage.removeItem(k);}
+ }catch{}
  return value;
 }

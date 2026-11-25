@@ -370,7 +370,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       let matchupGames = 0;
       {
         // STRATZ Divine+ data replaces the small OpenDota pro sample where it exists.
-        const matches = vsRows.length ? [] : draft.filter(a=>a.mode===opposing).map(a=>observed(heroId,+a.heroId,matchups)).filter(Boolean);
+        const covered = new Set(vsRows.map(x => x.pick));
+        const matches = draft.filter(a=>a.mode===opposing&&!covered.has(+a.heroId)).map(a=>observed(heroId,+a.heroId,matchups)).filter(Boolean);
         if (matches.length) {
           matchupGames = matches.reduce((sum,m)=>sum+m.games,0);
           components.matchup = matches.reduce((sum,m)=>sum+m.score,0)/matches.length;
@@ -395,6 +396,10 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
           sample:category==='history' && h ? {games:h.games,recent30d:h.recent,cup180d:h.cup,cup16h:h.currentCup} :
             category==='matchup'?matchupGames:category==='role' && !picking?roleSample:null
         }))};
+      // A ban resting only on STRATZ matchups belongs to no particular enemy player.
+      if (!picking && !components.history && !components.signature && !components.desired) {
+        rec.playerId = null; rec.playerName = null; for (const d of rec.details) d.playerId = null;
+      }
       if (!best || score>best.score) best = rec;
     }
     if (best) ranked.push(best);
