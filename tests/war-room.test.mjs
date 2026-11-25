@@ -35,7 +35,7 @@ test('ally without a linked account shows self-reported heroes instead of loadin
 test('private and failed accounts show their state without a zero win rate',async()=>{
  const closed={...profile('901',[]),sources:{profile:{status:'private'}}},failed={...profile('902',[]),sources:{profile:{status:'error'},heroes:{status:'error'}}};
  const h=await board({state:{enemyIds:['901','902']},players:{901:closed,902:failed}});
- try{const text=h.q('player-rail').textContent;assert.match(text,/Closed account/);assert.match(text,/Stats unavailable/);assert.doesNotMatch(text,/0%/);}finally{h.w.close();}
+ try{const text=h.q('player-rail').textContent;assert.match(text,/Closed account/);assert.match(text,/Waiting for OpenDota…/);assert.doesNotMatch(text,/0%/); /* a failed load is retried before it reads 'Stats unavailable' */}finally{h.w.close();}
 });
 test('a failed optional comfort matchup does not show the draft-wide retry',async()=>{
  const h=await board({state:{roster:[{id:'ally',displayName:'Ally',signatureHeroes:[1]}]},request:async()=>{throw Error('offline');}});
@@ -217,7 +217,7 @@ test('absence labels only appear when their sources succeeded',async()=>{
   const cup=id=>enemyCard(h,id).querySelector('.seat-cup').textContent,ban=id=>enemyCard(h,id).querySelector('.seat-ban').textContent;
   assert.equal(cup('900'),'Stats unavailable');assert.match(ban('900'),/Terrorblade/);
   assert.equal(ban('901'),'Stats unavailable');
-  assert.equal(cup('902'),'Stats unavailable');assert.equal(ban('902'),'Stats unavailable');
+  assert.equal(cup('902'),'Waiting for OpenDota…');assert.equal(ban('902'),'Waiting for OpenDota…'); /* whole load failed: retry pending */
   assert.equal(cup('903'),'Closed account');assert.equal(ban('903'),'Closed account');
   assert.equal(cup('904'),'Loading…');assert.equal(ban('904'),'Loading…');
   assert.equal(h.q('player-rail').querySelector('.seat-card.is-ally .seat-cup').textContent,'No recent cups');
