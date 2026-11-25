@@ -5116,3 +5116,11 @@ body:has(#identity-download:not([hidden])) {min-height:100vh;background-repeat:n
 .rec-row.rec-tag-team.rec-tag-meta{box-shadow:inset 3px 0 0 var(--ally),inset 6px 0 0 var(--pick)}
 .rec-row.rec-tag-counter.rec-tag-meta{box-shadow:inset 3px 0 0 var(--enemy),inset 6px 0 0 var(--pick)}
 #draft-view .rec-row.rec-all-three.rec-tag-team.rec-tag-counter.rec-tag-meta{box-shadow:inset 0 0 0 2px var(--accent);background:linear-gradient(90deg,color-mix(in srgb, var(--accent) 13%, transparent),transparent 60%)}
+
+.stratz-credit{display:inline-block;margin-top:8px;font-size:var(--text-xs);color:var(--muted);text-decoration:none}
+.stratz-credit:hover{color:var(--brass);text-decoration:underline}
+.review-notes{list-style:none;margin:0 0 10px;padding:0 0 0 12px;font-size:var(--text-sm);line-height:1.4}
+.review-notes li{padding-left:10px;border-left:2px solid var(--line)}
+.review-note-warn{color:var(--enemy);border-left-color:var(--enemy)!important}
+.review-note-good{color:var(--ally);border-left-color:var(--ally)!important}
+.review-note-info{color:var(--muted)}

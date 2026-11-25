@@ -46,6 +46,8 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
   const state = statuses.includes('fetching') || !statuses.length && !hasData ? 'loading'
     : sources.profile?.status === 'private' ? 'closed'
     : hasData ? 'ready'
+    // Rate-limited or about to be retried: not a final failure.
+    : Object.values(sources).some(s => s?.status === 'waiting' || s?.status === 'error' && (s.rateLimited || s.retrying)) ? 'waiting'
     : statuses.includes('error') ? 'error' : 'closed';
   const topHeroes = heroRows.filter(h => +h.games > 0)
     .map(h => ({heroId: +h.hero_id, games: +h.games, wins: h.win == null ? null : Math.max(0, +h.win || 0)}))
@@ -239,7 +241,54 @@ export function diverseTop(ranked = [], limit = 8, perTag = 2) {
   }
   return ranked.filter(r => chosen.has(r));
 }
-export function recommend({heroes = [],draft = [],allies = [],opponents = [],matchups = {},firstPick = true,now = Date.now(),mode} = {}) {
+// STRATZ rows for `heroId` from the matchup lists of already-picked heroes.
+function stratzRows(stratz, picks, heroId, list) {
+  return picks.map(a => ({pick: +a.heroId, row: array(stratz?.[+a.heroId]?.[list]).find(r => +r.h === heroId && +r.m >= 50)})).filter(x => x.row);
+}
+// One STRATZ row from H's point of view: H's own list first, else the other
+// hero's list (for matchups the advantage and win rate are flipped).
+function stratzPair(stratz, heroId, otherId, list) {
+  const usable = r => +r?.h === otherId && +r.m >= 50 && Number.isFinite(+r.w) && Number.isFinite(+r.s);
+  const own = array(stratz?.[heroId]?.[list]).find(usable);
+  if (own) return {other: otherId, m: +own.m, w: +own.w, s: +own.s};
+  const back = array(stratz?.[otherId]?.[list]).find(r => +r?.h === heroId && +r.m >= 50 && Number.isFinite(+r.w) && Number.isFinite(+r.s));
+  if (!back) return null;
+  return list === 'vs' ? {other: otherId, m: +back.m, w: 1 - +back.w, s: -back.s} : {other: otherId, m: +back.m, w: +back.w, s: +back.s};
+}
+// End-of-draft review: which picked hero plays into a counter or a weak pair,
+// and which ones are strong, from STRATZ Divine+ data.
+export function reviewLineup({draft = [], stratz = {}, heroes = []} = {}) {
+  // The app keeps heroes as an object keyed by id; tests may pass a list.
+  const pool = Array.isArray(heroes) ? heroes : Object.values(heroes || {});
+  const names = new Map(pool.map(h => [+h.id, h.localized_name]));
+  const nameOf = id => names.get(+id) || String(id);
+  const signed = s => (s >= 0 ? '+' : '') + s.toFixed(1);
+  const side = mode => {
+    const picks = draft.filter(a => a.mode === mode + 'Pick').map(a => +a.heroId);
+    const opponents = draft.filter(a => a.mode === (mode === 'our' ? 'enemy' : 'our') + 'Pick').map(a => +a.heroId);
+    let total = 0, pairs = 0;
+    const list = picks.map(heroId => {
+      const vs = opponents.map(e => stratzPair(stratz, heroId, e, 'vs')).filter(Boolean);
+      const mates = picks.filter(t => t !== heroId).map(t => stratzPair(stratz, heroId, t, 'with')).filter(Boolean);
+      for (const row of vs) { total += row.s; pairs++; }
+      const notes = [];
+      const byS = rows => [...rows].sort((a, b) => a.s - b.s);
+      const hard = byS(vs)[0], strong = byS(vs).at(-1), weak = byS(mates)[0], good = byS(mates).at(-1);
+      const wins = row => `wins ${Math.round(100 * row.w)}% (${row.m} games)`;
+      if (hard && hard.s <= -2) notes.push({text: `Hard time vs ${nameOf(hard.other)}: ${wins(hard)}`, tone: 'warn'});
+      if (strong && strong.s >= 2) notes.push({text: `Strong vs ${nameOf(strong.other)}: ${wins(strong)}`, tone: 'good'});
+      if (weak && weak.s <= -2) notes.push({text: `Weak pair with ${nameOf(weak.other)}: ${signed(weak.s)}`, tone: 'warn'});
+      if (good && good.s >= 2) notes.push({text: `Pairs well with ${nameOf(good.other)}: ${signed(good.s)}`, tone: 'good'});
+      if (!notes.length) notes.push(vs.length || mates.length
+        ? {text: 'No strong matchups or pairs (Divine+)', tone: 'info'}
+        : {text: 'No STRATZ data for this hero', tone: 'info'});
+      return {heroId, notes};
+    });
+    return {edge: pairs ? Math.round(total / pairs * 10) / 10 : null, pairs, heroes: list};
+  };
+  return {our: side('our'), enemy: side('enemy')};
+}
+export function recommend({heroes = [],draft = [],allies = [],opponents = [],matchups = {},stratz = {},firstPick = true,now = Date.now(),mode} = {}) {
   if (!nextTurn(draft,firstPick)) return [];
   mode ||= nextTurn(draft,firstPick).mode;
   const picking = mode.endsWith('Pick');
@@ -297,6 +346,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   const available = remaining.filter(p=>!p.unknown);
   const slots = [...available];
   if (picking && remaining.some(p=>p.unknown)) slots.push(null);
+  // Bans can rest on matchup evidence alone, even with no known players.
+  if (!picking && !slots.length) slots.push(null);
   const penalties = new Map(slots.map(p => [p, picking ? reservationPenalties(p,available,open) : {}]));
   const covered = new Set(picked.flatMap(a => array(byId.get(+a.heroId)?.roles)));
   const totals = metaTotals(pool);
@@ -304,19 +355,37 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   for (const hero of pool) {
     const heroId = +hero.id;
     if (taken.has(heroId)) continue;
-    // Meta only shapes picks; ban suggestions stay evidence-based.
-    const meta = picking ? heroMeta(hero, totals) : null, metaReason = meta ? metaText(meta) : '';
+    // Meta shapes picks, and gives every ban turn suggestions: heroes strong in Divine+ and pro games.
+    const meta = heroMeta(hero, totals), metaReason = meta ? metaText(meta) : '';
+    // Divine+ counters (vs the opposing picks) and synergy (with this side's picks).
+    const nameOf = id => byId.get(id)?.localized_name || String(id);
+    const vsRows = stratzRows(stratz, draft.filter(a => a.mode === opposing), heroId, 'vs');
+    const withRows = stratzRows(stratz, draft.filter(a => a.mode === team), heroId, 'with');
+    const edge = vsRows.length ? vsRows.reduce((sum, x) => sum - x.row.s, 0) / vsRows.length : 0;
+    const syn = withRows.length ? withRows.reduce((sum, x) => sum + x.row.s, 0) / withRows.length : 0;
+    const stratzCounter = +clamp(edge * 0.5, -5, 5).toFixed(2), synergy = +clamp(syn * 0.35, -3.5, 3.5).toFixed(2);
+    const stratzReasons = [];
+    const byEdge = [...vsRows].sort((a, b) => a.row.s - b.row.s);
+    const winsVs = x => Math.round(100 * (1 - x.row.w));
+    if (byEdge.length && -byEdge[0].row.s >= 2) stratzReasons.push(`Counters ${nameOf(byEdge[0].pick)}: wins ${winsVs(byEdge[0])}% (${byEdge[0].row.m} games, Divine+)`);
+    const worst = byEdge.at(-1);
+    if (worst && -worst.row.s <= -2) stratzReasons.push(`Weak vs ${nameOf(worst.pick)}: wins ${winsVs(worst)}% (${worst.row.m} games)`);
+    const partner = [...withRows].sort((a, b) => b.row.s - a.row.s)[0];
+    if (partner && partner.row.s >= 2) stratzReasons.push(`Pairs with ${nameOf(partner.pick)}: +${partner.row.s} (Divine+)`);
     let best;
     for (const player of slots) {
       const s = player?.selfReport, h = histories.get(player?.id)?.get(heroId);
       if (s?.avoidHeroes.includes(heroId)) continue;
       const components = {history:experience(h),signature:s?.signatureHeroes.includes(heroId)?20:0,
-        desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0,meta:meta?.score ?? 0};
+        desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0,meta:meta?.score ?? 0,stratzCounter,synergy};
       const evidence = [], reasons = [];
       if (experienceText(h)) evidence.push(experienceText(h));
       if (components.signature) reasons.push('Reported signature hero');
       if (s?.desiredHeroes.includes(heroId)) reasons.push(components.desired ? 'Wants to play' : 'Also wants to play (signature already counted)');
-      if (!picking && !components.history && !components.signature && !components.desired) continue;
+      const metaBan = !picking && (meta?.score ?? 0) >= 1;
+      if (!picking && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2 && !metaBan) continue;
+      reasons.push(...stratzReasons);
+      if (metaBan) reasons.push(metaReason);
       const slot = bestSlot(player,hero,open,penalties.get(player));
       let likelyPosition = null;
       let roleSample = 0;
@@ -345,31 +414,39 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       }
       let matchupGames = 0;
       {
-        const matches = draft.filter(a=>a.mode===opposing).map(a=>observed(heroId,+a.heroId,matchups)).filter(Boolean);
+        // STRATZ Divine+ data replaces the small OpenDota pro sample where it exists.
+        const covered = new Set(vsRows.map(x => x.pick));
+        const matches = draft.filter(a=>a.mode===opposing&&!covered.has(+a.heroId)).map(a=>observed(heroId,+a.heroId,matchups)).filter(Boolean);
         if (matches.length) {
           matchupGames = matches.reduce((sum,m)=>sum+m.games,0);
           components.matchup = matches.reduce((sum,m)=>sum+m.score,0)/matches.length;
           evidence.push('Observed matchup data for '+matches.length+' opposing picks ('+matchupGames+' games)');
         }
       }
-      if (!matchupGames && draft.some(a=>a.mode===opposing)) evidence.push('Observed matchup data unavailable');
+      if (!matchupGames && !vsRows.length && draft.some(a=>a.mode===opposing)) evidence.push('Observed matchup data unavailable');
       if (picking && !array(hero.roles).length) evidence.push('Composition tags unavailable');
       const score = +Object.values(components).reduce((sum,x)=>sum+x,0).toFixed(2);
       // Category tags for our picks: the team's own heroes, counters to their picks, current meta.
       const tags = mode !== 'ourPick' ? [] : [
         (components.signature > 0 || components.desired > 0 || components.history > 0) && 'team',
         // Counter needs a clear edge on enough games: small pro samples are noisy.
-        components.matchup >= 1 && matchupGames >= 30 && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
+        (components.matchup >= 1 && matchupGames >= 30 || components.stratzCounter >= 1.5) && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
       const rec = {heroId,score,reasons,tags,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
         details:Object.entries(components).map(([category,contribution]) => ({
           category,contribution,heroId,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,
           source:({history:experienceText(h),signature:'Teammate profile',desired:'Teammate profile',
             role:picking?'Declared role and OpenDota hero roles':'Inferred from observed lane',
             composition:'OpenDota hero roles',matchup:matchupGames?'OpenDota hero matchups':null,
-            deny:reasons.find(r=>r.startsWith('Denies ')),meta:meta?'OpenDota hero stats (Divine+ and pro)':null})[category] || null,
+            deny:reasons.find(r=>r.startsWith('Denies ')),meta:meta?'OpenDota hero stats (Divine+ and pro)':null,stratzCounter:stratzCounter?'STRATZ Divine+ matchups':null,synergy:synergy?'STRATZ Divine+ matchups':null})[category] || null,
           sample:category==='history' && h ? {games:h.games,recent30d:h.recent,cup180d:h.cup,cup16h:h.currentCup} :
             category==='matchup'?matchupGames:category==='role' && !picking?roleSample:null
         }))};
+      // A ban resting only on STRATZ matchups belongs to no particular enemy player.
+      if (!picking && !components.history && !components.signature && !components.desired) {
+        rec.playerId = null; rec.playerName = null; for (const d of rec.details) d.playerId = null;
+      }
+      // A ban kept only by the meta must still come out positive (e.g. not when it is weak vs our picks).
+      if (metaBan && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2 && score <= 0) continue;
       if (!best || score>best.score) best = rec;
     }
     if (best) ranked.push(best);

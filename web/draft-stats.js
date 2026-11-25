@@ -19,7 +19,7 @@ export function sourceStatus(player={},keys=[]){
  const sources=player.sources||{};
  if(!Object.keys(sources).length)return 'ok';
  const statuses=keys.map(key=>sources[key]?.status);
- if(statuses.includes('fetching'))return 'loading';
+ if(statuses.includes('fetching')||statuses.includes('waiting'))return 'loading';
  return statuses.every(status=>status==='updated'||status==='empty')?'ok':'error';
 }
 
