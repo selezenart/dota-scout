@@ -237,6 +237,18 @@ test('reviewLineup: heroes given as an object keyed by id use localized_name',()
  const r=engine2.reviewLineup({draft,stratz,heroes:byId});
  assert.equal(notesOf(r,'our',1)[0].text,'Hard time vs Axe: wins 40% (100 games)');
 });
+test('reviewLineup: rows with missing or non-numeric s or w are ignored, never NaN',()=>{
+ const draft=[act('ourPick',1),act('ourPick',2),act('enemyPick',3),act('enemyPick',4),act('enemyPick',5)];
+ const stratz={1:{heroId:1,vs:[{h:3,m:100,w:0.5},row(4,100,0.5,'x'),row(5,100,'y',3),row(5,100,0.5,2)],with:[{h:2,m:100,w:0.5}]},
+  3:{heroId:3,vs:[{h:1,m:100,w:0.5}],with:[]}};
+ const r=rl({draft,stratz});
+ assert.equal(r.our.pairs,1);assert.equal(r.our.edge,2);
+ const all=JSON.stringify(r);assert.doesNotMatch(all,/NaN/);
+ for(const side of ['our','enemy'])for(const h of r[side].heroes)for(const n of h.notes)assert.doesNotMatch(n.text,/NaN/);
+ const none=rl({draft:[act('ourPick',1),act('enemyPick',3)],stratz:{1:{heroId:1,vs:[{h:3,m:100,w:0.5}],with:[]},3:{heroId:3,vs:[row(1,100,0.5,'x')],with:[]}}});
+ assert.equal(none.our.edge,null);assert.equal(none.our.pairs,0);assert.equal(none.enemy.edge,null);
+ assert.deepEqual(notesOf(none,'our',1),[{text:'No STRATZ data for this hero',tone:'info'}]);
+});
 test('reviewLineup: empty input, bans ignored, names fall back to ids, roles unused',()=>{
  const e=engine2.reviewLineup();assert.deepEqual(e,{our:{edge:null,pairs:0,heroes:[]},enemy:{edge:null,pairs:0,heroes:[]}});
  const draft=[act('ourPick',1),act('enemyPick',77),act('enemyBan',3),act('ourBan',4)];

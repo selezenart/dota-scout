@@ -248,9 +248,10 @@ function stratzRows(stratz, picks, heroId, list) {
 // One STRATZ row from H's point of view: H's own list first, else the other
 // hero's list (for matchups the advantage and win rate are flipped).
 function stratzPair(stratz, heroId, otherId, list) {
-  const own = array(stratz?.[heroId]?.[list]).find(r => +r.h === otherId && +r.m >= 50);
+  const usable = r => +r?.h === otherId && +r.m >= 50 && Number.isFinite(+r.w) && Number.isFinite(+r.s);
+  const own = array(stratz?.[heroId]?.[list]).find(usable);
   if (own) return {other: otherId, m: +own.m, w: +own.w, s: +own.s};
-  const back = array(stratz?.[otherId]?.[list]).find(r => +r.h === heroId && +r.m >= 50);
+  const back = array(stratz?.[otherId]?.[list]).find(r => +r?.h === heroId && +r.m >= 50 && Number.isFinite(+r.w) && Number.isFinite(+r.s));
   if (!back) return null;
   return list === 'vs' ? {other: otherId, m: +back.m, w: 1 - +back.w, s: -back.s} : {other: otherId, m: +back.m, w: +back.w, s: +back.s};
 }
