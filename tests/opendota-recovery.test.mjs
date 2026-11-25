@@ -112,5 +112,30 @@ test('retries stop after three attempts and the card shows Stats unavailable',as
  const w=await boot(async(id,progress)=>{calls.push(id);const p=failing({status:'error',message:'x'});progress(p);return p;},{timers:true});
  // Retries chain through timers: wait (bounded) for the fourth attempt before asserting.
  try{for(let i=0;i<60&&calls.length<4;i++)await tick(5);for(let i=0;i<5;i++)await tick(5);
-  assert.equal(calls.length,4);assert.equal(w.document.querySelector('.draft-enemy-meta').textContent,'Stats unavailable');}finally{w.close();}
+  assert.equal(calls.length,4);assert.equal(w.document.querySelector('.draft-enemy-meta').textContent,'Stats unavailable');
+  const seats=[...w.document.querySelectorAll('.seat-state')].map(n=>n.textContent);assert.ok(seats.length,'seat cards render');assert.ok(seats.includes('Stats unavailable'),'seat card ends at Stats unavailable');}finally{w.close();}
+});
+
+// Review follow-ups
+test('a storage that cannot be written still enforces the per-tab budget',async()=>{
+ const fetched=[],sleeper=parked(),m=memory();m.setItem=()=>{throw Error('QuotaExceededError');};
+ const q=new PublicQueue({fetcher:async u=>{fetched.push(u);return reply(200);},now:()=>1000,sleep:sleeper.sleep,storage:m,limit:3,windowMs:60000});
+ for(let i=1;i<=6;i++)void q.request('/players/'+i+'/heroes');
+ for(let i=0;i<5;i++)await tick();
+ assert.equal(fetched.length,3);
+});
+test('a huge Retry-After is capped at one minute',async()=>{
+ const sleeper=instant();let first=true;
+ const q=new PublicQueue({fetcher:async()=>first?(first=false,reply(429,'3600')):reply(200),now:()=>1000,sleep:sleeper.sleep,storage:memory()});
+ await q.request('/players/1/heroes');
+ assert.deepEqual(sleeper.calls,[60000]);
+});
+test('a 429 in one tab pauses the other same-origin tabs too',async()=>{
+ const shared=memory(),fetchedB=[],sleepA=instant(),sleepB=parked();let first=true;
+ const a=new PublicQueue({fetcher:async()=>first?(first=false,reply(429)):reply(200),now:()=>1000,sleep:sleepA.sleep,storage:shared});
+ await a.request('/players/1/heroes');
+ const b=new PublicQueue({fetcher:async u=>{fetchedB.push(u);return reply(200);},now:()=>2000,sleep:sleepB.sleep,storage:shared});
+ void b.request('/players/2/heroes');await tick();
+ assert.equal(fetchedB.length,0,'tab B waits out tab A\'s pause');
+ assert.deepEqual(sleepB.calls,[14000]);
 });

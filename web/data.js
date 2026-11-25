@@ -2,7 +2,7 @@ import snapshot from './heroes.json' with {type:'json'};
 const BASE='https://api.opendota.com/api';
 export const PRIORITY={constants:0,profile:1,recent:2,heroes:3,history:4,matchups:5};
 export class PublicQueue {
- constructor({fetcher=(...args)=>globalThis.fetch(...args),now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),storage=globalThis.localStorage,limit=45,windowMs=60000,timeout=12000}={}){Object.assign(this,{fetcher,now,sleep,storage,limit,windowMs,timeout});this.jobs=[];this.running=0;this.starts=[];this.inflight=new Map();this.cache=new Map();this.sourceInfo=new Map();this.waking=false;this.pause=null;}
+ constructor({fetcher=(...args)=>globalThis.fetch(...args),now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),storage=globalThis.localStorage,limit=45,windowMs=60000,timeout=12000}={}){Object.assign(this,{fetcher,now,sleep,storage,limit,windowMs,timeout});this.jobs=[];this.running=0;this.starts=[];this.inflight=new Map();this.cache=new Map();this.sourceInfo=new Map();this.waking=false;this.pause=null;this.localOnly=false;this.sharedPauseSeen=0;}
  getSourceInfo(path){return this.sourceInfo.get(path);}
  request(path,{priority=3,ttl=300000,transform,onWait}={}){
   if(!/^\/(?:constants\/heroes|heroStats|matches\/\d+|players\/\d+(?:\/(?:heroes|recentMatches|matches))?|heroes\/\d+\/matchups)(?:\?|$)/.test(path)||/[#]/.test(path))return Promise.reject(new Error('Unsupported public endpoint'));
@@ -24,9 +24,13 @@ export class PublicQueue {
     job.onWait?.();
     const retry=response.headers.get('Retry-After');
     const asked=retry!==null&&retry!==''&&Number.isFinite(Number(retry))?Number(retry)*1000:Date.parse(retry)-this.now();
-    const delay=Math.max(1000,Number.isFinite(asked)?asked:15000);
+    // Capped: a far-off Retry-After must not freeze every request for long.
+    const delay=Math.min(60000,Math.max(1000,Number.isFinite(asked)?asked:15000));
     // One shared pause: every waiting job resumes when it ends.
     this.pause=this.sleep(delay).then(()=>{});
+    // Other same-origin tabs read this and wait too.
+    const until=this.now()+delay;this.sharedPauseSeen=until;
+    try{this.storage?.setItem('od-public-pause-v1',String(until));}catch{}
     if(attempt<2)continue;
     const error=new Error('OpenDota rate limit reached');error.rateLimited=true;throw error;
    }
@@ -43,12 +47,15 @@ export class PublicQueue {
   while(true){
    if(this.pause){const pause=this.pause;await pause;if(this.pause===pause)this.pause=null;continue;}
    const now=this.now();
+   let until=0;try{until=Number(this.storage?.getItem('od-public-pause-v1'))||0;}catch{}
+   if(until>now&&until!==this.sharedPauseSeen){this.sharedPauseSeen=until;await this.sleep(until-now);continue;}
    let list=this.starts,shared=false;
-   try{if(this.storage){const saved=JSON.parse(this.storage.getItem(key)||'[]');list=Array.isArray(saved)?saved:[];shared=true;}}catch{list=this.starts;shared=false;}
+   // A storage that cannot be written (full, private mode) falls back to this tab's own budget.
+   if(!this.localOnly)try{if(this.storage){const saved=JSON.parse(this.storage.getItem(key)||'[]');list=Array.isArray(saved)?saved:[];shared=true;}}catch{list=this.starts;shared=false;}
    list=list.filter(t=>Number.isFinite(t)&&now-t<this.windowMs);
    if(list.length<this.limit){
     list.push(now);this.starts=list;
-    if(shared)try{this.storage.setItem(key,JSON.stringify(list));}catch{}
+    if(shared)try{this.storage.setItem(key,JSON.stringify(list));}catch{this.localOnly=true;}
     return;
    }
    await this.sleep(Math.max(1,this.windowMs-(now-Math.min(...list))));

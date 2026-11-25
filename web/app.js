@@ -152,7 +152,8 @@ function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){co
  scoutRetries.set(gen+':'+key,tries+1);
  const sources=Object.fromEntries(Object.entries(p.sources).map(([k,s])=>[k,s?.status==='error'?{...s,retrying:true}:s]));
  observations.set(key,{...p,sources});render();
- setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);scout([key]);},failed.some(s=>s.rateLimited)?20000:8000);
+ // Re-scout through refreshScouting so a player removed meanwhile is not fetched again.
+ setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?20000:8000);
 }).catch(e=>{if(gen===generation)notice(e.message);});}}
 
 function requestMatchup(id){
