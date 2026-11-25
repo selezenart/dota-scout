@@ -245,6 +245,49 @@ export function diverseTop(ranked = [], limit = 8, perTag = 2) {
 function stratzRows(stratz, picks, heroId, list) {
   return picks.map(a => ({pick: +a.heroId, row: array(stratz?.[+a.heroId]?.[list]).find(r => +r.h === heroId && +r.m >= 50)})).filter(x => x.row);
 }
+// One STRATZ row from H's point of view: H's own list first, else the other
+// hero's list (for matchups the advantage and win rate are flipped).
+function stratzPair(stratz, heroId, otherId, list) {
+  const usable = r => +r?.h === otherId && +r.m >= 50 && Number.isFinite(+r.w) && Number.isFinite(+r.s);
+  const own = array(stratz?.[heroId]?.[list]).find(usable);
+  if (own) return {other: otherId, m: +own.m, w: +own.w, s: +own.s};
+  const back = array(stratz?.[otherId]?.[list]).find(r => +r?.h === heroId && +r.m >= 50 && Number.isFinite(+r.w) && Number.isFinite(+r.s));
+  if (!back) return null;
+  return list === 'vs' ? {other: otherId, m: +back.m, w: 1 - +back.w, s: -back.s} : {other: otherId, m: +back.m, w: +back.w, s: +back.s};
+}
+// End-of-draft review: which picked hero plays into a counter or a weak pair,
+// and which ones are strong, from STRATZ Divine+ data.
+export function reviewLineup({draft = [], stratz = {}, heroes = []} = {}) {
+  // The app keeps heroes as an object keyed by id; tests may pass a list.
+  const pool = Array.isArray(heroes) ? heroes : Object.values(heroes || {});
+  const names = new Map(pool.map(h => [+h.id, h.localized_name]));
+  const nameOf = id => names.get(+id) || String(id);
+  const signed = s => (s >= 0 ? '+' : '') + s.toFixed(1);
+  const side = mode => {
+    const picks = draft.filter(a => a.mode === mode + 'Pick').map(a => +a.heroId);
+    const opponents = draft.filter(a => a.mode === (mode === 'our' ? 'enemy' : 'our') + 'Pick').map(a => +a.heroId);
+    let total = 0, pairs = 0;
+    const list = picks.map(heroId => {
+      const vs = opponents.map(e => stratzPair(stratz, heroId, e, 'vs')).filter(Boolean);
+      const mates = picks.filter(t => t !== heroId).map(t => stratzPair(stratz, heroId, t, 'with')).filter(Boolean);
+      for (const row of vs) { total += row.s; pairs++; }
+      const notes = [];
+      const byS = rows => [...rows].sort((a, b) => a.s - b.s);
+      const hard = byS(vs)[0], strong = byS(vs).at(-1), weak = byS(mates)[0], good = byS(mates).at(-1);
+      const wins = row => `wins ${Math.round(100 * row.w)}% (${row.m} games)`;
+      if (hard && hard.s <= -2) notes.push({text: `Hard time vs ${nameOf(hard.other)}: ${wins(hard)}`, tone: 'warn'});
+      if (strong && strong.s >= 2) notes.push({text: `Strong vs ${nameOf(strong.other)}: ${wins(strong)}`, tone: 'good'});
+      if (weak && weak.s <= -2) notes.push({text: `Weak pair with ${nameOf(weak.other)}: ${signed(weak.s)}`, tone: 'warn'});
+      if (good && good.s >= 2) notes.push({text: `Pairs well with ${nameOf(good.other)}: ${signed(good.s)}`, tone: 'good'});
+      if (!notes.length) notes.push(vs.length || mates.length
+        ? {text: 'No strong matchups or pairs (Divine+)', tone: 'info'}
+        : {text: 'No STRATZ data for this hero', tone: 'info'});
+      return {heroId, notes};
+    });
+    return {edge: pairs ? Math.round(total / pairs * 10) / 10 : null, pairs, heroes: list};
+  };
+  return {our: side('our'), enemy: side('enemy')};
+}
 export function recommend({heroes = [],draft = [],allies = [],opponents = [],matchups = {},stratz = {},firstPick = true,now = Date.now(),mode} = {}) {
   if (!nextTurn(draft,firstPick)) return [];
   mode ||= nextTurn(draft,firstPick).mode;
