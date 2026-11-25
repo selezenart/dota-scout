@@ -138,12 +138,15 @@ const okFetch=async()=>({ok:true,status:200,json:async()=>({data:{heroStats:{her
 
 test('review: only canonical, real hero ids reach STRATZ',async()=>{
  let calls=0;const h=api2.createHandler({fetcher:async(...a)=>{calls++;return okFetch(...a);},env:{STRATZ_API_TOKEN:'t'}});
- for(const url of ['/api/stratz?hero=01','/api/stratz?hero=1&x=1','/api/stratz?hero=250','/api/stratz?hero=24']){const r=resOf();await h({url},r);assert.equal(r.statusCode,400,url);}
+ for(const url of ['/api/stratz?hero=01','/api/stratz?hero=1&x=1','/api/stratz?hero=250','/api/stratz?hero=24','/api/stratz?hero=1&','/api/stratz?&hero=1','/api/stratz?hero=1&&&','/api/stratz?%68ero=1','/api/stratz?hero=%31']){const r=resOf();await h({url},r);assert.equal(r.statusCode,400,url);}
  const r=resOf();await h({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,200);assert.equal(calls,1);
 });
-test('review: STRATZ rate limits and missing config are cached briefly with Retry-After',async()=>{
- const limited=api2.createHandler({fetcher:async()=>({ok:false,status:429,json:async()=>({})}),env:{STRATZ_API_TOKEN:'t'}});
- let r=resOf();await limited({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,502);assert.match(r.headers['cache-control'],/s-maxage=\d+/);assert.ok(r.headers['retry-after']);
+test('review: after a STRATZ rate limit the function stops calling STRATZ for a while; no data is a cacheable 404',async()=>{
+ let calls=0;const limited=api2.createHandler({fetcher:async()=>{calls++;return {ok:false,status:429,json:async()=>({})};},env:{STRATZ_API_TOKEN:'t'}});
+ let r=resOf();await limited({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,502);assert.ok(r.headers['retry-after']);
+ r=resOf();await limited({url:'/api/stratz?hero=2'},r);assert.equal(r.statusCode,502);assert.equal(calls,1,'cooling down: STRATZ not called again');
+ const empty=api2.createHandler({fetcher:async()=>({ok:true,status:200,json:async()=>({data:{heroStats:{heroVsHeroMatchup:{advantage:[]}}}})}),env:{STRATZ_API_TOKEN:'t'}});
+ r=resOf();await empty({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,404);assert.match(r.headers['cache-control'],/s-maxage=\d+/);
  const none=api2.createHandler({env:{}});r=resOf();await none({url:'/api/stratz?hero=1'},r);assert.equal(r.statusCode,503);assert.match(r.headers['cache-control'],/s-maxage=\d+/);
 });
 test('review: OpenDota matchup still counts for enemy picks without STRATZ rows',()=>{
