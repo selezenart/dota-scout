@@ -57,9 +57,19 @@ test('ban after picks combines STRATZ counter and meta; STRATZ-only heroes stay'
   const iCounter = h1.reasons.findIndex(r=>r.startsWith('Counters ')), iMeta = h1.reasons.findIndex(r=>r.startsWith('Meta: '));
   assert.ok(iCounter>=0 && iMeta>iCounter,'meta reason comes after STRATZ reasons');
   assert.equal(h3.components.meta,0.16);
-  assert.ok(!h3.reasons.some(r=>r.startsWith('Meta: ')) || h3.reasons.at(-1).startsWith('Meta: '));
+  assert.ok(!h3.reasons.some(r=>r.startsWith('Meta: ')),'meta 0.16 < 1 adds no Meta reason');
   assert.equal(h1.playerId,null);
   assert.ok(!ids(out).includes(4) && !ids(out).includes(6));
+});
+test('a meta-only ban is dropped when STRATZ says it is weak vs our picks (total score <= 0)',()=>{
+  const draft = [{mode:'ourPick',heroId:5}];
+  const neutral = {5:{heroId:5,vs:[],with:[]}};
+  const weakVs = {5:{heroId:5,vs:[row(2,100,0.6,6)],with:[]}};
+  const kept = ban('ourBan',{draft,stratz:neutral}).find(r=>r.heroId===2);
+  assert.ok(kept && kept.score>0,'meta-only hero 2 (1.16) is suggested with neutral STRATZ');
+  const out = ban('ourBan',{draft,stratz:weakVs});
+  assert.ok(!ids(out).includes(2),'stratzCounter -3 pushes total below 0, so it is dropped');
+  assert.ok(ids(out).includes(1),'the stronger meta hero stays');
 });
 test('pick ranking is unchanged by the ban-meta change',()=>{
   const out = recommend({heroes:pool,mode:'ourPick',now});

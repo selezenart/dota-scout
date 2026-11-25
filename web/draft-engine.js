@@ -445,6 +445,8 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       if (!picking && !components.history && !components.signature && !components.desired) {
         rec.playerId = null; rec.playerName = null; for (const d of rec.details) d.playerId = null;
       }
+      // A ban kept only by the meta must still come out positive (e.g. not when it is weak vs our picks).
+      if (metaBan && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2 && score <= 0) continue;
       if (!best || score>best.score) best = rec;
     }
     if (best) ranked.push(best);
