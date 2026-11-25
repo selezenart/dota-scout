@@ -17,16 +17,19 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function refreshStratz({
   fetcher = (...args) => globalThis.fetch(...args), createClient = supabaseClient,
-  env = process.env, sleep = wait, heroIds = allHeroIds(),
+  env = process.env, sleep = wait, heroIds = allHeroIds(), now = Date.now,
 } = {}) {
   const token = env.STRATZ_API_TOKEN;
   if (!token || !env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('STRATZ refresh is not configured');
   const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {auth: {persistSession: false, autoRefreshToken: false}});
   let stored = 0;
   const failed = [];
+  const start = now();
   for (let i = 0; i < heroIds.length; i += BATCH) {
     const ids = heroIds.slice(i, i + BATCH);
     if (i > 0) await sleep(1500);
+    // Stay inside the 300 s function limit: stop starting batches after 250 s.
+    if (now() - start >= 250000) { failed.push(...heroIds.slice(i)); break; }
     const query = `{ heroStats { ${ids.map(id => `h${id}: heroVsHeroMatchup(heroId: ${id}, bracketBasicIds: [DIVINE_IMMORTAL], take: 200) { ${FIELDS} }`).join(' ')} } }`;
     let json = null;
     try {

@@ -9,12 +9,12 @@ const ENV = {STRATZ_API_TOKEN:'sekret-token',SUPABASE_URL:'https://db.example',S
 const entry = id => ({advantage:[{heroId:id,vs:[{heroId2:id+1,matchCount:100,winsAverage:0.5123,synergy:1.26}],with:[{heroId2:id+2,matchCount:50,winsAverage:0.4,synergy:-2.26}]}]});
 const idsIn = body => [...JSON.parse(body).query.matchAll(/h(\d+):\s*heroVsHeroMatchup/g)].map(m=>+m[1]);
 const okBody = body => ({data:{heroStats:Object.fromEntries(idsIn(body).map(id=>['h'+id,entry(id)]))}});
-const setup = ({respond=async(u,init)=>({ok:true,status:200,json:async()=>okBody(init.body)}),upsertError=null,heroIds=[1,2,3,4,5,6,7,8,9,10,11,12],env=ENV}={}) => {
+const setup = ({respond=async(u,init)=>({ok:true,status:200,json:async()=>okBody(init.body)}),upsertError=null,heroIds=[1,2,3,4,5,6,7,8,9,10,11,12],env=ENV,now}={}) => {
   const fetches = [], upserts = [], events = [], clients = [];
   const fetcher = async (u,init) => { fetches.push({u,init}); events.push('fetch'); return respond(u,init,fetches.length); };
   const sleep = async ms => { events.push('sleep:'+ms); };
   const createClient = (url,key,opts) => { clients.push({url,key,opts}); return {from:table => ({upsert:async(rows,o) => { upserts.push({table,rows,o}); events.push('upsert'); return {error:typeof upsertError==='function'?upsertError(rows):upsertError}; }})}; };
-  const run = () => mod.refreshStratz({fetcher,createClient,env,sleep,...(heroIds===null?{}:{heroIds})});
+  const run = () => mod.refreshStratz({fetcher,createClient,env,sleep,...(now?{now}:{}),...(heroIds===null?{}:{heroIds})});
   return {run,fetches,upserts,events,clients};
 };
 const fakeRes = () => ({statusCode:200,headers:{},body:undefined,status(c){this.statusCode=c;return this;},setHeader(k,v){this.headers[k.toLowerCase()]=v;},json(b){this.body=b;return this;}});
@@ -70,6 +70,11 @@ test('refresh stops the whole run on STRATZ 403 or 429', async () => {
     const s = setup({respond:async(u,init,n)=>n===2?{ok:false,status,json:async()=>({})}:{ok:true,status:200,json:async()=>okBody(init.body)}});
     assert.deepEqual(await s.run(),{stored:5,failed:[6,7,8,9,10,11,12]}); assert.equal(s.fetches.length,2,String(status));
   }
+});
+test('refresh stops starting batches after 250 s and counts the rest as failed', async () => {
+  const times = [0,0,1000,250000]; let i = 0; const s = setup({now:()=>times[Math.min(i++,times.length-1)]});
+  assert.deepEqual(await s.run(),{stored:10,failed:[11,12]}); assert.equal(s.fetches.length,2);
+  assert.deepEqual(s.events,['fetch','upsert','sleep:1500','fetch','upsert','sleep:1500']);
 });
 test('refresh throws when nothing was stored and never leaks the token', async () => {
   const s = setup({respond:async()=>({ok:false,status:403,json:async()=>({})})});
