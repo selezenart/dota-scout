@@ -79,6 +79,8 @@ const storageKey=demo?'captain-demo-v1':'captain-practice-v1';
 
 let heroes=snapshot,state=demo?demoState():initialState(),profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {},backend,user,shared,teams=[],team,selected=null,pending=false,localControl=true,generation=0,polling=false,healthy=true,lastRoster=0;
 
+// STRATZ Divine+ counters/synergy per picked hero; hero-level, so kept across drafts.
+let stratz={},stratzRequested=new Set();
 let observations=new Map(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
 // Optional seat data: kept apart from `matchups`, which recommend() reads.
 let allyCounterMatchups={},focusedPlayer=null,suggestionCache={key:'',pick:new Set(),ban:new Set()};
@@ -156,6 +158,12 @@ function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){co
  setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?20000:8000);
 }).catch(e=>{if(gen===generation)notice(e.message);});}}
 
+function requestStratz(id){
+ if(demo||stratzRequested.has(String(id)))return;
+ stratzRequested.add(String(id));
+ void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;render();}})
+  .catch(()=>{setTimeout(()=>stratzRequested.delete(String(id)),60000);});
+}
 function requestMatchup(id){
  if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
  requestedMatchups.add(id);
@@ -191,7 +199,7 @@ function refreshScouting(){
  if(demo)return;
  const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
  scout([...(state.enemyIds||[]),...members.map(p=>p.steamAccountId||p.accountId)]);
- for(const action of state.actions.filter(a=>a.mode.endsWith('Pick')))requestMatchup(action.heroId);
+ for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){requestMatchup(action.heroId);requestStratz(action.heroId);}
 }
 
 let searchIndex=0,rankedIds=new Set();
@@ -407,9 +415,9 @@ function focusedHeroIds(taken){
 
 function suggestionSets(){
  const seats=[...roster(),...opponents()].map(p=>[p.id,p.availability,p.selfReport,p.heroes,p.recent,p.matches]);
- const key=JSON.stringify([state.actions,state.firstPick,seats,matchups,Object.keys(heroes).length]);
+ const key=JSON.stringify([state.actions,state.firstPick,seats,matchups,Object.keys(stratz),Object.keys(heroes).length]);
  if(key===suggestionCache.key)return suggestionCache;
- const input={heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick};
+ const input={heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick};
  const top=mode=>new Set(recommend({...input,mode}).slice(0,8).map(row=>+row.heroId));
  suggestionCache={key,pick:top('ourPick'),ban:top('ourBan')};
  return suggestionCache;
@@ -486,7 +494,9 @@ function heroEvidence(heroId,sources,playerId){
  return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
 }
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();
+ // Credit for STRATZ counter and synergy data, shown whenever it is in use.
+ if(state.actions.some(a=>stratz[a.heroId])){const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';queueMicrotask(()=>root.append(credit));}if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));

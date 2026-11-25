@@ -113,3 +113,13 @@ export function summarizeMatch(raw={}){
   radiantWin:typeof raw.radiant_win==='boolean'?raw.radiant_win:null,players,picksBans};
 }
 export function loadMatch(id,queue=publicData){return queue.request('/matches/'+id,{priority:6,ttl:30*86400000,transform:summarizeMatch});}
+// Divine+ counters and synergy for one hero from our STRATZ proxy, cached for 12 h.
+export async function loadStratz(heroId,{fetcher=(...args)=>globalThis.fetch(...args),storage=globalThis.localStorage,now=Date.now}={}){
+ const key='stratz-v1:'+heroId;
+ try{const saved=JSON.parse(storage?.getItem(key)||'null');if(saved?.value&&Number.isFinite(saved.at)&&now()-saved.at<43200000)return saved.value;}catch{}
+ const response=await fetcher('/api/stratz?hero='+encodeURIComponent(heroId),{credentials:'same-origin',headers:{Accept:'application/json'}});
+ if(!response.ok)throw new Error('STRATZ HTTP '+response.status);
+ const value=await response.json();
+ try{storage?.setItem(key,JSON.stringify({at:now(),value}));}catch{}
+ return value;
+}
