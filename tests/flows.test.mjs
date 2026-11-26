@@ -603,7 +603,8 @@ test('the page hides signed-out controls from the first paint when a session is 
  const inline=[...new JSDOM(markup).window.document.querySelectorAll('head script:not([src])')].map(n=>n.textContent).join('\n');
  assert.ok(inline.includes('authPending'),'head marks auth pending before app code runs');
  const css=await readFile('web/styles.css','utf8');
- assert.match(css,/html\[data-auth-pending\] #welcome-view/);
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #welcome-view/);
+ assert.ok(inline.includes('20000'),'head script clears the mark if the app never loads');
  const first=new JSDOM(markup,{url:'https://board.example/',runScripts:'outside-only'});
  first.window.localStorage.setItem('sb-example-auth-token','{}');first.window.eval(inline);
  assert.equal(first.window.document.documentElement.dataset.authPending,'');
@@ -626,8 +627,8 @@ test('while the account loads a full loading screen replaces the welcome page',a
  assert.ok(screen.contains(doc.getElementById('welcome-loading')),'the status text lives on the loading screen');
  assert.ok(!doc.getElementById('welcome-view').contains(screen),'the loading screen is outside the welcome page');
  const css=await readFile('web/styles.css','utf8');
- assert.match(css,/html\[data-auth-pending\] #welcome-view/,'welcome page hidden while pending');
- assert.match(css,/html\[data-auth-pending\] #auth-loading/,'loading screen shown while pending');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #welcome-view/,'welcome page hidden while pending');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #auth-loading/,'loading screen only over the welcome view');
  let resolveSession;
  const h=await harness({query:'#access_token=abc&type=signup',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r),loadRoster:async()=>[]})});
  try{

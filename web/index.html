@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="./war-room.css" />
     <script>
       // Before first paint: if a stored session or sign-in callback exists, hide signed-out controls until the app knows the account.
-      try{var q=new URLSearchParams(location.search);if(!q.has('demo')&&!q.has('mock')&&!q.has('onboarding-demo')&&!q.has('team-image')&&(Object.keys(localStorage).some(function(k){return /^sb-.+-auth-token$/.test(k);})||/(?:^|[#&])(?:access_token|steam_token)=/.test(location.hash)||q.has('code')||sessionStorage.getItem('captain-oauth-provider')))document.documentElement.dataset.authPending='';}catch(e){}
+      try{var q=new URLSearchParams(location.search);if(!q.has('demo')&&!q.has('mock')&&!q.has('onboarding-demo')&&!q.has('team-image')&&(Object.keys(localStorage).some(function(k){return /^sb-.+-auth-token$/.test(k);})||/(?:^|[#&])(?:access_token|steam_token)=/.test(location.hash)||q.has('code')||sessionStorage.getItem('captain-oauth-provider'))){document.documentElement.dataset.authPending='';setTimeout(function(){delete document.documentElement.dataset.authPending;},20000);}}catch(e){}
     </script>
     <script type="module" src="./main.js"></script>
   </head>
