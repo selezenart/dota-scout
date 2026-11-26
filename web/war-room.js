@@ -57,6 +57,7 @@ export function renderPlayerRail(root,options){
  if(!options.onAddAlly)allyEntry=null;
  if(!root.dataset.seatRerender){root.dataset.seatRerender='1';root.addEventListener('seat-rerender',()=>root.__rerender?.());}root.__rerender=()=>renderPlayerRail(root,root.__options);root.__options=options;
  const focused=root.contains(document.activeElement)?document.activeElement.dataset?.seatId:null;
+ const focusedOpenSeat=root.contains(document.activeElement)?document.activeElement.dataset?.allySeat:null;
  root.replaceChildren();
  for(const [side,seats] of [['ally',options.allies],['enemy',options.enemies]]){
   const group=make('div','seat-group');group.setAttribute('role','group');group.setAttribute('aria-label',side==='ally'?'Our players':'Enemy players');
@@ -65,5 +66,6 @@ export function renderPlayerRail(root,options){
  }
  if(focused!=null)[...root.querySelectorAll('[data-seat-id]')].find(node=>node.dataset.seatId===focused)?.focus({preventScroll:true});
  // After Cancel, return focus to the seat the form came from.
+ if(focusedOpenSeat!=null&&returnFocusIndex==null)root.querySelector('[data-ally-seat="'+focusedOpenSeat+'"]')?.focus({preventScroll:true});
  if(returnFocusIndex!=null){root.querySelector('[data-ally-seat="'+returnFocusIndex+'"]')?.focus({preventScroll:true});returnFocusIndex=null;}
 }
