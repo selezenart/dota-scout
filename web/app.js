@@ -1526,6 +1526,7 @@ function leaveCup(){
 function openCup(){showWorkspace('cup');welcome.board();void cup.refresh();}
 $('draft-button').onclick=()=>{leaveCup();const url=new URL(location.href);if(url.searchParams.has('team')){url.searchParams.delete('team');if(!demo)url.searchParams.set(shared?'draft':'practice',shared?.id||'');history.pushState(null,'',url);}showWorkspace('draft');};
 $('team-button').onclick=()=>navigateTeam();
+$('cup-button').onclick=()=>navigateCup();
 let homeTeamId='';
 let homeRoster=[];
 let homeRequest=0;

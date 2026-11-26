@@ -414,6 +414,19 @@ test('newer draft-open intent wins when responses arrive out of order',async()=>
 });
 
 
+test('the header Battle Cup button opens Battle Cup and Draft returns to the board',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  await h.click(h.q('cup-button'));
+  assert.equal(h.q('cup-view').hidden,false,'Battle Cup is shown');
+  assert.equal(h.q('cup-button').getAttribute('aria-current'),'page');
+  assert.ok(new URLSearchParams(h.w.location.search).has('cup'));
+  await h.click(h.q('draft-button'));
+  assert.equal(h.q('cup-view').hidden,true);
+  assert.equal(h.q('draft-view').hidden,false);
+ }finally{h.w.close();}
+});
+
 test('shared draft invitation survives an OAuth return to Cup and explains guest sign-in',async()=>{
  const guest=await harness({query:'?draft='+draftId,backend:{getSession:async()=>null,onAuthChange(){}}});
  try{
