@@ -599,6 +599,26 @@ test('a link error clears the loading state and a stalled session restores Sign 
  }finally{h.w.close();}
 });
 
+test('the page hides signed-out controls from the first paint when a session is stored',async()=>{
+ const inline=[...new JSDOM(markup).window.document.querySelectorAll('head script:not([src])')].map(n=>n.textContent).join('\n');
+ assert.ok(inline.includes('authPending'),'head marks auth pending before app code runs');
+ const css=await readFile('web/styles.css','utf8');
+ assert.match(css,/html\[data-auth-pending\] #welcome-signin/);
+ const first=new JSDOM(markup,{url:'https://board.example/',runScripts:'outside-only'});
+ first.window.localStorage.setItem('sb-example-auth-token','{}');first.window.eval(inline);
+ assert.equal(first.window.document.documentElement.dataset.authPending,'');
+ const fresh=new JSDOM(markup,{url:'https://board.example/',runScripts:'outside-only'});fresh.window.eval(inline);
+ assert.equal(fresh.window.document.documentElement.dataset.authPending,undefined);
+ first.window.close();fresh.window.close();
+ let resolveSession;
+ const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r),loadRoster:async()=>[]}),local:{'sb-example-auth-token':'{}'},beforeRun:w=>w.document.documentElement.dataset.authPending=''});
+ try{
+  assert.equal(h.w.document.documentElement.dataset.authPending,'','still pending while the session loads');
+  resolveSession({user:{id:'owner'}});await flush();
+  assert.equal(h.w.document.documentElement.dataset.authPending,undefined,'cleared once the account is known');
+ }finally{h.w.close();}
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{
