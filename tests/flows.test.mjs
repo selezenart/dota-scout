@@ -712,6 +712,15 @@ test('views fade in briefly when they appear and never animate with reduced moti
  assert.doesNotMatch(block,/transition-delay|animation-delay/,'content is never delayed');
 });
 
+test('the page declares a favicon, a PNG fallback and an Apple touch icon that exist',async()=>{
+ const {existsSync}=await import('node:fs');
+ const head=new JSDOM(markup).window.document.head;
+ const link=selector=>head.querySelector(selector)?.getAttribute('href');
+ const svg=link('link[rel="icon"][type="image/svg+xml"]'),png=link('link[rel="icon"][type="image/png"][sizes="32x32"]'),touch=link('link[rel="apple-touch-icon"]');
+ for(const [name,href] of [['svg icon',svg],['32px png',png],['apple touch icon',touch]]){assert.ok(href,name+' is linked');assert.ok(existsSync(new URL('../web/'+href.replace(/^\.\//,''),import.meta.url)),name+' file exists: '+href);}
+ assert.ok(head.querySelector('meta[name="theme-color"]'),'theme colour set');
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{
