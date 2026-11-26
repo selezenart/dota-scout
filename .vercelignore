@@ -19,6 +19,9 @@
 !web/draft-engine.js
 !web/backend.js
 !web/heroes.json
+!web/favicon.svg
+!web/favicon-32.png
+!web/apple-touch-icon.png
 !api
 !api/config.js
 !api/steam.js
