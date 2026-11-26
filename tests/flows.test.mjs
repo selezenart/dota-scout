@@ -787,6 +787,18 @@ test('clicking an open seat in local practice adds a teammate by ID without Setu
  }finally{h.w.close();}
 });
 
+test('Escape closes the open-seat ID field and returns focus to the seat',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  const rail=h.q('player-rail');
+  await h.click([...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat')));
+  const input=rail.querySelector('input[aria-label="Player ID or link"]');assert.ok(input);
+  input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+  assert.equal(rail.querySelector('input[aria-label="Player ID or link"]'),null,'form closed');
+  assert.equal(h.w.document.activeElement?.dataset.allySeat,'0','focus back on the seat');
+ }finally{h.w.close();}
+});
+
 test('open seats in a shared team draft stay non-interactive',async()=>{
  const row={id:draftId,team_id:'team',revision:0,drafter_user_id:'owner',state:{actions:[],firstPick:true,roster:[]}};
  const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row)})});

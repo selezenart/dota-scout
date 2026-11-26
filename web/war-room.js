@@ -27,23 +27,28 @@ function seatCard(seat,options){
 
 // Inline "add a teammate by ID" form for an open ally seat. Kept across re-renders (stats loading
 // re-draws the rail) so typed text and focus survive.
-let allyEntry=null;
+let allyEntry=null,returnFocusIndex=null;
+// Called when the workspace or account changes, so an open form never carries over to another account.
+export function resetAllyEntry(){allyEntry=null;returnFocusIndex=null;}
 function allyForm(index,onAddAlly){
  const form=make('form','seat-card seat-empty seat-add-ally is-ally'),input=make('input'),actions=make('span','seat-add-actions'),add=make('button',null,'Add'),cancel=make('button',null,'Cancel'),error=make('small','seat-add-error');
- input.type='text';input.setAttribute('aria-label','Player ID or link');input.placeholder='Player ID or link';input.autocomplete='off';input.value=allyEntry.text;input.oninput=()=>{allyEntry.text=input.value;};
+ input.type='text';input.setAttribute('aria-label','Player ID or link');input.placeholder='Player ID or link';input.autocomplete='off';input.value=allyEntry.text;input.oninput=()=>{if(allyEntry)allyEntry.text=input.value;};
+ if(allyEntry.error)input.setAttribute('aria-invalid','true');
+ input.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();cancel.onclick();}};
  add.type='submit';cancel.type='button';error.setAttribute('role','status');error.textContent=allyEntry.error||'';
- cancel.onclick=()=>{allyEntry=null;form.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));};
+ cancel.onclick=()=>{allyEntry=null;returnFocusIndex=index;form.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));};
  form.onsubmit=async event=>{event.preventDefault();if(allyEntry.busy)return;allyEntry.busy=true;add.disabled=true;
   try{await onAddAlly(input.value);allyEntry=null;}
-  catch(e){allyEntry.error=e.message||'Could not add this player.';error.textContent=allyEntry.error;input.focus();}
+  catch(e){if(allyEntry){allyEntry.error=e.message||'Could not add this player.';error.textContent=allyEntry.error;input.setAttribute('aria-invalid','true');input.focus();}}
   finally{if(allyEntry){allyEntry.busy=false;add.disabled=false;}form.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));}};
  actions.append(add,cancel);form.append(input,actions,error);
- queueMicrotask(()=>{if(form.isConnected&&!form.contains(document.activeElement))input.focus({preventScroll:true});});
+ // Focus once when the form opens; later re-renders must not pull focus from other controls.
+ if(!allyEntry.focused){allyEntry.focused=true;queueMicrotask(()=>{if(form.isConnected)input.focus({preventScroll:true});});}
  return form;
 }
 function emptySeat(side,onAddEnemy,index,onAddAlly){
  if(side==='ally'&&onAddAlly&&allyEntry?.index===index)return allyForm(index,onAddAlly);
- if(side==='ally'&&onAddAlly){const seat=make('button','seat-card seat-empty is-ally');seat.type='button';seat.append(make('strong',null,'Open seat'),make('small',null,'Add player by ID'));seat.onclick=()=>{allyEntry={index,text:'',error:''};seat.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));};return seat;}
+ if(side==='ally'&&onAddAlly){const seat=make('button','seat-card seat-empty is-ally');seat.type='button';seat.dataset.allySeat=String(index);seat.append(make('strong',null,'Open seat'),make('small',null,'Add player by ID'));seat.onclick=()=>{allyEntry={index,text:'',error:''};seat.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));};return seat;}
  if(side==='ally'){const seat=make('div','seat-card seat-empty is-ally');seat.append(make('strong',null,'Open seat'));return seat;}
  const add=make('button','seat-card seat-empty seat-add-enemy is-enemy','Add enemy');add.type='button';add.onclick=onAddEnemy;return add;
 }
@@ -59,4 +64,6 @@ export function renderPlayerRail(root,options){
   root.append(group);
  }
  if(focused!=null)[...root.querySelectorAll('[data-seat-id]')].find(node=>node.dataset.seatId===focused)?.focus({preventScroll:true});
+ // After Cancel, return focus to the seat the form came from.
+ if(returnFocusIndex!=null){root.querySelector('[data-ally-seat="'+returnFocusIndex+'"]')?.focus({preventScroll:true});returnFocusIndex=null;}
 }

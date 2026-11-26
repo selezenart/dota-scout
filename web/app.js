@@ -8,7 +8,7 @@ import snapshot from './heroes.json';
 
 import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
 import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES} from './draft-stats.js';
-import {renderPlayerRail} from './war-room.js';
+import {renderPlayerRail,resetAllyEntry} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
@@ -113,7 +113,7 @@ function restorePractice(){
 }
 function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();suggestionCache={key:'',pick:new Set(),ban:new Set()};focusedPlayer=null;}
 function detachWorkspace(){
- stopLiveWatch();
+ stopLiveWatch();resetAllyEntry();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
  state=demo?demoState():initialState();
  resetDraftData();reviewVisible=true;
@@ -394,6 +394,8 @@ async function addAllyById(text){
  const id=String(ids[0]);
  if(current.some(p=>String(p.steamAccountId||p.accountId||'')===id))throw Error('This player is already on our team.');
  await mutate('set_state',{roster:[...current,{id,name:id,steamAccountId:id}]});
+ // mutate() returns quietly while another change is still saving; only confirm a real change.
+ if(!(state.roster||[]).some(p=>String(p?.steamAccountId||'')===id))throw Error('Another change is still saving. Try again.');
  notice('Player '+id+' added to our team.');
 }
 let freshActionIndex=-1;
@@ -1398,7 +1400,7 @@ async function authChanged(session,event){
 
  const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation)welcome.signedIn();return;}
 
- stopLiveWatch();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
+ stopLiveWatch();resetAllyEntry();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
  const gen=++generation,acct=++accountGen;user=session?.user||null;welcome.setAccount(!!user,recovery);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
  ++cupAccountVersion;cup.sync();
  const inviteOnEntry=!!teamInvitation;
