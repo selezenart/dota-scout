@@ -1198,13 +1198,19 @@ async function checkLiveWatch(watch) {
  }finally{clearTimeout(timeout);}
 }
 
+let lobbyEdited=false;
+function sessionButtons(){$('create-session').disabled=!user||!team||demo;$('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';$('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!user?'Sign in to create a shared draft with your team.':!team?(teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';}
 async function lobby(){
- if(team&&!teamRoster.length)await loadTeam(team.id,{preserveSelection:true});
+ lobbyEdited=false;
+ // Default to the team shown on Team home so shared draft creation is not silently disabled.
+ // The roster loads in the background so a slow response never blocks Setup.
+ if(user&&!demo&&!team&&teams.length){const id=(teams.find(t=>t.id===homeTeamId)||teams[0]).id;void safe(async()=>{if(!await loadTeam(id)||team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();}
+ else if(team&&!teamRoster.length)await loadTeam(team.id,{preserveSelection:true});
  const details=document.querySelector('[data-connection-details]'),manual=document.querySelector('[data-manual-entry]');
  details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
  const link=el('a','Open legacy live/replay helper');link.href='http://localhost:8765';link.target='_blank';link.rel='noopener';if(['localhost','127.0.0.1'].includes(location.hostname))details.append(link);
  const demoLink=el('a','Try the demo');demoLink.href='?demo';
- const links=el('div',null,'lobby-links');links.append(link,demoLink);details.append(links);manual.replaceChildren();
+ const links=el('div',null,'lobby-links');links.append(link,demoLink);details.append(links);manual.replaceChildren();manual.oninput=()=>{lobbyEdited=true;};
  const scouting=el('section',null,'lobby-card');scouting.setAttribute('aria-label','Enemy scouting');scouting.append(el('h3','Enemy scouting'));manual.append(scouting);
  const scoutingActions=el('div',null,'lobby-actions');
  if(!demo){
@@ -1242,9 +1248,33 @@ async function lobby(){
  button('Save and scout enemies',async()=>{await mutate('set_state',{enemyIds:validateEnemies()});notice('Enemy scouting saved.');},scoutingActions,'primary').disabled=!canWrite();
  button('Clear enemy scouting',async()=>{await mutate('set_state',{enemyIds:[]});enemies.value='';enemies.removeAttribute('aria-invalid');notice('Enemy scouting cleared.');},scoutingActions).disabled=!canWrite();
  if(!shared){
-  const allies=el('details',null,'lobby-card lobby-local');allies.append(el('summary','Import a local roster'));manual.append(allies);
-  const ownIds=field(allies,'Import allied public IDs (up to 5)','','textarea');ownIds.rows=3;ownIds.placeholder='One player ID or link per line';
-  button('Import local roster',async()=>{if(!canWrite())throw Error('Become local drafter first.');const tokens=ownIds.value.trim().split(/[\s,;]+/).filter(Boolean);if(tokens.some(token=>parseAccountIds(token).length!==1))throw Error('Correct invalid allied account entries first.');const ids=parseAccountIds(ownIds.value);if(!ids.length||ids.length>5)throw Error('Enter one to five unique account IDs.');await mutate('set_state',{roster:ids.map(id=>({id:String(id),name:String(id),steamAccountId:String(id)}))});notice('Local roster imported.');},allies);
+  // Local practice: tick members of the active team and/or add stand-ins by public ID (max five).
+  const ours=el('section',null,'lobby-card lobby-local');ours.setAttribute('aria-label','Our team');ours.append(el('h3','Our team'));manual.append(ours);
+  const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
+  const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
+  const savedMembers=current.map(p=>p.id||p.userId).filter(id=>memberIds.has(id));
+  let picked=savedMembers.some(id=>id!==user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,5).map(p=>p.userId);
+  if(members.length){
+   ours.append(el('p','Load players from '+team.name+':'));
+   const list=el('div',null,'lobby-roster');ours.append(list);
+   for(const p of members){const label=el('label',p.displayName),check=el('input');check.type='checkbox';check.checked=picked.includes(p.userId);check.onchange=()=>{picked=check.checked?[...new Set([...picked,p.userId])]:picked.filter(id=>id!==p.userId);};label.prepend(check);list.append(label);}
+  }else if(user&&!demo)ours.append(el('p',teams.length?'Select an active team under Team management to load your teammates.':'Create or join a team to load your teammates.','secondary'));
+  const manualIds=current.filter(p=>!memberIds.has(p.id||p.userId)).map(p=>p.steamAccountId||p.accountId).filter(Boolean);
+  const ownIds=field(ours,members.length?'Add other players by public ID or URL':'Teammate public player IDs or URLs (up to 5)',manualIds.join(' '),'textarea');ownIds.rows=3;ownIds.placeholder='One player ID or link per line';
+  const ourActions=el('div',null,'lobby-actions');ours.append(ourActions);
+  button('Save our team',async()=>{
+   if(!canWrite())throw Error('Become local drafter first.');
+   const tokens=ownIds.value.trim().split(/[\s,;]+/).filter(Boolean);
+   if(tokens.some(token=>parseAccountIds(token).length!==1)){ownIds.setAttribute('aria-invalid','true');throw Error('Correct invalid teammate account entries first.');}
+   const chosen=members.filter(p=>picked.includes(p.userId)).map(p=>({...p,id:p.userId}));
+   const extra=parseAccountIds(ownIds.value).map(id=>({id:String(id),name:String(id),steamAccountId:String(id)}));
+   const rows=[...chosen,...extra];
+   if(!rows.length||rows.length>5)throw Error('Choose one to five players for our team.');
+   const accounts=rows.map(p=>String(p.steamAccountId||'')).filter(Boolean);
+   if(new Set(accounts).size!==accounts.length)throw Error('A player is listed twice. Remove the duplicate public ID.');
+   ownIds.removeAttribute('aria-invalid');
+   await mutate('set_state',{roster:rows});notice('Our team saved.');
+  },ourActions,'primary').disabled=!canWrite();
  }
  if(user&&!demo){
   const section=el('section',null,'team-management lobby-card');section.setAttribute('aria-label','Team management');section.append(el('h3','Team management'));manual.append(section);
@@ -1289,11 +1319,23 @@ async function lobby(){
     else{await mutate('set_state',{roster});notice('Roster snapshot refreshed.');}
    },section).disabled=!canWrite();
    if(shared&&teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id)button('Owner reclaim drafter',()=>mutateOwner(),section);
+   const ownsTeam=team.owner_user_id===user.id,leaving=team,account=user.id;
+   const exit=button(ownsTeam?'Delete team':'Leave team',async()=>{
+    if(exit.disabled||team?.id!==leaving.id||user?.id!==account)return;
+    if(!confirm(ownsTeam?'Delete '+leaving.name+' for everyone? Its drafts, scouting notes, Battle Cup spots and members are removed permanently.':'Leave '+leaving.name+'? You lose access to its drafts and release any draft control you hold.'))return;
+    exit.disabled=true;try{await (ownsTeam?backend.deleteTeam(leaving.id,account):backend.leaveTeam(leaving.id,account));}finally{exit.disabled=false;}
+    if(user?.id!==account)return;
+    if(shared?.team_id===leaving.id)enterPractice();
+    ++teamLoad;team=null;teamRoster=[];selectedTeamIds=[];
+    if(homeTeamId===leaving.id){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
+    teams=await backend.listTeams();if(user?.id!==account)return;
+    await lobby();notice(ownsTeam?'Deleted team '+leaving.name+'.':'You left '+leaving.name+'.');
+   },section,ownsTeam?'danger':undefined);
    const results=el('div',null,'team-draft-results');results.setAttribute('aria-live','polite');
    button('List team drafts',async()=>{const teamId=team.id,drafts=await backend.listDrafts(teamId);if(team?.id!==teamId)return;results.replaceChildren();for(const d of drafts)button(`${d.id.slice(0,8)} - ${d.status} - revision ${d.revision}`,()=>openDraft(d.id),results);if(!drafts.length)results.append(el('p','No drafts yet.'));},section);section.append(results);
   }
  }
- $('create-session').disabled=!user||!team||demo;$('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';$('join-session').disabled=!user||demo;showIfClosed('session-dialog');
+ sessionButtons();$('join-session').disabled=!user||demo;showIfClosed('session-dialog');
 }
 function showIfClosed(id){if(!$(id).open)show(id);}
 
@@ -1632,8 +1674,7 @@ if(imageId!==null)void (async()=>{
  try{
   if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(imageId))throw Error();
   if(demo){await showIdentityDownload(root,demoIdentityBackend,imageId);return;}
-  const response=await fetch('/api/config',{cache:'no-store'});
-  const config=await response.json();
+  const config=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:await (await fetch('/api/config',{cache:'no-store'})).json();
   await showIdentityDownload(root,createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey}),imageId);
  }catch{root.textContent='This image is unavailable.';}
 })();
@@ -1642,6 +1683,10 @@ else if(!demo)void (async()=>{try{
  const authFragment=new URLSearchParams(location.hash.slice(1));
  let oauthProvider;try{oauthProvider=sessionStorage.getItem('captain-oauth-provider');sessionStorage.removeItem('captain-oauth-provider');}catch{}
  const steamToken=authFragment.get('steam_token');
+ // Show progress instead of a signed-out home while a callback or a stored session resolves.
+ const callback=!!(steamToken||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
+ let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
+ if(callback||storedSession||'authPending' in document.documentElement.dataset){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),15000);}
  if(steamToken){const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);}
 
  if(authFragment.has('error')||authFragment.has('error_code')){
@@ -1656,7 +1701,10 @@ else if(!demo)void (async()=>{try{
 
  }
 
- const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}const config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey});
+ // Use the config baked in at build time; fall back to /api/config when the build had none.
+ const inlined=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;
+ let config=inlined;
+ if(!config){const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey});
  if(teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
  if(new URLSearchParams(location.search).has('steam-error')){
   welcome.home('signin');
@@ -1672,7 +1720,9 @@ else if(!demo)void (async()=>{try{
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });const initialSession=await backend.getSession();
  if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!new URLSearchParams(location.search).has('steam-error'))welcome.home('signin');
- await authChanged(initialSession);welcome.setConnection('available');render();}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
+ await authChanged(initialSession);welcome.loading();welcome.setConnection('available');render();
+ // Sign-in provider flags can change without a rebuild; refresh them in the background.
+ if(inlined)void fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(fresh=>{if(!fresh?.url)return;steamEnabled=fresh.steamAuth===true;googleEnabled=fresh.googleAuth===true;welcome.setConnection('available');}).catch(()=>{});}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
 
 
 

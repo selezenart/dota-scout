@@ -24,7 +24,7 @@ function waitForText(window,node,expected){
   observer.observe(node,{childList:true,subtree:true,characterData:true});
  });
 }
-async function harness({query='?practice',backend,saved,local={},session={},clipboard}={}){
+async function harness({query='?practice',backend,saved,local={},session={},clipboard,beforeRun}={}){
  const dom=new JSDOM(markup,{url:'https://board.example/'+query,runScripts:'outside-only'}),w=dom.window;
  w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>backend?{url:'https://example.supabase.co',anonKey:'public'}:{}});
  w.setInterval=()=>0;w.confirm=()=>true;
@@ -33,6 +33,7 @@ async function harness({query='?practice',backend,saved,local={},session={},clip
  for(const [key,value] of Object.entries(session))w.sessionStorage.setItem(key,value);
  if(clipboard)Object.defineProperty(w.navigator,'clipboard',{value:{writeText:clipboard}});
  if(saved)w.localStorage.setItem('captain-practice-v1',saved);
+ beforeRun?.(w);
  w.eval(code);await flush();
  const q=id=>w.document.getElementById(id);
  const click=async node=>{assert.ok(node,'control exists');node.click();await flush();};
@@ -289,9 +290,47 @@ test('team creation and joining preserve an explicit roster selection when creat
  const h=await harness({backend});try{
  await h.click(h.q('setup-button'));const manual=h.w.document.querySelector('[data-manual-entry]');const named=label=>[...manual.querySelectorAll('label')].find(l=>l.textContent.startsWith(label)).querySelector('input');named('New team name').value='Five';await h.click(h.button('Create team'));assert.equal(h.q('create-session').disabled,false);
  named('Team invitation code').value='invite-code';await h.click(h.button('Join team'));assert.equal(joined,'invite-code');
- const checks=[...manual.querySelectorAll('input[type=checkbox]')];assert.deepEqual(checks.map(c=>c.checked),[true,true,false]);checks[1].click();checks[2].click();await h.click(h.q('create-session'));
+ const checks=[...manual.querySelectorAll('.team-management input[type=checkbox]')];assert.deepEqual(checks.map(c=>c.checked),[true,true,false]);checks[1].click();checks[2].click();await h.click(h.q('create-session'));
  assert.deepEqual(created.roster.map(p=>p.id),['owner','away']);assert.equal(h.q('session-code').textContent,'aaaaaaaa');
  }finally{h.dom.window.close();}
+});
+
+test('Setup preselects the signed-in team so shared draft creation is available',async()=>{
+ const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
+ const h=await harness({backend:accountBackend({listTeams:async()=>[squad],loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}]})});
+ try{
+  await h.click(h.q('setup-button'));
+  assert.equal(h.q('create-session').disabled,false);
+  assert.equal(h.q('create-session').textContent,'Create draft for Night Shift');
+  assert.equal(h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]').value,'team');
+ }finally{h.w.close();}
+});
+
+test('Setup keeps typed text when the preselected team roster arrives late',async()=>{
+ let release;const slow=new Promise(r=>release=r);
+ const h=await harness({backend:accountBackend({listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner'}],loadRoster:()=>slow})});
+ try{
+  await h.click(h.q('setup-button'));
+  const enemies=h.q('enemy-account-input');enemies.value='12345';enemies.dispatchEvent(new h.w.Event('input',{bubbles:true}));
+  release([{userId:'owner',displayName:'Captain',availability:'available'}]);await flush();
+  assert.equal(h.q('enemy-account-input').value,'12345');
+  assert.equal(h.q('create-session').disabled,false);
+ }finally{h.w.close();}
+});
+
+test('Setup explains why shared draft creation is unavailable',async()=>{
+ const signedOut=await harness();
+ try{
+  await signedOut.click(signedOut.q('setup-button'));
+  assert.equal(signedOut.q('create-session').disabled,true);
+  assert.match(signedOut.q('create-session-hint').textContent,/Sign in/);
+ }finally{signedOut.w.close();}
+ const noTeam=await harness({backend:accountBackend()});
+ try{
+  await noTeam.click(noTeam.q('setup-button'));
+  assert.equal(noTeam.q('create-session').disabled,true);
+  assert.match(noTeam.q('create-session-hint').textContent,/Create or join a team/);
+ }finally{noTeam.w.close();}
 });
 
 test('shared claim release reclaim and polling disconnect enforce confirmed authority',async()=>{
@@ -305,6 +344,45 @@ test('shared claim release reclaim and polling disconnect enforce confirmed auth
  }finally{h.dom.window.close();}
 });
 
+
+test('local practice saves teammates by public ID from a visible Our team card',async()=>{
+ const h=await harness();
+ try{
+  await h.click(h.q('setup-button'));
+  const card=h.w.document.querySelector('[data-manual-entry] section[aria-label="Our team"]');
+  assert.ok(card,'Our team card is visible');
+  const ids=card.querySelector('textarea');ids.value='111 222';
+  await h.click(h.button('Save our team',card));
+  const saved=JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster;
+  assert.deepEqual(saved.map(p=>p.steamAccountId),['111','222']);
+  ids.value='1 2 3 4 5 6';await h.click(h.button('Save our team',card));
+  assert.equal(JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster.length,2);
+ }finally{h.w.close();}
+});
+
+test('signed-in local practice mixes ticked team members with manual stand-ins',async()=>{
+ const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
+ const members=[{userId:'owner',displayName:'Captain',steamAccountId:'100',availability:'available'},{userId:'mid',displayName:'Mid',steamAccountId:'200',availability:'available'},{userId:'away',displayName:'Away',steamAccountId:'300',availability:'unavailable'}];
+ const h=await harness({backend:accountBackend({listTeams:async()=>[squad],loadRoster:async()=>members})});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const card=h.w.document.querySelector('[data-manual-entry] section[aria-label="Our team"]');
+  const checks=[...card.querySelectorAll('input[type=checkbox]')];
+  assert.deepEqual(checks.map(c=>c.parentElement.textContent.trim()),['Captain','Mid','Away']);
+  assert.deepEqual(checks.map(c=>c.checked),[true,true,false],'available members ticked by default');
+  checks[2].click();
+  card.querySelector('textarea').value='200';
+  await h.click(h.button('Save our team',card));
+  assert.equal(h.w.localStorage.getItem('captain-practice-v1:owner'),null,'duplicate public ID rejected');
+  card.querySelector('textarea').value='999';
+  await h.click(h.button('Save our team',card));
+  const saved=JSON.parse(h.w.localStorage.getItem('captain-practice-v1:owner')).state.roster;
+  assert.deepEqual(saved.map(p=>p.id),['owner','mid','away','999']);
+  assert.deepEqual(saved.map(p=>p.steamAccountId),['100','200','300','999']);
+ }finally{h.w.close();}
+});
 
 test('newer draft-open intent wins when responses arrive out of order',async()=>{
  const older='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',newer='cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -421,6 +499,39 @@ test('first Steam sign-in requires profile setup before Team opens',async()=>{
  }finally{h.w.close();}
 });
 
+test('captain deletes a team from Setup only after confirming',async()=>{
+ let teams=[{id:'team',name:'Night Shift',owner_user_id:'owner'}],deleted;
+ const h=await harness({backend:accountBackend({listTeams:async()=>teams,loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],deleteTeam:async(...args)=>{deleted=args;teams=[];}})});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  assert.equal(h.button('Leave team',section()),undefined,'captain cannot leave');
+  h.w.confirm=()=>false;await h.click(h.button('Delete team',section()));assert.equal(deleted,undefined);
+  h.w.confirm=()=>true;await h.click(h.button('Delete team',section()));
+  assert.deepEqual(deleted,['team','owner']);
+  assert.equal(h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]').value,'');
+  assert.doesNotMatch(section().textContent,/Night Shift/);
+  assert.equal(h.q('create-session').disabled,true);
+ }finally{h.w.close();}
+});
+
+test('team member leaves a team from Setup and cannot delete it',async()=>{
+ let teams=[{id:'team',name:'Night Shift',owner_user_id:'captain'}],left;
+ const h=await harness({backend:accountBackend({listTeams:async()=>teams,loadRoster:async()=>[{userId:'captain',displayName:'Captain'},{userId:'owner',displayName:'Me'}],leaveTeam:async(...args)=>{left=args;teams=[];}})});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  assert.equal(h.button('Delete team',section()),undefined,'members cannot delete');
+  await h.click(h.button('Leave team',section()));
+  assert.deepEqual(left,['team','owner']);
+  assert.doesNotMatch(section().textContent,/Night Shift/);
+ }finally{h.w.close();}
+});
+
 test('captain can remove a teammate from Team home after confirming',async()=>{
  const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
  let removed;
@@ -440,6 +551,112 @@ test('captain can remove a teammate from Team home after confirming',async()=>{
   assert.deepEqual(removed,['team','player','owner']);
   assert.equal(root.querySelectorAll('.team-home-card').length,1);
   assert.match(root.textContent,/Lee was removed/);
+ }finally{h.w.close();}
+});
+
+test('a restored session shows a loading state instead of the signed-out welcome page',async()=>{
+ let resolveSession,resolveTeams;
+ const backend=accountBackend({getSession:()=>new Promise(r=>resolveSession=r),listTeams:()=>new Promise(r=>resolveTeams=r),loadRoster:async()=>[]});
+ const h=await harness({query:'',backend,local:{'sb-example-auth-token':'{}'}});
+ try{
+  const signin=h.q('welcome-signin'),seen=[];
+  const observer=new h.w.MutationObserver(()=>seen.push(signin.hidden?'(hidden)':signin.textContent.trim()));observer.observe(signin,{childList:true,characterData:true,subtree:true,attributes:true});
+  assert.equal(signin.hidden,true,'no sign-in button while the session loads');
+  assert.equal(h.q('welcome-register').hidden,true);
+  assert.equal(h.q('welcome-loading').hidden,false);
+  assert.match(h.q('welcome-loading').textContent,/Loading your account/);
+  resolveSession({user:{id:'owner'}});await flush();
+  resolveTeams([]);await flush();
+  assert.equal(h.q('welcome-loading').hidden,true);
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.ok(!seen.includes('Sign in'),'Sign in never appeared: '+seen.join(','));
+  observer.disconnect();
+ }finally{h.w.close();}
+});
+
+test('an OAuth or Steam callback says it is signing in until the session resolves',async()=>{
+ let resolveSession;
+ const h=await harness({query:'#access_token=abc&type=signup',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r)})});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,true);
+  assert.match(h.q('welcome-loading').textContent,/Signing you in/);
+  resolveSession(null);await flush();
+  assert.equal(h.q('welcome-loading').hidden,true);
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-signin').textContent.trim(),'Sign in');
+ }finally{h.w.close();}
+});
+
+test('a link error clears the loading state and a stalled session restores Sign in after 15 seconds',async()=>{
+ const errored=await harness({query:'#error=access_denied',backend:accountBackend({getSession:()=>new Promise(()=>{})}),local:{'sb-example-auth-token':'{}'}});
+ try{assert.equal(errored.q('welcome-loading').hidden,true);assert.ok(errored.q('welcome-auth').querySelector('form'));}finally{errored.w.close();}
+ const timers=[];const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})}),local:{'sb-example-auth-token':'{}'},beforeRun:w=>{const real=w.setTimeout.bind(w);w.setTimeout=(fn,ms,...a)=>{if(ms===15000){timers.push(fn);return 0;}return real(fn,ms,...a);};}});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,true);
+  assert.equal(timers.length,1);timers[0]();
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-loading').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('the page hides signed-out controls from the first paint when a session is stored',async()=>{
+ const inline=[...new JSDOM(markup).window.document.querySelectorAll('head script:not([src])')].map(n=>n.textContent).join('\n');
+ assert.ok(inline.includes('authPending'),'head marks auth pending before app code runs');
+ const css=await readFile('web/styles.css','utf8');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #welcome-view/);
+ assert.ok(inline.includes('20000'),'head script clears the mark if the app never loads');
+ const first=new JSDOM(markup,{url:'https://board.example/',runScripts:'outside-only'});
+ first.window.localStorage.setItem('sb-example-auth-token','{}');first.window.eval(inline);
+ assert.equal(first.window.document.documentElement.dataset.authPending,'');
+ const fresh=new JSDOM(markup,{url:'https://board.example/',runScripts:'outside-only'});fresh.window.eval(inline);
+ assert.equal(fresh.window.document.documentElement.dataset.authPending,undefined);
+ first.window.close();fresh.window.close();
+ let resolveSession;
+ const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r),loadRoster:async()=>[]}),local:{'sb-example-auth-token':'{}'},beforeRun:w=>w.document.documentElement.dataset.authPending=''});
+ try{
+  assert.equal(h.w.document.documentElement.dataset.authPending,'','still pending while the session loads');
+  resolveSession({user:{id:'owner'}});await flush();
+  assert.equal(h.w.document.documentElement.dataset.authPending,undefined,'cleared once the account is known');
+ }finally{h.w.close();}
+});
+
+test('while the account loads a full loading screen replaces the welcome page',async()=>{
+ const doc=new JSDOM(markup).window.document;
+ const screen=doc.getElementById('auth-loading');
+ assert.ok(screen,'a dedicated loading screen exists');
+ assert.ok(screen.contains(doc.getElementById('welcome-loading')),'the status text lives on the loading screen');
+ assert.ok(!doc.getElementById('welcome-view').contains(screen),'the loading screen is outside the welcome page');
+ const css=await readFile('web/styles.css','utf8');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #welcome-view/,'welcome page hidden while pending');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #auth-loading/,'loading screen only over the welcome view');
+ let resolveSession;
+ const h=await harness({query:'#access_token=abc&type=signup',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r),loadRoster:async()=>[]})});
+ try{
+  assert.equal(h.w.document.documentElement.dataset.authPending,'','a callback marks the page pending even without the head script');
+  resolveSession({user:{id:'owner'}});await flush();
+  assert.equal(h.w.document.documentElement.dataset.authPending,undefined);
+  assert.equal(h.w.document.body.dataset.view,'board');
+ }finally{h.w.close();}
+});
+
+test('without a stored session the sign-in button shows immediately',async()=>{
+ const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-loading').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('clicking the logo while signed in never shows the signed-out Sign in button',async()=>{
+ const h=await harness({query:'',backend:accountBackend({loadRoster:async()=>[]}),local:{'sb-example-auth-token':'{}'}});
+ try{
+  const signin=h.q('welcome-signin'),seen=[];
+  const observer=new h.w.MutationObserver(()=>seen.push(signin.hidden?'(hidden)':signin.textContent.trim()));observer.observe(signin,{childList:true,characterData:true,subtree:true,attributes:true});
+  await h.click(h.q('home-button'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(signin.textContent.trim(),'Open my team');
+  assert.ok(!seen.includes('Sign in'),'Sign in never appeared: '+seen.join(','));
+  observer.disconnect();
  }finally{h.w.close();}
 });
 
