@@ -3090,11 +3090,25 @@ body[data-view="welcome"] {
 
 }
 
-html[data-auth-pending] #welcome-signin,
-html[data-auth-pending] #welcome-register { display: none; }
-html[data-auth-pending] #welcome-loading[hidden] { display: block !important; }
+/* While the account resolves, one plain loading screen replaces the welcome page. */
+.auth-loading { display: none; }
+html[data-auth-pending] body[data-view="welcome"] #welcome-view { display: none !important; }
+html[data-auth-pending] body[data-view="welcome"] #auth-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+  color: var(--text);
+}
+.auth-loading .compass { width: 56px; height: 56px; color: var(--accent); }
+html[data-auth-pending] body[data-view="welcome"] #welcome-loading[hidden] { display: block !important; }
 .welcome-loading {
-  margin: 18px 0 0;
+  margin: 0;
   color: var(--muted);
   font-weight: 600;
 }

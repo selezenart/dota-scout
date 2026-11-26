@@ -603,7 +603,8 @@ test('the page hides signed-out controls from the first paint when a session is 
  const inline=[...new JSDOM(markup).window.document.querySelectorAll('head script:not([src])')].map(n=>n.textContent).join('\n');
  assert.ok(inline.includes('authPending'),'head marks auth pending before app code runs');
  const css=await readFile('web/styles.css','utf8');
- assert.match(css,/html\[data-auth-pending\] #welcome-signin/);
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #welcome-view/);
+ assert.ok(inline.includes('20000'),'head script clears the mark if the app never loads');
  const first=new JSDOM(markup,{url:'https://board.example/',runScripts:'outside-only'});
  first.window.localStorage.setItem('sb-example-auth-token','{}');first.window.eval(inline);
  assert.equal(first.window.document.documentElement.dataset.authPending,'');
@@ -616,6 +617,25 @@ test('the page hides signed-out controls from the first paint when a session is 
   assert.equal(h.w.document.documentElement.dataset.authPending,'','still pending while the session loads');
   resolveSession({user:{id:'owner'}});await flush();
   assert.equal(h.w.document.documentElement.dataset.authPending,undefined,'cleared once the account is known');
+ }finally{h.w.close();}
+});
+
+test('while the account loads a full loading screen replaces the welcome page',async()=>{
+ const doc=new JSDOM(markup).window.document;
+ const screen=doc.getElementById('auth-loading');
+ assert.ok(screen,'a dedicated loading screen exists');
+ assert.ok(screen.contains(doc.getElementById('welcome-loading')),'the status text lives on the loading screen');
+ assert.ok(!doc.getElementById('welcome-view').contains(screen),'the loading screen is outside the welcome page');
+ const css=await readFile('web/styles.css','utf8');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #welcome-view/,'welcome page hidden while pending');
+ assert.match(css,/html\[data-auth-pending\] body\[data-view="welcome"\] #auth-loading/,'loading screen only over the welcome view');
+ let resolveSession;
+ const h=await harness({query:'#access_token=abc&type=signup',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r),loadRoster:async()=>[]})});
+ try{
+  assert.equal(h.w.document.documentElement.dataset.authPending,'','a callback marks the page pending even without the head script');
+  resolveSession({user:{id:'owner'}});await flush();
+  assert.equal(h.w.document.documentElement.dataset.authPending,undefined);
+  assert.equal(h.w.document.body.dataset.view,'board');
  }finally{h.w.close();}
 });
 

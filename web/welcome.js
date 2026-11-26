@@ -33,7 +33,8 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
   const signin=$('welcome-signin'),register=$('welcome-register'),loading=$('welcome-loading');
   // While a session or sign-in callback is still resolving, show progress instead of signed-out controls.
   if(loading){if(loadingMessage)loading.textContent=loadingMessage;loading.hidden=!loadingMessage;}
-  if(!loadingMessage&&settled)delete document.documentElement.dataset.authPending;
+  if(loadingMessage)document.documentElement.dataset.authPending='';
+  else if(settled)delete document.documentElement.dataset.authPending;
   if(signin)signin.hidden=!!loadingMessage;
   if(signin){
    const updating=signedInAccount&&recovery;
