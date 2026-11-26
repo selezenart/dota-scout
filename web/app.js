@@ -1519,13 +1519,16 @@ function leaveCup(){
  const url=new URL(location.href);
  if(url.searchParams.has('cup')){
   url.searchParams.delete('cup');
-  if(!url.searchParams.has('draft')&&!url.searchParams.has('demo')&&!url.searchParams.has('mock'))url.searchParams.set('practice','');
+  // Back from Cup during a shared draft: keep its link so refresh/copy still opens the draft.
+  if(shared&&!demo&&!url.searchParams.has('draft'))url.searchParams.set('draft',shared.id);
+  else if(!url.searchParams.has('draft')&&!url.searchParams.has('demo')&&!url.searchParams.has('mock'))url.searchParams.set('practice','');
   history.pushState(null,'',url);
  }
 }
 function openCup(){showWorkspace('cup');welcome.board();void cup.refresh();}
 $('draft-button').onclick=()=>{leaveCup();const url=new URL(location.href);if(url.searchParams.has('team')){url.searchParams.delete('team');if(!demo)url.searchParams.set(shared?'draft':'practice',shared?.id||'');history.pushState(null,'',url);}showWorkspace('draft');};
 $('team-button').onclick=()=>navigateTeam();
+$('cup-button').onclick=()=>navigateCup();
 let homeTeamId='';
 let homeRoster=[];
 let homeRequest=0;

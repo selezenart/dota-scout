@@ -414,6 +414,32 @@ test('newer draft-open intent wins when responses arrive out of order',async()=>
 });
 
 
+test('the header Battle Cup button opens Battle Cup and Draft returns to the board',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  await h.click(h.q('cup-button'));
+  assert.equal(h.q('cup-view').hidden,false,'Battle Cup is shown');
+  assert.equal(h.q('cup-button').getAttribute('aria-current'),'page');
+  assert.ok(new URLSearchParams(h.w.location.search).has('cup'));
+  await h.click(h.q('draft-button'));
+  assert.equal(h.q('cup-view').hidden,true);
+  assert.equal(h.q('draft-view').hidden,false);
+ }finally{h.w.close();}
+});
+
+test('leaving Battle Cup during a shared draft restores the draft link',async()=>{
+ const row={id:draftId,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,roster:[]}};
+ const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row)})});
+ try{
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+  await h.click(h.q('cup-button'));
+  assert.ok(new URLSearchParams(h.w.location.search).has('cup'));
+  await h.click(h.q('draft-button'));
+  assert.equal(new URLSearchParams(h.w.location.search).get('draft'),draftId);
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+ }finally{h.w.close();}
+});
+
 test('shared draft invitation survives an OAuth return to Cup and explains guest sign-in',async()=>{
  const guest=await harness({query:'?draft='+draftId,backend:{getSession:async()=>null,onAuthChange(){}}});
  try{
@@ -672,6 +698,18 @@ test('while the account loads a full loading screen replaces the welcome page',a
   assert.equal(h.w.document.documentElement.dataset.authPending,undefined);
   assert.equal(h.w.document.body.dataset.view,'board');
  }finally{h.w.close();}
+});
+
+test('views fade in briefly when they appear and never animate with reduced motion',async()=>{
+ const css=await readFile('web/styles.css','utf8');
+ const block=css.match(/\/\* View fade[\s\S]*?\n\/\* end view fade \*\//)?.[0]||'';
+ assert.ok(block,'a dedicated view-fade block exists');
+ for(const selector of ['#welcome-view','#app-shell','#draft-view','#team-view','#cup-view','dialog[open]'])assert.ok(block.includes(selector),selector+' fades in');
+ const ms=+(block.match(/animation:\s*view-in\s+(\d+)ms/)||[])[1];
+ assert.ok(ms>=120&&ms<=220,'short fade, got '+ms+'ms');
+ assert.match(block,/@keyframes view-in\s*\{\s*from\s*\{[^}]*opacity/);
+ assert.match(block,/prefers-reduced-motion:\s*reduce[\s\S]*animation:\s*none/);
+ assert.doesNotMatch(block,/transition-delay|animation-delay/,'content is never delayed');
 });
 
 test('without a stored session the sign-in button shows immediately',async()=>{
