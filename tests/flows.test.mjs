@@ -421,6 +421,39 @@ test('first Steam sign-in requires profile setup before Team opens',async()=>{
  }finally{h.w.close();}
 });
 
+test('captain deletes a team from Setup only after confirming',async()=>{
+ let teams=[{id:'team',name:'Night Shift',owner_user_id:'owner'}],deleted;
+ const h=await harness({backend:accountBackend({listTeams:async()=>teams,loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],deleteTeam:async(...args)=>{deleted=args;teams=[];}})});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  assert.equal(h.button('Leave team',section()),undefined,'captain cannot leave');
+  h.w.confirm=()=>false;await h.click(h.button('Delete team',section()));assert.equal(deleted,undefined);
+  h.w.confirm=()=>true;await h.click(h.button('Delete team',section()));
+  assert.deepEqual(deleted,['team','owner']);
+  assert.equal(h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]').value,'');
+  assert.doesNotMatch(section().textContent,/Night Shift/);
+  assert.equal(h.q('create-session').disabled,true);
+ }finally{h.w.close();}
+});
+
+test('team member leaves a team from Setup and cannot delete it',async()=>{
+ let teams=[{id:'team',name:'Night Shift',owner_user_id:'captain'}],left;
+ const h=await harness({backend:accountBackend({listTeams:async()=>teams,loadRoster:async()=>[{userId:'captain',displayName:'Captain'},{userId:'owner',displayName:'Me'}],leaveTeam:async(...args)=>{left=args;teams=[];}})});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  assert.equal(h.button('Delete team',section()),undefined,'members cannot delete');
+  await h.click(h.button('Leave team',section()));
+  assert.deepEqual(left,['team','owner']);
+  assert.doesNotMatch(section().textContent,/Night Shift/);
+ }finally{h.w.close();}
+});
+
 test('captain can remove a teammate from Team home after confirming',async()=>{
  const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
  let removed;
