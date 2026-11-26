@@ -736,6 +736,30 @@ test('privacy and terms pages exist, are linked from the welcome footer and are 
  assert.match(config,/privacy\.html/);assert.match(config,/terms\.html/);
 });
 
+test('a direct Google return with a matching state signs in through Supabase and clears the token from the address',async()=>{
+ const finished=[];
+ const pending=JSON.stringify({state:'s'.repeat(32),nonce:'n'.repeat(32),at:Date.now()});
+ const h=await harness({query:'#id_token=TOKEN&state='+'s'.repeat(32),session:{'captain-google-oauth':pending,'captain-oauth-provider':'google'},backend:accountBackend({finishGoogle:async(token,nonce)=>{finished.push([token,nonce]);},loadRoster:async()=>[]})});
+ try{
+  assert.deepEqual(finished,[['TOKEN','n'.repeat(32)]]);
+  assert.equal(h.w.location.hash,'');
+  assert.equal(h.w.sessionStorage.getItem('captain-google-oauth'),null);
+ }finally{h.w.close();}
+});
+
+test('a direct Google return with a wrong or stale state is rejected without contacting Supabase',async()=>{
+ for(const [label,stored] of [['wrong state',{state:'x'.repeat(32),nonce:'n'.repeat(32),at:Date.now()}],['stale attempt',{state:'s'.repeat(32),nonce:'n'.repeat(32),at:Date.now()-11*60000}],['no attempt',null]]){
+  const finished=[];
+  const session={'captain-oauth-provider':'google'};if(stored)session['captain-google-oauth']=JSON.stringify(stored);
+  const h=await harness({query:'#id_token=TOKEN&state='+'s'.repeat(32),session,backend:accountBackend({getSession:async()=>null,finishGoogle:async(...args)=>{finished.push(args);}})});
+  try{
+   assert.deepEqual(finished,[],label+': Supabase not contacted');
+   assert.equal(h.w.location.hash,'',label+': token cleared');
+   assert.match(h.q('welcome-auth').textContent,/Google sign-in was canceled or could not finish/,label+': error shown');
+  }finally{h.w.close();}
+ }
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{

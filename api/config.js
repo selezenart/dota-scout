@@ -12,8 +12,13 @@ export function publicConfig(env = process.env) {
     return {url:url.origin,anonKey:key};
   } catch { return {}; }
 }
+// OAuth web client ID for direct Google sign-in (public by design). Empty when unset or malformed.
+export function googleClientId(env = process.env) {
+  const id = (env.GOOGLE_CLIENT_ID || '').trim();
+  return /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(id) ? id : '';
+}
 export async function googleConfigured(config,fetcher=fetch){
  if(!config.url)return false;
  try{const response=await fetcher(config.url+'/auth/v1/settings',{headers:{apikey:config.anonKey},signal:AbortSignal.timeout(3000)});return response.ok&&(await response.json()).external?.google===true;}catch{return false;}
 }
-export default async function handler(req,res) { res.setHeader('Cache-Control','no-store'); const config=publicConfig(); res.status(200).json(config.url?{...config,steamAuth:!!steamConfig(),googleAuth:await googleConfigured(config)}:config); }
+export default async function handler(req,res) { res.setHeader('Cache-Control','no-store'); const config=publicConfig(); res.status(200).json(config.url?{...config,steamAuth:!!steamConfig(),googleAuth:await googleConfigured(config),googleClientId:googleClientId()}:config); }
