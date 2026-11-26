@@ -1,0 +1,11 @@
+/* Privacy and terms pages: plain readable text on the board's dark theme. */
+:root { color-scheme: dark; }
+body { margin: 0; background: #0f1115; color: #eef1f5; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.legal { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+.legal h1 { font-size: 2rem; margin: 24px 0 4px; }
+.legal h2 { font-size: 1.15rem; margin: 32px 0 8px; }
+.legal a { color: #4cc9f0; }
+.legal-date { color: #a6afbd; margin-top: 0; }
+.legal ul { padding-left: 1.2em; }
+.legal li { margin: 6px 0; }
+.legal-links { margin-top: 40px; }
