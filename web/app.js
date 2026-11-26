@@ -1292,7 +1292,7 @@ async function lobby(){
    const ownsTeam=team.owner_user_id===user.id,leaving=team,account=user.id;
    const exit=button(ownsTeam?'Delete team':'Leave team',async()=>{
     if(exit.disabled||team?.id!==leaving.id||user?.id!==account)return;
-    if(!confirm(ownsTeam?'Delete '+leaving.name+' for everyone? Its drafts, scouting notes, Battle Cup spots and members are removed permanently.':'Leave '+leaving.name+'? You lose access to its drafts until a captain invites you again.'))return;
+    if(!confirm(ownsTeam?'Delete '+leaving.name+' for everyone? Its drafts, scouting notes, Battle Cup spots and members are removed permanently.':'Leave '+leaving.name+'? You lose access to its drafts and release any draft control you hold.'))return;
     exit.disabled=true;try{await (ownsTeam?backend.deleteTeam(leaving.id,account):backend.leaveTeam(leaving.id,account));}finally{exit.disabled=false;}
     if(user?.id!==account)return;
     if(shared?.team_id===leaving.id)enterPractice();
