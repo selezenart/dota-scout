@@ -72,26 +72,24 @@ Google logo source: https://developers.google.com/static/identity/images/g-logo.
 
 ## Database migrations
 
-Migrations live in `supabase/migrations/NNN_name.sql` and are applied with the Supabase CLI (`brew install supabase/tap/supabase`). The remote `supabase_migrations.schema_migrations` table records which versions each project already has, so `db push` only runs new files.
+Migrations live in `supabase/migrations/NNN_name.sql` and are applied with the Supabase CLI (`brew install supabase/tap/supabase`, one-time `supabase login`). The remote `supabase_migrations.schema_migrations` table records which versions each project already has, so `db push` only runs new files.
 
-One-time: `supabase login`.
-
-Apply new migrations, develop first:
+Always name the target project explicitly, develop first:
 
 ```bash
-supabase link --project-ref defwtxxathsewjmuggpm   # develop
-supabase db push --remote --dry-run                 # shows what would run
-supabase db push --remote
+supabase db push --remote=defwtxxathsewjmuggpm --dry-run   # develop: shows what would run
+supabase db push --remote=defwtxxathsewjmuggpm
 ```
 
-Then prod, at release time (before merging `develop` into `main`), and link back to develop afterwards so a later push cannot hit prod by accident:
+Prod only at release time, before merging `develop` into `main`:
 
 ```bash
-supabase link --project-ref cxawsjcmqajdyhrjrypn   # prod
-supabase db push --remote --dry-run
-supabase db push --remote
-supabase link --project-ref defwtxxathsewjmuggpm
+supabase db push --remote=cxawsjcmqajdyhrjrypn --dry-run   # prod
+supabase db push --remote=cxawsjcmqajdyhrjrypn
 ```
 
-New migration = new file with the next number (`015_…sql`). Never edit an applied migration; add a new one. Use `--include-all` only when an older-numbered file is intentionally still pending.
-
+Rules:
+- New migration = new file with the next number (`015_…sql`). Never edit an applied migration; add a new one.
+- Use `--include-all` only when an older-numbered file is intentionally still pending.
+- Never pass `--include-seed` or `--include-roles` to a remote project.
+- Never run `supabase config push`: `supabase/config.jsonc` holds local-development defaults and would overwrite hosted auth settings (redirect URLs, providers). Hosted settings are managed in the Supabase dashboard.
