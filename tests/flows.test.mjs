@@ -532,6 +532,26 @@ test('team member leaves a team from Setup and cannot delete it',async()=>{
  }finally{h.w.close();}
 });
 
+test('removing a teammate refreshes the team so the captain copies the new invite link',async()=>{
+ const oldCode='a'.repeat(64),newCode='b'.repeat(64),expires=new Date(Date.now()+864e5).toISOString();
+ let code=oldCode,copied;
+ const h=await harness({query:'',clipboard:async text=>{copied=text;},backend:accountBackend({
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:code,invite_expires_at:expires}],
+  loadRoster:async()=>[{userId:'owner',displayName:'Captain'},{userId:'player',displayName:'Lee'}],
+  removeTeamMember:async()=>{code=newCode;},
+ })});
+ try{
+  const root=h.q('team-home');root.querySelector('details').open=true;
+  await h.click(h.button('Remove Lee',root));
+  assert.match(root.textContent,/invite link was reset/i);
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  await h.click(h.button('Copy team invite link',h.w.document.querySelector('[data-manual-entry]')));
+  assert.ok(copied?.includes(newCode),'copied link uses the new code: '+copied);
+ }finally{h.w.close();}
+});
+
 test('captain can remove a teammate from Team home after confirming',async()=>{
  const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
  let removed;

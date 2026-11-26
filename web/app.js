@@ -1576,7 +1576,7 @@ function renderTeamHome(message=''){
    row.append(el('strong',label));
    const remove=button('Remove '+label,async()=>{
     if(removing||request!==homeRequest||user?.id!==account)return;
-    if(!confirm('Remove '+label+' from '+active.name+'? This also releases their team Battle Cup spot and draft control.'))return;
+    if(!confirm('Remove '+label+' from '+active.name+'? This also releases their team Battle Cup spot and draft control, and resets the team invite link.'))return;
     removing=true;remove.disabled=true;
     try{
      await backend.removeTeamMember(active.id,member.userId,account);
@@ -1587,7 +1587,10 @@ function renderTeamHome(message=''){
       selectedTeamIds=selectedTeamIds.filter(id=>id!==member.userId);
      }
      homeRoster=homeRoster.filter(item=>item.userId!==member.userId);
-     renderTeamHome(label+' was removed from the team.');renderRoster();
+     // Removal resets the invite code server-side; reload teams so Copy invite link uses the new one.
+     try{const fresh=await backend.listTeams();if(request===homeRequest&&user?.id===account){teams=fresh;if(team)team=teams.find(t=>t.id===team.id)||team;}}catch{}
+     if(request!==homeRequest||user?.id!==account)return;
+     renderTeamHome(label+' was removed from the team. The team invite link was reset: share the new one with players who have not joined yet.');renderRoster();
      root.querySelector('summary')?.focus();
     }catch(error){status.textContent=error.code==='PGRST202'?'Team removal is not available yet.':'Could not remove this player. Try again.';}
     finally{removing=false;remove.disabled=false;}
