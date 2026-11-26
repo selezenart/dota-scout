@@ -345,6 +345,21 @@ test('shared claim release reclaim and polling disconnect enforce confirmed auth
 });
 
 
+test('a follower whose team was deleted is told why and moved to local practice',async()=>{
+ let gone=false,teams=[{id:'team',name:'Night Shift',owner_user_id:'captain'}];
+ const row={id:draftId,team_id:'team',revision:0,drafter_user_id:'captain',state:{actions:[],firstPick:true,roster:[]}};
+ const backend=accountBackend({listTeams:async()=>teams,loadRoster:async()=>[],getDraft:async()=>{if(gone){const e=Error('JSON object requested, multiple (or no) rows returned');e.code='PGRST116';throw e;}return structuredClone(row);}});
+ const h=await harness({query:'?draft='+draftId,backend});
+ try{
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+  gone=true;teams=[];
+  h.w.dispatchEvent(new h.w.Event('focus'));await flush();await flush();
+  assert.equal(h.q('session-code').textContent,'Local');
+  assert.match(h.q('notice').textContent,/Night Shift was deleted, or you are no longer a member/);
+  assert.ok(new URLSearchParams(h.w.location.search).has('practice'));
+ }finally{h.w.close();}
+});
+
 test('local practice saves teammates by public ID from a visible Our team card',async()=>{
  const h=await harness();
  try{
@@ -529,6 +544,26 @@ test('team member leaves a team from Setup and cannot delete it',async()=>{
   await h.click(h.button('Leave team',section()));
   assert.deepEqual(left,['team','owner']);
   assert.doesNotMatch(section().textContent,/Night Shift/);
+ }finally{h.w.close();}
+});
+
+test('removing a teammate refreshes the team so the captain copies the new invite link',async()=>{
+ const oldCode='a'.repeat(64),newCode='b'.repeat(64),expires=new Date(Date.now()+864e5).toISOString();
+ let code=oldCode,copied;
+ const h=await harness({query:'',clipboard:async text=>{copied=text;},backend:accountBackend({
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:code,invite_expires_at:expires}],
+  loadRoster:async()=>[{userId:'owner',displayName:'Captain'},{userId:'player',displayName:'Lee'}],
+  removeTeamMember:async()=>{code=newCode;},
+ })});
+ try{
+  const root=h.q('team-home');root.querySelector('details').open=true;
+  await h.click(h.button('Remove Lee',root));
+  assert.match(root.textContent,/invite link was reset/i);
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  await h.click(h.button('Copy team invite link',h.w.document.querySelector('[data-manual-entry]')));
+  assert.ok(copied?.includes(newCode),'copied link uses the new code: '+copied);
  }finally{h.w.close();}
 });
 

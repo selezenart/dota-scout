@@ -793,14 +793,28 @@ async function openDraft(id,{navigate=true}={}){
 }
 async function poll(){
  if(!shared||polling||pending||!user)return;
- polling=true;const gen=generation,id=shared.id;let changed=false;
+ polling=true;const gen=generation,id=shared.id;let changed=false,leaving=false;
  try{
   const row=await backend.getDraft(id);if(gen!==generation)return;
   changed=!healthy||JSON.stringify(row)!==JSON.stringify(shared);
   if(changed)adopt(row);
   if(Date.now()-lastRoster>30000){const fresh=await backend.loadRoster(row.team_id);if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}}
- }catch(e){if(gen===generation){changed=healthy;healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}}
- finally{if(gen===generation){polling=false;if(changed)render();}}
+ }catch(e){
+  // The draft is no longer visible: the team was deleted or this account left / was removed.
+  if(gen===generation&&e.code==='PGRST116'){leaving=true;void safe(()=>leaveVanishedDraft(gen))().finally(()=>{if(gen===generation)polling=false;});return;}
+  if(gen===generation){changed=healthy;healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}
+ }
+ finally{if(gen===generation){if(!leaving)polling=false;if(changed)render();}}
+}
+async function leaveVanishedDraft(gen){
+ const teamId=shared?.team_id,name=teams.find(t=>t.id===teamId)?.name||'This team',account=user?.id;
+ let fresh=null;try{fresh=await backend.listTeams();}catch{}
+ if(gen!==generation||user?.id!==account)return;
+ if(fresh)teams=fresh;
+ const message=!fresh?'This draft is no longer available to you. Switched to local practice.':fresh.some(t=>t.id===teamId)?'This draft is no longer available. Switched to local practice.':name+' was deleted, or you are no longer a member. Switched to local practice.';
+ if(team?.id===teamId){++teamLoad;team=null;teamRoster=[];selectedTeamIds=[];}
+ if(homeTeamId===teamId){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
+ enterPractice();notice(message);
 }
 let teamRoster=[],selectedTeamIds=[],teamLoad=0;
 
@@ -1576,7 +1590,7 @@ function renderTeamHome(message=''){
    row.append(el('strong',label));
    const remove=button('Remove '+label,async()=>{
     if(removing||request!==homeRequest||user?.id!==account)return;
-    if(!confirm('Remove '+label+' from '+active.name+'? This also releases their team Battle Cup spot and draft control.'))return;
+    if(!confirm('Remove '+label+' from '+active.name+'? This also releases their team Battle Cup spot and draft control, and resets the team invite link.'))return;
     removing=true;remove.disabled=true;
     try{
      await backend.removeTeamMember(active.id,member.userId,account);
@@ -1587,7 +1601,12 @@ function renderTeamHome(message=''){
       selectedTeamIds=selectedTeamIds.filter(id=>id!==member.userId);
      }
      homeRoster=homeRoster.filter(item=>item.userId!==member.userId);
-     renderTeamHome(label+' was removed from the team.');renderRoster();
+     // Removal resets the invite code server-side; reload teams so Copy invite link uses the new one.
+     let reloaded=true;
+     try{const fresh=await backend.listTeams();if(request===homeRequest&&user?.id===account){teams=fresh;if(team)team=teams.find(t=>t.id===team.id)||team;}}
+     catch{reloaded=false;teams=teams.map(t=>t.id===active.id?{...t,invite_code:undefined}:t);if(team?.id===active.id)team={...team,invite_code:undefined};}
+     if(request!==homeRequest||user?.id!==account)return;
+     renderTeamHome(label+' was removed from the team. The team invite link was reset'+(reloaded?': share the new one with players who have not joined yet.':'. Reload the page to get the new link.'));renderRoster();
      root.querySelector('summary')?.focus();
     }catch(error){status.textContent=error.code==='PGRST202'?'Team removal is not available yet.':'Could not remove this player. Try again.';}
     finally{removing=false;remove.disabled=false;}
