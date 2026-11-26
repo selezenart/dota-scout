@@ -1687,7 +1687,7 @@ else if(!demo)void (async()=>{try{
  // Show progress instead of a signed-out home while a callback or a stored session resolves.
  const callback=!!(steamToken||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
  let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
- if(callback||storedSession)welcome.loading(callback?'Signing you in…':'Loading your account…');
+ if(callback||storedSession){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),15000);}
  if(steamToken){const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);}
 
  if(authFragment.has('error')||authFragment.has('error_code')){
