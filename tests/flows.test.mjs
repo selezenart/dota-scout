@@ -721,6 +721,21 @@ test('the page declares a favicon, a PNG fallback and an Apple touch icon that e
  assert.ok(head.querySelector('meta[name="theme-color"]'),'theme colour set');
 });
 
+test('privacy and terms pages exist, are linked from the welcome footer and are part of the build',async()=>{
+ const {existsSync,readFileSync}=await import('node:fs');
+ const footer=new JSDOM(markup).window.document.querySelector('.welcome-footer');
+ for(const page of ['privacy.html','terms.html']){
+  assert.ok(footer?.querySelector('a[href="./'+page+'"]'),'footer links '+page);
+  const file=new URL('../web/'+page,import.meta.url);assert.ok(existsSync(file),page+' exists');
+  const doc=new JSDOM(readFileSync(file,'utf8')).window.document;
+  assert.ok(doc.querySelector('h1'),page+' has a heading');
+  assert.ok(doc.querySelector('a[href="https://github.com/selezenart/dota-scout/issues"]'),page+' gives the contact link');
+  assert.equal(doc.querySelectorAll('script').length,0,page+' is static');
+ }
+ const config=readFileSync(new URL('../vite.config.js',import.meta.url),'utf8');
+ assert.match(config,/privacy\.html/);assert.match(config,/terms\.html/);
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{

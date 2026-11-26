@@ -22,6 +22,9 @@
 !web/favicon.svg
 !web/favicon-32.png
 !web/apple-touch-icon.png
+!web/privacy.html
+!web/terms.html
+!web/legal.css
 !api
 !api/config.js
 !api/steam.js
