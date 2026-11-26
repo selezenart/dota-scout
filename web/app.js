@@ -1289,6 +1289,18 @@ async function lobby(){
     else{await mutate('set_state',{roster});notice('Roster snapshot refreshed.');}
    },section).disabled=!canWrite();
    if(shared&&teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id)button('Owner reclaim drafter',()=>mutateOwner(),section);
+   const ownsTeam=team.owner_user_id===user.id,leaving=team,account=user.id;
+   const exit=button(ownsTeam?'Delete team':'Leave team',async()=>{
+    if(exit.disabled||team?.id!==leaving.id||user?.id!==account)return;
+    if(!confirm(ownsTeam?'Delete '+leaving.name+' for everyone? Its drafts, scouting notes, Battle Cup spots and members are removed permanently.':'Leave '+leaving.name+'? You lose access to its drafts and release any draft control you hold.'))return;
+    exit.disabled=true;try{await (ownsTeam?backend.deleteTeam(leaving.id,account):backend.leaveTeam(leaving.id,account));}finally{exit.disabled=false;}
+    if(user?.id!==account)return;
+    if(shared?.team_id===leaving.id)enterPractice();
+    ++teamLoad;team=null;teamRoster=[];selectedTeamIds=[];
+    if(homeTeamId===leaving.id){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
+    teams=await backend.listTeams();if(user?.id!==account)return;
+    await lobby();notice(ownsTeam?'Deleted team '+leaving.name+'.':'You left '+leaving.name+'.');
+   },section,ownsTeam?'danger':undefined);
    const results=el('div',null,'team-draft-results');results.setAttribute('aria-live','polite');
    button('List team drafts',async()=>{const teamId=team.id,drafts=await backend.listDrafts(teamId);if(team?.id!==teamId)return;results.replaceChildren();for(const d of drafts)button(`${d.id.slice(0,8)} - ${d.status} - revision ${d.revision}`,()=>openDraft(d.id),results);if(!drafts.length)results.append(el('p','No drafts yet.'));},section);section.append(results);
   }
