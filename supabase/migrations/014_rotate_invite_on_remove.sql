@@ -4,6 +4,9 @@ create or replace function public.remove_scout_team_member(target_team uuid, tar
 returns void language plpgsql security definer set search_path = '' as $$
 declare captain uuid;
 begin
+  -- Lock the invite row before the team row: join_scout_team locks team_invites first and then
+  -- touches teams through the team_members foreign key, so this order avoids a deadlock.
+  perform 1 from public.team_invites where team_id = target_team for update;
   select owner_user_id into captain from public.teams where id = target_team for update;
   if auth.uid() is null or captain is distinct from auth.uid() then
     raise exception 'Only the captain can remove teammates' using errcode = '42501';

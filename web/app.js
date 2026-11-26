@@ -1588,9 +1588,11 @@ function renderTeamHome(message=''){
      }
      homeRoster=homeRoster.filter(item=>item.userId!==member.userId);
      // Removal resets the invite code server-side; reload teams so Copy invite link uses the new one.
-     try{const fresh=await backend.listTeams();if(request===homeRequest&&user?.id===account){teams=fresh;if(team)team=teams.find(t=>t.id===team.id)||team;}}catch{}
+     let reloaded=true;
+     try{const fresh=await backend.listTeams();if(request===homeRequest&&user?.id===account){teams=fresh;if(team)team=teams.find(t=>t.id===team.id)||team;}}
+     catch{reloaded=false;teams=teams.map(t=>t.id===active.id?{...t,invite_code:undefined}:t);if(team?.id===active.id)team={...team,invite_code:undefined};}
      if(request!==homeRequest||user?.id!==account)return;
-     renderTeamHome(label+' was removed from the team. The team invite link was reset: share the new one with players who have not joined yet.');renderRoster();
+     renderTeamHome(label+' was removed from the team. The team invite link was reset'+(reloaded?': share the new one with players who have not joined yet.':'. Reload the page to get the new link.'));renderRoster();
      root.querySelector('summary')?.focus();
     }catch(error){status.textContent=error.code==='PGRST202'?'Team removal is not available yet.':'Could not remove this player. Try again.';}
     finally{removing=false;remove.disabled=false;}
