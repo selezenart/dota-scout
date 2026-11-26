@@ -1242,9 +1242,33 @@ async function lobby(){
  button('Save and scout enemies',async()=>{await mutate('set_state',{enemyIds:validateEnemies()});notice('Enemy scouting saved.');},scoutingActions,'primary').disabled=!canWrite();
  button('Clear enemy scouting',async()=>{await mutate('set_state',{enemyIds:[]});enemies.value='';enemies.removeAttribute('aria-invalid');notice('Enemy scouting cleared.');},scoutingActions).disabled=!canWrite();
  if(!shared){
-  const allies=el('details',null,'lobby-card lobby-local');allies.append(el('summary','Import a local roster'));manual.append(allies);
-  const ownIds=field(allies,'Import allied public IDs (up to 5)','','textarea');ownIds.rows=3;ownIds.placeholder='One player ID or link per line';
-  button('Import local roster',async()=>{if(!canWrite())throw Error('Become local drafter first.');const tokens=ownIds.value.trim().split(/[\s,;]+/).filter(Boolean);if(tokens.some(token=>parseAccountIds(token).length!==1))throw Error('Correct invalid allied account entries first.');const ids=parseAccountIds(ownIds.value);if(!ids.length||ids.length>5)throw Error('Enter one to five unique account IDs.');await mutate('set_state',{roster:ids.map(id=>({id:String(id),name:String(id),steamAccountId:String(id)}))});notice('Local roster imported.');},allies);
+  // Local practice: tick members of the active team and/or add stand-ins by public ID (max five).
+  const ours=el('section',null,'lobby-card lobby-local');ours.setAttribute('aria-label','Our team');ours.append(el('h3','Our team'));manual.append(ours);
+  const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
+  const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
+  const savedMembers=current.map(p=>p.id||p.userId).filter(id=>memberIds.has(id));
+  let picked=savedMembers.length?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,5).map(p=>p.userId);
+  if(members.length){
+   ours.append(el('p','Load players from '+team.name+':'));
+   const list=el('div',null,'lobby-roster');ours.append(list);
+   for(const p of members){const label=el('label',p.displayName),check=el('input');check.type='checkbox';check.checked=picked.includes(p.userId);check.onchange=()=>{picked=check.checked?[...new Set([...picked,p.userId])]:picked.filter(id=>id!==p.userId);};label.prepend(check);list.append(label);}
+  }else if(user&&!demo)ours.append(el('p',teams.length?'Select an active team under Team management to load your teammates.':'Create or join a team to load your teammates.','secondary'));
+  const manualIds=current.filter(p=>!memberIds.has(p.id||p.userId)).map(p=>p.steamAccountId||p.accountId).filter(Boolean);
+  const ownIds=field(ours,members.length?'Add other players by public ID or URL':'Teammate public player IDs or URLs (up to 5)',manualIds.join(' '),'textarea');ownIds.rows=3;ownIds.placeholder='One player ID or link per line';
+  const ourActions=el('div',null,'lobby-actions');ours.append(ourActions);
+  button('Save our team',async()=>{
+   if(!canWrite())throw Error('Become local drafter first.');
+   const tokens=ownIds.value.trim().split(/[\s,;]+/).filter(Boolean);
+   if(tokens.some(token=>parseAccountIds(token).length!==1)){ownIds.setAttribute('aria-invalid','true');throw Error('Correct invalid teammate account entries first.');}
+   const chosen=members.filter(p=>picked.includes(p.userId)).map(p=>({...p,id:p.userId}));
+   const extra=parseAccountIds(ownIds.value).map(id=>({id:String(id),name:String(id),steamAccountId:String(id)}));
+   const rows=[...chosen,...extra];
+   if(!rows.length||rows.length>5)throw Error('Choose one to five players for our team.');
+   const accounts=rows.map(p=>String(p.steamAccountId||'')).filter(Boolean);
+   if(new Set(accounts).size!==accounts.length)throw Error('A player is listed twice. Remove the duplicate public ID.');
+   ownIds.removeAttribute('aria-invalid');
+   await mutate('set_state',{roster:rows});notice('Our team saved.');
+  },ourActions,'primary').disabled=!canWrite();
  }
  if(user&&!demo){
   const section=el('section',null,'team-management lobby-card');section.setAttribute('aria-label','Team management');section.append(el('h3','Team management'));manual.append(section);
