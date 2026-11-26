@@ -305,6 +305,18 @@ test('Setup preselects the signed-in team so shared draft creation is available'
  }finally{h.w.close();}
 });
 
+test('Setup keeps typed text when the preselected team roster arrives late',async()=>{
+ let release;const slow=new Promise(r=>release=r);
+ const h=await harness({backend:accountBackend({listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner'}],loadRoster:()=>slow})});
+ try{
+  await h.click(h.q('setup-button'));
+  const enemies=h.q('enemy-account-input');enemies.value='12345';enemies.dispatchEvent(new h.w.Event('input',{bubbles:true}));
+  release([{userId:'owner',displayName:'Captain',availability:'available'}]);await flush();
+  assert.equal(h.q('enemy-account-input').value,'12345');
+  assert.equal(h.q('create-session').disabled,false);
+ }finally{h.w.close();}
+});
+
 test('Setup explains why shared draft creation is unavailable',async()=>{
  const signedOut=await harness();
  try{

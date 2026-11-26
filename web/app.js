@@ -1198,16 +1198,19 @@ async function checkLiveWatch(watch) {
  }finally{clearTimeout(timeout);}
 }
 
+let lobbyEdited=false;
+function sessionButtons(){$('create-session').disabled=!user||!team||demo;$('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';$('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!user?'Sign in to create a shared draft with your team.':!team?(teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';}
 async function lobby(){
+ lobbyEdited=false;
  // Default to the team shown on Team home so shared draft creation is not silently disabled.
  // The roster loads in the background so a slow response never blocks Setup.
- if(user&&!demo&&!team&&teams.length){const id=(teams.find(t=>t.id===homeTeamId)||teams[0]).id;void safe(async()=>{if(await loadTeam(id)&&team?.id===id&&$('session-dialog').open)await lobby();})();}
+ if(user&&!demo&&!team&&teams.length){const id=(teams.find(t=>t.id===homeTeamId)||teams[0]).id;void safe(async()=>{if(!await loadTeam(id)||team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();}
  else if(team&&!teamRoster.length)await loadTeam(team.id,{preserveSelection:true});
  const details=document.querySelector('[data-connection-details]'),manual=document.querySelector('[data-manual-entry]');
  details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
  const link=el('a','Open legacy live/replay helper');link.href='http://localhost:8765';link.target='_blank';link.rel='noopener';if(['localhost','127.0.0.1'].includes(location.hostname))details.append(link);
  const demoLink=el('a','Try the demo');demoLink.href='?demo';
- const links=el('div',null,'lobby-links');links.append(link,demoLink);details.append(links);manual.replaceChildren();
+ const links=el('div',null,'lobby-links');links.append(link,demoLink);details.append(links);manual.replaceChildren();manual.oninput=()=>{lobbyEdited=true;};
  const scouting=el('section',null,'lobby-card');scouting.setAttribute('aria-label','Enemy scouting');scouting.append(el('h3','Enemy scouting'));manual.append(scouting);
  const scoutingActions=el('div',null,'lobby-actions');
  if(!demo){
@@ -1296,7 +1299,7 @@ async function lobby(){
    button('List team drafts',async()=>{const teamId=team.id,drafts=await backend.listDrafts(teamId);if(team?.id!==teamId)return;results.replaceChildren();for(const d of drafts)button(`${d.id.slice(0,8)} - ${d.status} - revision ${d.revision}`,()=>openDraft(d.id),results);if(!drafts.length)results.append(el('p','No drafts yet.'));},section);section.append(results);
   }
  }
- $('create-session').disabled=!user||!team||demo;$('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!user?'Sign in to create a shared draft with your team.':!team?(teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';$('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';$('join-session').disabled=!user||demo;showIfClosed('session-dialog');
+ sessionButtons();$('join-session').disabled=!user||demo;showIfClosed('session-dialog');
 }
 function showIfClosed(id){if(!$(id).open)show(id);}
 
