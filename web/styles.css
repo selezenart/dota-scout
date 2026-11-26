@@ -3090,6 +3090,9 @@ body[data-view="welcome"] {
 
 }
 
+html[data-auth-pending] #welcome-signin,
+html[data-auth-pending] #welcome-register { display: none; }
+html[data-auth-pending] #welcome-loading[hidden] { display: block !important; }
 .welcome-loading {
   margin: 18px 0 0;
   color: var(--muted);
