@@ -799,8 +799,22 @@ async function poll(){
   changed=!healthy||JSON.stringify(row)!==JSON.stringify(shared);
   if(changed)adopt(row);
   if(Date.now()-lastRoster>30000){const fresh=await backend.loadRoster(row.team_id);if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}}
- }catch(e){if(gen===generation){changed=healthy;healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}}
+ }catch(e){
+  // The draft is no longer visible: the team was deleted or this account left / was removed.
+  if(gen===generation&&e.code==='PGRST116'){polling=false;void safe(()=>leaveVanishedDraft(gen))();return;}
+  if(gen===generation){changed=healthy;healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}
+ }
  finally{if(gen===generation){polling=false;if(changed)render();}}
+}
+async function leaveVanishedDraft(gen){
+ const teamId=shared?.team_id,name=teams.find(t=>t.id===teamId)?.name||'This team',account=user?.id;
+ const fresh=await backend.listTeams();
+ if(gen!==generation||user?.id!==account)return;
+ teams=fresh;
+ const message=fresh.some(t=>t.id===teamId)?'This draft is no longer available. Switched to local practice.':name+' was deleted, or you are no longer a member. Switched to local practice.';
+ if(team?.id===teamId){++teamLoad;team=null;teamRoster=[];selectedTeamIds=[];}
+ if(homeTeamId===teamId){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
+ enterPractice();notice(message);
 }
 let teamRoster=[],selectedTeamIds=[],teamLoad=0;
 

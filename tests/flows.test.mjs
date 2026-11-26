@@ -345,6 +345,21 @@ test('shared claim release reclaim and polling disconnect enforce confirmed auth
 });
 
 
+test('a follower whose team was deleted is told why and moved to local practice',async()=>{
+ let gone=false,teams=[{id:'team',name:'Night Shift',owner_user_id:'captain'}];
+ const row={id:draftId,team_id:'team',revision:0,drafter_user_id:'captain',state:{actions:[],firstPick:true,roster:[]}};
+ const backend=accountBackend({listTeams:async()=>teams,loadRoster:async()=>[],getDraft:async()=>{if(gone){const e=Error('JSON object requested, multiple (or no) rows returned');e.code='PGRST116';throw e;}return structuredClone(row);}});
+ const h=await harness({query:'?draft='+draftId,backend});
+ try{
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+  gone=true;teams=[];
+  h.w.dispatchEvent(new h.w.Event('focus'));await flush();await flush();
+  assert.equal(h.q('session-code').textContent,'Local');
+  assert.match(h.q('notice').textContent,/Night Shift was deleted, or you are no longer a member/);
+  assert.ok(new URLSearchParams(h.w.location.search).has('practice'));
+ }finally{h.w.close();}
+});
+
 test('local practice saves teammates by public ID from a visible Our team card',async()=>{
  const h=await harness();
  try{
