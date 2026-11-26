@@ -16,7 +16,7 @@ Use `?onboarding-demo` to try a teammate’s invitation, account creation, email
 
 Immediately after the invitation, the walkthrough accepts a Dotabuff/OpenDota player link, numeric Steam profile URL, SteamID64 or Dota account ID. Import loads public data from OpenDota and suggests signature heroes from the last 180 days of recorded hero totals. Players review these suggestions and choose their role and today’s hero preferences. Sample and manual options remain available. Steam vanity URLs require a numeric ID. Registration and joining in this walkthrough remain simulated.
 
-For shared teams, apply `supabase/migrations/001_team_drafts.sql` to your Supabase project. Configure email confirmation and password recovery redirect URLs for the deployed origin. Set these environment variables in the launching shell or Vercel project settings:
+For shared teams, apply the migrations in `supabase/migrations/` to your Supabase project (see *Database migrations* below). Configure email confirmation and password recovery redirect URLs for the deployed origin. Set these environment variables in the launching shell or Vercel project settings:
 
 - `SUPABASE_URL`: HTTPS project origin.
 - `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY`: public publishable key or anon-role JWT.
@@ -69,3 +69,29 @@ The Google button appears on sign-in, registration and invitation screens. Its a
 Profile import now seeds an empty Today list from signatures as an editable starting point. Existing Today selections remain unchanged. Selected heroes stay first in the picker grid when not searching, even if they do not match the preferred-role suggestion filter. Search still filters by name.
 
 Google logo source: https://developers.google.com/static/identity/images/g-logo.png (official Google Identity branding asset).
+
+## Database migrations
+
+Migrations live in `supabase/migrations/NNN_name.sql` and are applied with the Supabase CLI (`brew install supabase/tap/supabase`). The remote `supabase_migrations.schema_migrations` table records which versions each project already has, so `db push` only runs new files.
+
+One-time: `supabase login`.
+
+Apply new migrations, develop first:
+
+```bash
+supabase link --project-ref defwtxxathsewjmuggpm   # develop
+supabase db push --remote --dry-run                 # shows what would run
+supabase db push --remote
+```
+
+Then prod, at release time (before merging `develop` into `main`), and link back to develop afterwards so a later push cannot hit prod by accident:
+
+```bash
+supabase link --project-ref cxawsjcmqajdyhrjrypn   # prod
+supabase db push --remote --dry-run
+supabase db push --remote
+supabase link --project-ref defwtxxathsewjmuggpm
+```
+
+New migration = new file with the next number (`015_…sql`). Never edit an applied migration; add a new one. Use `--include-all` only when an older-numbered file is intentionally still pending.
+
