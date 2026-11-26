@@ -50,7 +50,7 @@ Team members can submit name and image proposals from Team after applying `supab
 
 ### Steam registration
 
-Apply `supabase/migrations/005_steam_sign_in.sql`. Configure server-only `SUPABASE_SERVICE_ROLE_KEY`, `STEAM_AUTH_ORIGIN` (the exact HTTPS production origin without a trailing slash), and a stable random `STEAM_AUTH_SECRET` of at least 32 characters in Vercel. Preserve the Steam auth secret across deployments because it is used to derive Steam account identifiers. The button appears only when server configuration is present. Steam OpenID does not use the scouting API key or send confirmation email. Existing email accounts and new Steam accounts are separate.
+Apply `supabase/migrations/005_steam_sign_in.sql`. Configure server-only `SUPABASE_SERVICE_ROLE_KEY`, `STEAM_AUTH_ORIGIN` (the exact HTTPS origin of that deployment, without a trailing slash: production and the develop Preview each set their own), and a stable random `STEAM_AUTH_SECRET` of at least 32 characters in Vercel. Preserve the Steam auth secret across deployments because it is used to derive Steam account identifiers. The button appears only when server configuration is present. Steam OpenID does not use the scouting API key or send confirmation email. Existing email accounts and new Steam accounts are separate.
 
 
 ### Optional team and public profile import
@@ -64,11 +64,27 @@ Preview `?demo&cup&profile` for the profile and close it to try booking and next
 
 ### Google sign-in
 
-The Google button appears on sign-in, registration and invitation screens. Its availability is read server-side from the Supabase public Auth settings; until Google is enabled it stays disabled with an explanation. Configure a Google OAuth web client in Google Cloud with the authorized callback `https://cxawsjcmqajdyhrjrypn.supabase.co/auth/v1/callback`, then enter its client ID and secret in Supabase Authentication -> Providers -> Google and enable it. Keep the secret in Supabase only. Ensure `https://captains-draft-three.vercel.app/?cup` is allowed in Supabase Auth redirect URLs. Reload the site after enabling. Full Google OAuth still requires a real account test.
+The Google button appears on sign-in, registration and invitation screens. Its availability is read from the Supabase public Auth settings; until the Google provider is enabled it stays disabled with an explanation.
+
+With `GOOGLE_CLIENT_ID` set in Vercel, the board signs in with Google directly (ID token, state and hashed nonce) and hands the token to Supabase (`signInWithIdToken`), so Google's consent screen shows the board's own address. Setup per environment:
+
+- Google Cloud OAuth web client: add each site origin with a trailing slash (for example `https://captains-board.vercel.app/`) as an authorized redirect URI, and keep `https://<project>.supabase.co/auth/v1/callback` for the fallback.
+- Supabase Authentication -> Providers -> Google: enable it and enter the same client ID and secret. The secret stays in Supabase only.
+- Vercel: `GOOGLE_CLIENT_ID` for Production and for the develop Preview, then redeploy.
+
+Without `GOOGLE_CLIENT_ID` the button falls back to Supabase's own Google redirect. Each origin, plus `/?cup`, must be allowed in Supabase Auth redirect URLs.
 
 Profile import now seeds an empty Today list from signatures as an editable starting point. Existing Today selections remain unchanged. Selected heroes stay first in the picker grid when not searching, even if they do not match the preferred-role suggestion filter. Search still filters by name.
 
 Google logo source: https://developers.google.com/static/identity/images/g-logo.png (official Google Identity branding asset).
+
+### STRATZ counters
+
+Divine/Immortal counters and synergy come from STRATZ. A STRATZ token works from only two IP addresses per 15 minutes, so board requests never call STRATZ. Instead `api/stratz-refresh.js` runs once a day (Vercel Schedules in `vercel.json`: production 04:00 UTC, preview 16:00 UTC) and stores every hero's matchups in `public.stratz_matchups` (migration 012). `api/stratz.js` reads them with the public anon key. Server-only Vercel variables for the refresh: `STRATZ_API_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`. Keep the STRATZ credit shown on the board.
+
+### Build-time configuration
+
+`npm run build` inlines the public configuration (Supabase URL, anon key and sign-in flags) into the bundle, so a signed-in reload goes straight to the team without waiting for `/api/config`. After changing `SUPABASE_URL`, `SUPABASE_ANON_KEY` or `GOOGLE_CLIENT_ID`, redeploy. Steam and Google availability is still refreshed from `/api/config` in the background.
 
 ## Database migrations
 
