@@ -553,6 +553,60 @@ test('captain can remove a teammate from Team home after confirming',async()=>{
  }finally{h.w.close();}
 });
 
+test('a restored session shows a loading state instead of the signed-out welcome page',async()=>{
+ let resolveSession,resolveTeams;
+ const backend=accountBackend({getSession:()=>new Promise(r=>resolveSession=r),listTeams:()=>new Promise(r=>resolveTeams=r),loadRoster:async()=>[]});
+ const h=await harness({query:'',backend,local:{'sb-example-auth-token':'{}'}});
+ try{
+  const signin=h.q('welcome-signin'),seen=[];
+  const observer=new h.w.MutationObserver(()=>seen.push(signin.hidden?'(hidden)':signin.textContent.trim()));observer.observe(signin,{childList:true,characterData:true,subtree:true,attributes:true});
+  assert.equal(signin.hidden,true,'no sign-in button while the session loads');
+  assert.equal(h.q('welcome-register').hidden,true);
+  assert.equal(h.q('welcome-loading').hidden,false);
+  assert.match(h.q('welcome-loading').textContent,/Loading your account/);
+  resolveSession({user:{id:'owner'}});await flush();
+  resolveTeams([]);await flush();
+  assert.equal(h.q('welcome-loading').hidden,true);
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.ok(!seen.includes('Sign in'),'Sign in never appeared: '+seen.join(','));
+  observer.disconnect();
+ }finally{h.w.close();}
+});
+
+test('an OAuth or Steam callback says it is signing in until the session resolves',async()=>{
+ let resolveSession;
+ const h=await harness({query:'#access_token=abc&type=signup',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r)})});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,true);
+  assert.match(h.q('welcome-loading').textContent,/Signing you in/);
+  resolveSession(null);await flush();
+  assert.equal(h.q('welcome-loading').hidden,true);
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-signin').textContent.trim(),'Sign in');
+ }finally{h.w.close();}
+});
+
+test('without a stored session the sign-in button shows immediately',async()=>{
+ const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-loading').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('clicking the logo while signed in never shows the signed-out Sign in button',async()=>{
+ const h=await harness({query:'',backend:accountBackend({loadRoster:async()=>[]}),local:{'sb-example-auth-token':'{}'}});
+ try{
+  const signin=h.q('welcome-signin'),seen=[];
+  const observer=new h.w.MutationObserver(()=>seen.push(signin.hidden?'(hidden)':signin.textContent.trim()));observer.observe(signin,{childList:true,characterData:true,subtree:true,attributes:true});
+  await h.click(h.q('home-button'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(signin.textContent.trim(),'Open my team');
+  assert.ok(!seen.includes('Sign in'),'Sign in never appeared: '+seen.join(','));
+  observer.disconnect();
+ }finally{h.w.close();}
+});
+
 test('signed-in home page offers the team instead of sign in and keeps the session',async()=>{
  let signIns=0;
  const h=await harness({query:'',backend:accountBackend({signIn:async()=>{signIns++;return {session:{user:{id:'owner'}}};},loadRoster:async()=>[]})});
