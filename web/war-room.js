@@ -25,17 +25,37 @@ function seatCard(seat,options){
  return card;
 }
 
-function emptySeat(side,onAddEnemy){
+// Inline "add a teammate by ID" form for an open ally seat. Kept across re-renders (stats loading
+// re-draws the rail) so typed text and focus survive.
+let allyEntry=null;
+function allyForm(index,onAddAlly){
+ const form=make('form','seat-card seat-empty seat-add-ally is-ally'),input=make('input'),actions=make('span','seat-add-actions'),add=make('button',null,'Add'),cancel=make('button',null,'Cancel'),error=make('small','seat-add-error');
+ input.type='text';input.setAttribute('aria-label','Player ID or link');input.placeholder='Player ID or link';input.autocomplete='off';input.value=allyEntry.text;input.oninput=()=>{allyEntry.text=input.value;};
+ add.type='submit';cancel.type='button';error.setAttribute('role','status');error.textContent=allyEntry.error||'';
+ cancel.onclick=()=>{allyEntry=null;form.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));};
+ form.onsubmit=async event=>{event.preventDefault();if(allyEntry.busy)return;allyEntry.busy=true;add.disabled=true;
+  try{await onAddAlly(input.value);allyEntry=null;}
+  catch(e){allyEntry.error=e.message||'Could not add this player.';error.textContent=allyEntry.error;input.focus();}
+  finally{if(allyEntry){allyEntry.busy=false;add.disabled=false;}form.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));}};
+ actions.append(add,cancel);form.append(input,actions,error);
+ queueMicrotask(()=>{if(form.isConnected&&!form.contains(document.activeElement))input.focus({preventScroll:true});});
+ return form;
+}
+function emptySeat(side,onAddEnemy,index,onAddAlly){
+ if(side==='ally'&&onAddAlly&&allyEntry?.index===index)return allyForm(index,onAddAlly);
+ if(side==='ally'&&onAddAlly){const seat=make('button','seat-card seat-empty is-ally');seat.type='button';seat.append(make('strong',null,'Open seat'),make('small',null,'Add player by ID'));seat.onclick=()=>{allyEntry={index,text:'',error:''};seat.dispatchEvent(new CustomEvent('seat-rerender',{bubbles:true}));};return seat;}
  if(side==='ally'){const seat=make('div','seat-card seat-empty is-ally');seat.append(make('strong',null,'Open seat'));return seat;}
  const add=make('button','seat-card seat-empty seat-add-enemy is-enemy','Add enemy');add.type='button';add.onclick=onAddEnemy;return add;
 }
 
 export function renderPlayerRail(root,options){
+ if(!options.onAddAlly)allyEntry=null;
+ if(!root.dataset.seatRerender){root.dataset.seatRerender='1';root.addEventListener('seat-rerender',()=>root.__rerender?.());}root.__rerender=()=>renderPlayerRail(root,root.__options);root.__options=options;
  const focused=root.contains(document.activeElement)?document.activeElement.dataset?.seatId:null;
  root.replaceChildren();
  for(const [side,seats] of [['ally',options.allies],['enemy',options.enemies]]){
   const group=make('div','seat-group');group.setAttribute('role','group');group.setAttribute('aria-label',side==='ally'?'Our players':'Enemy players');
-  for(let index=0;index<5;index++)group.append(seats[index]?seatCard(seats[index],options):emptySeat(side,options.onAddEnemy));
+  for(let index=0;index<5;index++)group.append(seats[index]?seatCard(seats[index],options):emptySeat(side,options.onAddEnemy,index,options.onAddAlly));
   root.append(group);
  }
  if(focused!=null)[...root.querySelectorAll('[data-seat-id]')].find(node=>node.dataset.seatId===focused)?.focus({preventScroll:true});

@@ -134,3 +134,8 @@
 @keyframes wr-slot{from{opacity:0;transform:scale(1.7)}to{opacity:1;transform:scale(1)}}
 @keyframes wr-reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){#draft-view *,#draft-view *::before,#draft-view *::after{animation:none!important;transition:none!important}#draft-view .seat-card:hover,#draft-view .hero-grid>button.hero-tile:hover{transform:none!important}}
+#draft-view .seat-add-ally{align-items:stretch;justify-content:center;gap:8px;text-align:left}
+#draft-view .seat-add-ally input{min-width:0;padding:7px 8px;color:var(--wr-ink);background:var(--wr-s2);border:1px solid var(--wr-line);border-radius:6px;font:inherit}
+#draft-view .seat-add-actions{display:flex;gap:6px}#draft-view .seat-add-actions button{flex:1;padding:6px 8px}
+#draft-view .seat-add-error{color:var(--wr-them);min-height:1em}
+#draft-view button.seat-empty small{color:var(--wr-muted)}
