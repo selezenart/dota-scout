@@ -332,8 +332,8 @@ test('signed-in local practice mixes ticked team members with manual stand-ins',
   const card=h.w.document.querySelector('[data-manual-entry] section[aria-label="Our team"]');
   const checks=[...card.querySelectorAll('input[type=checkbox]')];
   assert.deepEqual(checks.map(c=>c.parentElement.textContent.trim()),['Captain','Mid','Away']);
-  assert.deepEqual(checks.map(c=>c.checked),[true,false,false],'current roster members stay ticked');
-  checks[1].click();checks[2].click();
+  assert.deepEqual(checks.map(c=>c.checked),[true,true,false],'available members ticked by default');
+  checks[2].click();
   card.querySelector('textarea').value='200';
   await h.click(h.button('Save our team',card));
   assert.equal(h.w.localStorage.getItem('captain-practice-v1:owner'),null,'duplicate public ID rejected');

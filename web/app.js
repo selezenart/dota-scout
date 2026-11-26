@@ -1247,7 +1247,7 @@ async function lobby(){
   const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
   const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
   const savedMembers=current.map(p=>p.id||p.userId).filter(id=>memberIds.has(id));
-  let picked=savedMembers.length?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,5).map(p=>p.userId);
+  let picked=savedMembers.some(id=>id!==user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,5).map(p=>p.userId);
   if(members.length){
    ours.append(el('p','Load players from '+team.name+':'));
    const list=el('div',null,'lobby-roster');ours.append(list);
