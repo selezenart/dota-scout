@@ -1684,6 +1684,10 @@ else if(!demo)void (async()=>{try{
  const authFragment=new URLSearchParams(location.hash.slice(1));
  let oauthProvider;try{oauthProvider=sessionStorage.getItem('captain-oauth-provider');sessionStorage.removeItem('captain-oauth-provider');}catch{}
  const steamToken=authFragment.get('steam_token');
+ // Show progress instead of a signed-out home while a callback or a stored session resolves.
+ const callback=!!(steamToken||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
+ let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
+ if(callback||storedSession){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),15000);}
  if(steamToken){const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);}
 
  if(authFragment.has('error')||authFragment.has('error_code')){
@@ -1714,7 +1718,7 @@ else if(!demo)void (async()=>{try{
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });const initialSession=await backend.getSession();
  if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!new URLSearchParams(location.search).has('steam-error'))welcome.home('signin');
- await authChanged(initialSession);welcome.setConnection('available');render();}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
+ await authChanged(initialSession);welcome.loading();welcome.setConnection('available');render();}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
 
 
 

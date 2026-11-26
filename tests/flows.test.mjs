@@ -24,7 +24,7 @@ function waitForText(window,node,expected){
   observer.observe(node,{childList:true,subtree:true,characterData:true});
  });
 }
-async function harness({query='?practice',backend,saved,local={},session={},clipboard}={}){
+async function harness({query='?practice',backend,saved,local={},session={},clipboard,beforeRun}={}){
  const dom=new JSDOM(markup,{url:'https://board.example/'+query,runScripts:'outside-only'}),w=dom.window;
  w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>backend?{url:'https://example.supabase.co',anonKey:'public'}:{}});
  w.setInterval=()=>0;w.confirm=()=>true;
@@ -33,6 +33,7 @@ async function harness({query='?practice',backend,saved,local={},session={},clip
  for(const [key,value] of Object.entries(session))w.sessionStorage.setItem(key,value);
  if(clipboard)Object.defineProperty(w.navigator,'clipboard',{value:{writeText:clipboard}});
  if(saved)w.localStorage.setItem('captain-practice-v1',saved);
+ beforeRun?.(w);
  w.eval(code);await flush();
  const q=id=>w.document.getElementById(id);
  const click=async node=>{assert.ok(node,'control exists');node.click();await flush();};
@@ -550,6 +551,72 @@ test('captain can remove a teammate from Team home after confirming',async()=>{
   assert.deepEqual(removed,['team','player','owner']);
   assert.equal(root.querySelectorAll('.team-home-card').length,1);
   assert.match(root.textContent,/Lee was removed/);
+ }finally{h.w.close();}
+});
+
+test('a restored session shows a loading state instead of the signed-out welcome page',async()=>{
+ let resolveSession,resolveTeams;
+ const backend=accountBackend({getSession:()=>new Promise(r=>resolveSession=r),listTeams:()=>new Promise(r=>resolveTeams=r),loadRoster:async()=>[]});
+ const h=await harness({query:'',backend,local:{'sb-example-auth-token':'{}'}});
+ try{
+  const signin=h.q('welcome-signin'),seen=[];
+  const observer=new h.w.MutationObserver(()=>seen.push(signin.hidden?'(hidden)':signin.textContent.trim()));observer.observe(signin,{childList:true,characterData:true,subtree:true,attributes:true});
+  assert.equal(signin.hidden,true,'no sign-in button while the session loads');
+  assert.equal(h.q('welcome-register').hidden,true);
+  assert.equal(h.q('welcome-loading').hidden,false);
+  assert.match(h.q('welcome-loading').textContent,/Loading your account/);
+  resolveSession({user:{id:'owner'}});await flush();
+  resolveTeams([]);await flush();
+  assert.equal(h.q('welcome-loading').hidden,true);
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.ok(!seen.includes('Sign in'),'Sign in never appeared: '+seen.join(','));
+  observer.disconnect();
+ }finally{h.w.close();}
+});
+
+test('an OAuth or Steam callback says it is signing in until the session resolves',async()=>{
+ let resolveSession;
+ const h=await harness({query:'#access_token=abc&type=signup',backend:accountBackend({getSession:()=>new Promise(r=>resolveSession=r)})});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,true);
+  assert.match(h.q('welcome-loading').textContent,/Signing you in/);
+  resolveSession(null);await flush();
+  assert.equal(h.q('welcome-loading').hidden,true);
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-signin').textContent.trim(),'Sign in');
+ }finally{h.w.close();}
+});
+
+test('a link error clears the loading state and a stalled session restores Sign in after 15 seconds',async()=>{
+ const errored=await harness({query:'#error=access_denied',backend:accountBackend({getSession:()=>new Promise(()=>{})}),local:{'sb-example-auth-token':'{}'}});
+ try{assert.equal(errored.q('welcome-loading').hidden,true);assert.ok(errored.q('welcome-auth').querySelector('form'));}finally{errored.w.close();}
+ const timers=[];const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})}),local:{'sb-example-auth-token':'{}'},beforeRun:w=>{const real=w.setTimeout.bind(w);w.setTimeout=(fn,ms,...a)=>{if(ms===15000){timers.push(fn);return 0;}return real(fn,ms,...a);};}});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,true);
+  assert.equal(timers.length,1);timers[0]();
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-loading').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('without a stored session the sign-in button shows immediately',async()=>{
+ const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
+ try{
+  assert.equal(h.q('welcome-signin').hidden,false);
+  assert.equal(h.q('welcome-loading').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('clicking the logo while signed in never shows the signed-out Sign in button',async()=>{
+ const h=await harness({query:'',backend:accountBackend({loadRoster:async()=>[]}),local:{'sb-example-auth-token':'{}'}});
+ try{
+  const signin=h.q('welcome-signin'),seen=[];
+  const observer=new h.w.MutationObserver(()=>seen.push(signin.hidden?'(hidden)':signin.textContent.trim()));observer.observe(signin,{childList:true,characterData:true,subtree:true,attributes:true});
+  await h.click(h.q('home-button'));
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(signin.textContent.trim(),'Open my team');
+  assert.ok(!seen.includes('Sign in'),'Sign in never appeared: '+seen.join(','));
+  observer.disconnect();
  }finally{h.w.close();}
 });
 
