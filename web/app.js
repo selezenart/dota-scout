@@ -1674,8 +1674,7 @@ if(imageId!==null)void (async()=>{
  try{
   if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(imageId))throw Error();
   if(demo){await showIdentityDownload(root,demoIdentityBackend,imageId);return;}
-  const response=await fetch('/api/config',{cache:'no-store'});
-  const config=await response.json();
+  const config=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url?__BOARD_CONFIG__:await (await fetch('/api/config',{cache:'no-store'})).json();
   await showIdentityDownload(root,createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey}),imageId);
  }catch{root.textContent='This image is unavailable.';}
 })();
@@ -1702,7 +1701,10 @@ else if(!demo)void (async()=>{try{
 
  }
 
- const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}const config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey});
+ // Use the config baked in at build time; fall back to /api/config when the build had none.
+ const inlined=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;
+ let config=inlined;
+ if(!config){const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey});
  if(teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
  if(new URLSearchParams(location.search).has('steam-error')){
   welcome.home('signin');
@@ -1718,7 +1720,9 @@ else if(!demo)void (async()=>{try{
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });const initialSession=await backend.getSession();
  if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!new URLSearchParams(location.search).has('steam-error'))welcome.home('signin');
- await authChanged(initialSession);welcome.loading();welcome.setConnection('available');render();}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
+ await authChanged(initialSession);welcome.loading();welcome.setConnection('available');render();
+ // Sign-in provider flags can change without a rebuild; refresh them in the background.
+ if(inlined)void fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(fresh=>{if(!fresh?.url)return;steamEnabled=fresh.steamAuth===true;googleEnabled=fresh.googleAuth===true;welcome.setConnection('available');}).catch(()=>{});}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
 
 
 
