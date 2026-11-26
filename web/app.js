@@ -1519,7 +1519,9 @@ function leaveCup(){
  const url=new URL(location.href);
  if(url.searchParams.has('cup')){
   url.searchParams.delete('cup');
-  if(!url.searchParams.has('draft')&&!url.searchParams.has('demo')&&!url.searchParams.has('mock'))url.searchParams.set('practice','');
+  // Back from Cup during a shared draft: keep its link so refresh/copy still opens the draft.
+  if(shared&&!demo&&!url.searchParams.has('draft'))url.searchParams.set('draft',shared.id);
+  else if(!url.searchParams.has('draft')&&!url.searchParams.has('demo')&&!url.searchParams.has('mock'))url.searchParams.set('practice','');
   history.pushState(null,'',url);
  }
 }

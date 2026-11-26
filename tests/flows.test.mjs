@@ -427,6 +427,19 @@ test('the header Battle Cup button opens Battle Cup and Draft returns to the boa
  }finally{h.w.close();}
 });
 
+test('leaving Battle Cup during a shared draft restores the draft link',async()=>{
+ const row={id:draftId,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,roster:[]}};
+ const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row)})});
+ try{
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+  await h.click(h.q('cup-button'));
+  assert.ok(new URLSearchParams(h.w.location.search).has('cup'));
+  await h.click(h.q('draft-button'));
+  assert.equal(new URLSearchParams(h.w.location.search).get('draft'),draftId);
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+ }finally{h.w.close();}
+});
+
 test('shared draft invitation survives an OAuth return to Cup and explains guest sign-in',async()=>{
  const guest=await harness({query:'?draft='+draftId,backend:{getSession:async()=>null,onAuthChange(){}}});
  try{
