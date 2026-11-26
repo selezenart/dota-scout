@@ -11,7 +11,14 @@ const normalizeProfile = row => row ? ({
 }) : null;
 
 /** Real Supabase client. Public URL/key only; authorization lives in Postgres. */
-export function createBackend({ supabaseUrl, supabaseAnonKey } = {}) {
+const randomHex = (bytes = 32) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+export const googleAttemptKey = 'captain-google-oauth';
+
+export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '' } = {}) {
   if (!supabaseUrl || !supabaseAnonKey) throw new Error('Team workspace is not configured. Set the public Supabase URL and publishable key.');
   const client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -45,7 +52,18 @@ export function createBackend({ supabaseUrl, supabaseAnonKey } = {}) {
     verifySteam(token) { return checked(client.auth.verifyOtp({token_hash:token,type:'email'})); },
     async getSession() { return (await checked(client.auth.getSession())).session; },
     signIn(email, password) { return checked(client.auth.signInWithPassword({ email: email.trim(), password })); },
-    signInGoogle() { return checked(client.auth.signInWithOAuth({provider:'google',options:{redirectTo:new URL('/',location.origin).href,queryParams:{prompt:'select_account'}}})); },
+    // With a Google client ID, sign in directly with Google so its consent screen shows our own
+    // address, then hand the ID token to Supabase (finishGoogle). Otherwise use Supabase's redirect.
+    googleDirect: !!googleClientId,
+    async signInGoogle() {
+      if (!googleClientId) return checked(client.auth.signInWithOAuth({provider:'google',options:{redirectTo:new URL('/',location.origin).href,queryParams:{prompt:'select_account'}}}));
+      const state = randomHex(), nonce = randomHex();
+      sessionStorage.setItem(googleAttemptKey, JSON.stringify({ state, nonce, at: Date.now() }));
+      const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      url.search = new URLSearchParams({ client_id: googleClientId, redirect_uri: location.origin + '/', response_type: 'id_token', scope: 'openid email profile', state, nonce: await sha256Hex(nonce), prompt: 'select_account' });
+      location.assign(url.href);
+    },
+    finishGoogle(token, nonce) { return checked(client.auth.signInWithIdToken({ provider: 'google', token, nonce })); },
     signUp(email, password, name = '', redirect = '/') {
       return checked(client.auth.signUp({ email: email.trim(), password, options: {
         emailRedirectTo: new URL(redirect, location.origin).href,
