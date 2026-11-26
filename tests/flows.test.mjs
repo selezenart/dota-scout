@@ -674,6 +674,18 @@ test('while the account loads a full loading screen replaces the welcome page',a
  }finally{h.w.close();}
 });
 
+test('views fade in briefly when they appear and never animate with reduced motion',async()=>{
+ const css=await readFile('web/styles.css','utf8');
+ const block=css.match(/\/\* View fade[\s\S]*?\n\/\* end view fade \*\//)?.[0]||'';
+ assert.ok(block,'a dedicated view-fade block exists');
+ for(const selector of ['#welcome-view','#app-shell','#draft-view','#team-view','#cup-view','dialog[open]'])assert.ok(block.includes(selector),selector+' fades in');
+ const ms=+(block.match(/animation:\s*view-in\s+(\d+)ms/)||[])[1];
+ assert.ok(ms>=120&&ms<=220,'short fade, got '+ms+'ms');
+ assert.match(block,/@keyframes view-in\s*\{\s*from\s*\{[^}]*opacity/);
+ assert.match(block,/prefers-reduced-motion:\s*reduce[\s\S]*animation:\s*none/);
+ assert.doesNotMatch(block,/transition-delay|animation-delay/,'content is never delayed');
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{
