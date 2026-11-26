@@ -14,6 +14,14 @@
     <script type="module" src="./main.js"></script>
   </head>
   <body data-view="welcome">
+    <div id="auth-loading" class="auth-loading">
+      <svg class="compass" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <path d="M20 2v5M38 20h-5M20 38v-5M2 20h5" stroke="currentColor" />
+        <path d="M20 7 30 30 20 25 10 30Z" stroke="currentColor" stroke-width="1.5" />
+        <path d="m20 7 0 18-10 5Z" fill="currentColor" />
+      </svg>
+      <p id="welcome-loading" class="welcome-loading" role="status" aria-live="polite" hidden>Loading your account…</p>
+    </div>
     <section
       id="welcome-view"
       class="welcome-view"
@@ -73,7 +81,6 @@
               Practice locally
             </button>
           </div>
-          <p id="welcome-loading" class="welcome-loading" role="status" aria-live="polite" hidden>Loading your account…</p>
           <p class="welcome-paths">
             Start with local practice, no account needed.<br />Or
             <a href="?demo"
