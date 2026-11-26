@@ -1674,7 +1674,7 @@ if(imageId!==null)void (async()=>{
  try{
   if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(imageId))throw Error();
   if(demo){await showIdentityDownload(root,demoIdentityBackend,imageId);return;}
-  const config=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url?__BOARD_CONFIG__:await (await fetch('/api/config',{cache:'no-store'})).json();
+  const config=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:await (await fetch('/api/config',{cache:'no-store'})).json();
   await showIdentityDownload(root,createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey}),imageId);
  }catch{root.textContent='This image is unavailable.';}
 })();

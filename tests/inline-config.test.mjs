@@ -10,7 +10,7 @@ process.env.SUPABASE_URL='https://example.supabase.co';
 process.env.SUPABASE_ANON_KEY=anonKey;
 delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const built=await build({logLevel:'silent',plugins:[{name:'inline-config-boundaries',enforce:'pre',load(id){
+const built=await build({inlineConfig:true,logLevel:'silent',plugins:[{name:'inline-config-boundaries',enforce:'pre',load(id){
  const path=id.replaceAll('\\','/');
  if(path.endsWith('/web/backend.js'))return 'export const createBackend=options=>globalThis.__createBackend(options);';
  if(path.endsWith('/web/data.js'))return 'export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async id=>({id:String(id),sources:{},heroes:[]});';
