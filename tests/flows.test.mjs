@@ -289,7 +289,7 @@ test('team creation and joining preserve an explicit roster selection when creat
  const h=await harness({backend});try{
  await h.click(h.q('setup-button'));const manual=h.w.document.querySelector('[data-manual-entry]');const named=label=>[...manual.querySelectorAll('label')].find(l=>l.textContent.startsWith(label)).querySelector('input');named('New team name').value='Five';await h.click(h.button('Create team'));assert.equal(h.q('create-session').disabled,false);
  named('Team invitation code').value='invite-code';await h.click(h.button('Join team'));assert.equal(joined,'invite-code');
- const checks=[...manual.querySelectorAll('input[type=checkbox]')];assert.deepEqual(checks.map(c=>c.checked),[true,true,false]);checks[1].click();checks[2].click();await h.click(h.q('create-session'));
+ const checks=[...manual.querySelectorAll('.team-management input[type=checkbox]')];assert.deepEqual(checks.map(c=>c.checked),[true,true,false]);checks[1].click();checks[2].click();await h.click(h.q('create-session'));
  assert.deepEqual(created.roster.map(p=>p.id),['owner','away']);assert.equal(h.q('session-code').textContent,'aaaaaaaa');
  }finally{h.dom.window.close();}
 });
@@ -305,6 +305,45 @@ test('shared claim release reclaim and polling disconnect enforce confirmed auth
  }finally{h.dom.window.close();}
 });
 
+
+test('local practice saves teammates by public ID from a visible Our team card',async()=>{
+ const h=await harness();
+ try{
+  await h.click(h.q('setup-button'));
+  const card=h.w.document.querySelector('[data-manual-entry] section[aria-label="Our team"]');
+  assert.ok(card,'Our team card is visible');
+  const ids=card.querySelector('textarea');ids.value='111 222';
+  await h.click(h.button('Save our team',card));
+  const saved=JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster;
+  assert.deepEqual(saved.map(p=>p.steamAccountId),['111','222']);
+  ids.value='1 2 3 4 5 6';await h.click(h.button('Save our team',card));
+  assert.equal(JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster.length,2);
+ }finally{h.w.close();}
+});
+
+test('signed-in local practice mixes ticked team members with manual stand-ins',async()=>{
+ const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
+ const members=[{userId:'owner',displayName:'Captain',steamAccountId:'100',availability:'available'},{userId:'mid',displayName:'Mid',steamAccountId:'200',availability:'available'},{userId:'away',displayName:'Away',steamAccountId:'300',availability:'unavailable'}];
+ const h=await harness({backend:accountBackend({listTeams:async()=>[squad],loadRoster:async()=>members})});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const card=h.w.document.querySelector('[data-manual-entry] section[aria-label="Our team"]');
+  const checks=[...card.querySelectorAll('input[type=checkbox]')];
+  assert.deepEqual(checks.map(c=>c.parentElement.textContent.trim()),['Captain','Mid','Away']);
+  assert.deepEqual(checks.map(c=>c.checked),[true,true,false],'available members ticked by default');
+  checks[2].click();
+  card.querySelector('textarea').value='200';
+  await h.click(h.button('Save our team',card));
+  assert.equal(h.w.localStorage.getItem('captain-practice-v1:owner'),null,'duplicate public ID rejected');
+  card.querySelector('textarea').value='999';
+  await h.click(h.button('Save our team',card));
+  const saved=JSON.parse(h.w.localStorage.getItem('captain-practice-v1:owner')).state.roster;
+  assert.deepEqual(saved.map(p=>p.id),['owner','mid','away','999']);
+  assert.deepEqual(saved.map(p=>p.steamAccountId),['100','200','300','999']);
+ }finally{h.w.close();}
+});
 
 test('newer draft-open intent wins when responses arrive out of order',async()=>{
  const older='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',newer='cccccccc-cccc-cccc-cccc-cccccccccccc';
