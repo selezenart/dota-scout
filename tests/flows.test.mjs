@@ -294,6 +294,44 @@ test('team creation and joining preserve an explicit roster selection when creat
  }finally{h.dom.window.close();}
 });
 
+test('Setup preselects the signed-in team so shared draft creation is available',async()=>{
+ const squad={id:'team',name:'Night Shift',owner_user_id:'owner'};
+ const h=await harness({backend:accountBackend({listTeams:async()=>[squad],loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}]})});
+ try{
+  await h.click(h.q('setup-button'));
+  assert.equal(h.q('create-session').disabled,false);
+  assert.equal(h.q('create-session').textContent,'Create draft for Night Shift');
+  assert.equal(h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]').value,'team');
+ }finally{h.w.close();}
+});
+
+test('Setup keeps typed text when the preselected team roster arrives late',async()=>{
+ let release;const slow=new Promise(r=>release=r);
+ const h=await harness({backend:accountBackend({listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner'}],loadRoster:()=>slow})});
+ try{
+  await h.click(h.q('setup-button'));
+  const enemies=h.q('enemy-account-input');enemies.value='12345';enemies.dispatchEvent(new h.w.Event('input',{bubbles:true}));
+  release([{userId:'owner',displayName:'Captain',availability:'available'}]);await flush();
+  assert.equal(h.q('enemy-account-input').value,'12345');
+  assert.equal(h.q('create-session').disabled,false);
+ }finally{h.w.close();}
+});
+
+test('Setup explains why shared draft creation is unavailable',async()=>{
+ const signedOut=await harness();
+ try{
+  await signedOut.click(signedOut.q('setup-button'));
+  assert.equal(signedOut.q('create-session').disabled,true);
+  assert.match(signedOut.q('create-session-hint').textContent,/Sign in/);
+ }finally{signedOut.w.close();}
+ const noTeam=await harness({backend:accountBackend()});
+ try{
+  await noTeam.click(noTeam.q('setup-button'));
+  assert.equal(noTeam.q('create-session').disabled,true);
+  assert.match(noTeam.q('create-session-hint').textContent,/Create or join a team/);
+ }finally{noTeam.w.close();}
+});
+
 test('shared claim release reclaim and polling disconnect enforce confirmed authority',async()=>{
  let callback,offline=false;const calls=[];let row={id:draftId,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,roster:[]}};
  const backend=accountBackend({onAuthChange:fn=>callback=fn,listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>{if(offline)throw Error('Offline');return structuredClone(row);},mutateDraft:async(id,revision,op)=>{assert.equal(revision,row.revision);calls.push(op);row={...row,revision:row.revision+1,drafter_user_id:op==='release'?null:'owner'};return structuredClone(row);},signOut:async()=>callback(null,'SIGNED_OUT')});
