@@ -1,5 +1,6 @@
 -- Removing a teammate also resets the team invite code, so the removed player
 -- cannot rejoin with a link they already have. Same body as 009 plus the reset.
+-- Also fixes lock order in delete_scout_team (from 013).
 create or replace function public.remove_scout_team_member(target_team uuid, target_user uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 declare captain uuid;
@@ -33,3 +34,21 @@ $$;
 
 revoke all on function public.remove_scout_team_member(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.remove_scout_team_member(uuid,uuid) to authenticated;
+
+-- Same lock order for team deletion (replaces 013's version): the cascade deletes the
+-- team_invites row, so lock it before the team row to avoid a deadlock with a concurrent join.
+create or replace function public.delete_scout_team(target_team uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare captain uuid;
+begin
+  perform 1 from public.team_invites where team_id = target_team for update;
+  select owner_user_id into captain from public.teams where id = target_team for update;
+  if auth.uid() is null or captain is null or captain is distinct from auth.uid() then
+    raise exception 'Only the captain can delete this team' using errcode = '42501';
+  end if;
+  delete from public.teams where id = target_team;
+end;
+$$;
+
+revoke all on function public.delete_scout_team(uuid) from public, anon, authenticated;
+grant execute on function public.delete_scout_team(uuid) to authenticated;
