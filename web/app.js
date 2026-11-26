@@ -1708,17 +1708,19 @@ else if(!demo)void (async()=>{try{
  // Direct Google sign-in returns #id_token&state. Remove it from the address at once, use the saved
  // attempt once, and only accept a matching state from the last 10 minutes.
  const googleAttemptKey='captain-google-oauth'; // same key as backend.js googleAttemptKey
- const googleToken=authFragment.get('id_token');let googleAttempt=null;
+ const googleToken=authFragment.get('id_token');let googleAttempt=null,googleRejected=false;
  if(googleToken||(authFragment.has('state')&&!authFragment.has('access_token'))){
   let saved=null;try{saved=JSON.parse(sessionStorage.getItem(googleAttemptKey)||'null');sessionStorage.removeItem(googleAttemptKey);}catch{}
   const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);
   if(googleToken&&saved?.state&&saved.state===authFragment.get('state')&&Date.now()-saved.at<600000)googleAttempt=saved;
-  else if(googleToken)welcome.linkError('google');
+  else if(googleToken)googleRejected=true;
  }
  // Show progress instead of a signed-out home while a callback or a stored session resolves.
- const callback=!!(steamToken||googleAttempt||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
+ const callback=!googleRejected&&!!(steamToken||googleAttempt||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
  let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
  if(callback||storedSession||'authPending' in document.documentElement.dataset){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),15000);}
+ // A rejected Google return shows its error after the loading state is set, so nothing covers it.
+ if(googleRejected)welcome.linkError('google');
  if(steamToken){const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);}
 
  if(authFragment.has('error')||authFragment.has('error_code')){

@@ -756,6 +756,8 @@ test('a direct Google return with a wrong or stale state is rejected without con
    assert.deepEqual(finished,[],label+': Supabase not contacted');
    assert.equal(h.w.location.hash,'',label+': token cleared');
    assert.match(h.q('welcome-auth').textContent,/Google sign-in was canceled or could not finish/,label+': error shown');
+   assert.equal(h.q('welcome-loading').hidden,true,label+': loading screen does not cover the error');
+   assert.equal(h.w.document.documentElement.dataset.authPending,undefined,label+': page not marked pending');
   }finally{h.w.close();}
  }
 });
