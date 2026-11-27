@@ -477,68 +477,8 @@ main {
   font-size: var(--text-xl);
 }
 
-.tree-key {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 12px;
-  font-size: var(--text-xs);
-}
-
 .history-panel {
   overflow: hidden;
-}
-
-#timeline {
-  padding: 0 8px 8px;
-}
-
-.tree-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
-  align-items: center;
-  min-height: 19px;
-  font-size: var(--text-xs);
-  line-height: 1.15;
-}
-
-.tree-row[data-action="pick"] {
-  min-height: 26px;
-}
-
-.tree-row img {
-  width: 28px;
-  height: 16px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.tree-row button {
-  font: inherit;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-}
-
-.tree-row[aria-current="step"],
-.tree-row.is-current {
-  background: var(--raised);
-}
-
-.tree-row[aria-current="step"]::after,
-.tree-row.is-current::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-inline: 2px solid var(--brass);
-  box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.tree-row[aria-current="step"] .tree-number,
-.tree-row.is-current .tree-number {
-  color: var(--brass);
-  font-weight: 700;
 }
 
 .history-legend {
@@ -1386,15 +1326,6 @@ dialog::backdrop {
     display: block !important;
   }
 
-  .tree-row {
-    min-height: 24px;
-    font-size: var(--text-sm);
-  }
-
-  .tree-row[data-action="pick"] {
-    min-height: 28px;
-  }
-
   .team-view {
     padding: 16px 0;
   }
@@ -1550,7 +1481,6 @@ dialog::backdrop {
     color: CanvasText;
   }
 
-  .tree-row[aria-current="step"],
   .tree-row.is-current {
     outline: 2px solid Highlight;
   }
@@ -2276,15 +2206,6 @@ label.auth-field {
   .hero-grid > button.hero-tile {
     aspect-ratio: auto;
   }
-
-  .tree-row {
-    min-height: 21px;
-    font-size: var(--text-sm);
-  }
-
-  .tree-row[data-action="pick"] {
-    min-height: 28px;
-  }
 }
 
 @media (max-width: 1100px) {
@@ -2515,86 +2436,6 @@ label.auth-field {
 
 .history-panel .panel-heading h2 {
   font-size: var(--text-xl);
-}
-
-.tree-key {
-  padding: 10px 15px;
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-}
-
-#timeline {
-  padding: 0 9px 9px;
-}
-
-.tree-row {
-  min-height: 23px;
-  grid-template-columns: minmax(0,1fr) 26px minmax(0,1fr);
-  font-size: var(--text-xs);
-  border-radius: 4px;
-}
-
-.tree-row[data-action=pick] {
-  min-height: 31px;
-}
-
-.tree-row .tree-number {
-  border-inline: 0 !important;
-  font: var(--text-xs)/1.2 var(--body);
-  color: var(--muted) !important;
-}
-
-.tree-row .tree-hero {
-  width: 28px;
-  height: 24px;
-  object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
-  flex: none;
-}
-
-.tree-row[data-action=pick] .tree-hero {
-  width: 34px;
-  height: 29px;
-}
-
-.tree-row[data-action=ban] .tree-hero {
-  filter: grayscale(.8) brightness(.75);
-}
-
-.tree-placeholder {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  opacity: .45;
-}
-
-.tree-placeholder::before {
-  content: "";
-  width: 17px;
-  height: 17px;
-  border: 1px dashed currentColor;
-  border-radius: 4px;
-}
-
-.tree-row[aria-current=step] {
-  background: linear-gradient(90deg,color-mix(in srgb, var(--accent) 8%, transparent),color-mix(in srgb, var(--accent) 2%, transparent));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-
-.tree-row[aria-current=step]::after {
-  border: 0;
-  box-shadow: none;
-}
-
-.tree-row[aria-current=step] .tree-number {
-  color: var(--brass) !important;
-  font-weight: 700;
-}
-
-.tree-row[aria-current=step] .tree-placeholder {
-  opacity: 1;
 }
 
 .history-legend {
@@ -2973,16 +2814,6 @@ label.auth-field {
   font-size: var(--text-xs);
   color: var(--muted);
   margin-top: 2px;
-}
-
-.tree-row .tree-hero {
-  width: 30px !important;
-  height: 24px !important;
-}
-
-.tree-row[data-action=pick] .tree-hero {
-  width: 36px !important;
-  height: 29px !important;
 }
 
 .position-picker legend {
@@ -3544,84 +3375,8 @@ label.auth-field {
   grid-area: analysis;
 }
 
-.history-panel .tree-key,
 .history-panel .history-legend {
   display: none;
-}
-
-#timeline {
-  display: grid;
-  grid-template-columns: repeat(6,minmax(0,1fr));
-  padding: 0 14px 14px;
-  gap: 10px;
-}
-
-#timeline .tree-row {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 48px;
-  padding: 0;
-  border: 1px solid var(--line);
-  background: linear-gradient(var(--line),var(--surface));
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-#timeline .tree-row:disabled {
-  opacity: .55;
-}
-
-#timeline .tree-row.is-current {
-  border: 2px solid var(--accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 19%, transparent);
-  opacity: 1;
-}
-
-#timeline .tree-row.is-current .tree-placeholder {
-  color: var(--accent);
-}
-
-#timeline .tree-hero {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border: 0;
-  filter: none;
-}
-
-#timeline .tree-row[data-action=ban] .tree-hero {
-  filter: grayscale(.65) brightness(.6);
-}
-
-#timeline .tree-row[data-action=ban].is-recorded:after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg,transparent 47%,var(--enemy) 48%,var(--enemy) 52%,transparent 53%);
-  pointer-events: none;
-}
-
-#timeline .tree-number {
-  position: absolute;
-  top: 2px;
-  left: 3px;
-  font-size: var(--text-xs);
-  color: var(--text);
-  background: color-mix(in srgb, var(--bg) 73%, transparent);
-  padding: 1px 2px;
-  z-index: 1;
-}
-
-#timeline .tree-placeholder {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  font-size: var(--text-xl);
-  color: var(--muted);
 }
 
 .history-inspect {
@@ -3780,10 +3535,6 @@ label.auth-field {
 }
 
 @media (max-width: 1100px) {
-  #timeline {
-    grid-template-columns: repeat(3,minmax(0,1fr));
-  }
-
   .draft-layout {
     grid-template-columns: minmax(0,1fr) 300px;
   }
@@ -3798,10 +3549,6 @@ label.auth-field {
   .draft-layout > .decision-panel {
     position: static;
     max-height: none;
-  }
-
-  #timeline {
-    grid-template-columns: repeat(2,minmax(0,1fr));
   }
 
   .history-inspect {
@@ -3884,30 +3631,27 @@ label.auth-field {
   margin: 0;
 }
 
-#timeline .tree-row .tree-hero {
-  width: 100% !important;
-  height: 100% !important;
-}
-
 /* Vertical Captain's Mode order, matching the supplied in-game reference. */
 .draft-layout {
   grid-template-columns: 268px minmax(0,1fr) 320px;
   grid-template-areas: 'history heroes decision' 'history analysis analysis';
 }
 
-.history-panel .tree-key {
+/* Draft order timeline: one Captain's Mode column, our turns left of the number, theirs right.
+   Every .tree-row lives in #timeline .tree-turn; .tree-number is the row's sibling. */
+#draft-view .history-panel .tree-key {
   display: flex;
   justify-content: space-between;
-  padding: 12px 24px 10px;
+  padding: 12px 20px;
   font-size: var(--text-sm);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: 0;
 }
 
 #timeline {
   display: flex;
   flex-direction: column;
-  gap: 0;
   padding: 4px 16px 16px;
 }
 
@@ -3928,15 +3672,22 @@ label.auth-field {
 }
 
 #timeline .tree-turn .tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
   grid-column: 1;
   grid-row: 1;
   justify-self: end;
   flex: none;
   width: 60px;
+  min-width: 0;
   min-height: 24px;
   height: 24px;
-  background: var(--bg);
-  border: 1px solid var(--muted);
+  padding: 0;
+  font-size: var(--text-xs);
+  line-height: 1.15;
+  background: var(--surface);
+  border: 1px solid var(--accent);
   border-radius: 5px;
   box-shadow: 0 2px 3px color-mix(in srgb, var(--bg) 53%, transparent);
   opacity: 1;
@@ -3954,7 +3705,14 @@ label.auth-field {
   height: 40px;
 }
 
-#timeline .tree-turn .tree-row:before {
+#timeline .tree-turn .tree-row.is-current {
+  background: var(--brass);
+  border-color: var(--brass);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* Connector from each slot to the turn number. */
+#timeline .tree-turn .tree-row::before {
   content: '';
   display: block;
   position: absolute;
@@ -3965,44 +3723,87 @@ label.auth-field {
   background: color-mix(in srgb, var(--muted) 53%, transparent);
 }
 
-#timeline .tree-turn[data-side=enemy] .tree-row:before {
+#timeline .tree-turn[data-side=enemy] .tree-row::before {
   left: auto;
   right: 100%;
 }
 
-#timeline .tree-turn > .tree-number {
-  position: static;
+#timeline .tree-number {
   grid-column: 2;
   grid-row: 1;
   justify-self: center;
-  font-size: var(--text-xs);
+  z-index: 1;
+  font-size: var(--text-sm);
   color: var(--muted);
-  padding: 0;
-  background: none;
 }
 
 #timeline .tree-turn:has(.is-current) > .tree-number {
   color: var(--accent);
 }
 
-#timeline .tree-turn .tree-hero {
+#timeline .tree-hero {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 0;
   border-radius: 4px;
+  filter: none;
 }
 
-#timeline .tree-turn .tree-placeholder {
+#timeline .tree-row[data-action=ban] .tree-hero {
+  filter: grayscale(.65) brightness(.6);
+}
+
+#timeline .tree-row[data-action=ban].is-recorded::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg,transparent 47%,var(--enemy) 48%,var(--enemy) 52%,transparent 53%);
+  pointer-events: none;
+}
+
+#timeline .tree-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
   font-size: var(--text-sm);
-  color: var(--muted);
+  color: var(--text);
   letter-spacing: 0;
 }
 
-#timeline .tree-turn .tree-row.is-current {
-  background: var(--pick);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--pick),0 0 12px color-mix(in srgb, var(--pick) 27%, transparent);
+#timeline .tree-turn .tree-row.is-current .tree-placeholder {
+  color: var(--surface);
 }
 
-#timeline .tree-turn .tree-row.is-current .tree-placeholder {
-  color: var(--text);
+@media (max-width: 1250px) {
+  #timeline {
+    padding-inline: 10px;
+  }
+
+  #timeline .tree-turn[data-action=pick] .tree-row {
+    width: 78px;
+  }
+}
+
+@media (max-width: 899px) {
+  #draft-view .history-panel .tree-key,
+  #draft-view #timeline {
+    max-width: 340px;
+    width: 100%;
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 750px) {
+  #timeline .tree-turn .tree-row {
+    width: 70px;
+  }
+
+  #timeline .tree-turn[data-action=pick] .tree-row {
+    width: 100px;
+  }
 }
 
 .history-inspect {
@@ -4026,14 +3827,6 @@ label.auth-field {
     position: static;
     max-height: none;
   }
-
-  #timeline {
-    padding-inline: 10px;
-  }
-
-  #timeline .tree-turn[data-action=pick] .tree-row {
-    width: 78px;
-  }
 }
 
 @media (max-width: 750px) {
@@ -4041,30 +3834,6 @@ label.auth-field {
     grid-template-columns: 1fr;
     grid-template-areas: 'history' 'heroes' 'decision' 'analysis';
   }
-
-  .history-panel .tree-key,
-  #timeline {
-    max-width: 340px;
-    margin-inline: auto;
-  }
-
-  #timeline {
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  #timeline .tree-turn[data-action=pick] .tree-row {
-    width: 100px;
-  }
-
-  #timeline .tree-turn .tree-row {
-    width: 70px;
-  }
-}
-
-#timeline .tree-turn .tree-placeholder:before {
-  content: none;
-  display: none;
 }
 
 /* Draft workspace audit fixes. Shared 8/16/24 spacing and legible controls. */
@@ -4181,27 +3950,10 @@ label.auth-field {
   display: block;
 }
 
-#draft-view .history-panel .tree-key {
-  padding: 12px 20px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
 #draft-view .history-inspect {
   padding: 12px;
   font-size: var(--text-sm);
   line-height: 1.5;
-  color: var(--text);
-}
-
-#timeline .tree-turn > .tree-number {
-  font-size: var(--text-sm);
-  color: var(--text);
-}
-
-#timeline .tree-turn .tree-placeholder {
-  opacity: 1;
   color: var(--text);
 }
 
@@ -4644,13 +4396,6 @@ label.auth-field {
 
   body:has(#draft-view:not([hidden]) #surface-players:checked) #team-view {
     display: block !important;
-  }
-
-  #draft-view .history-panel .tree-key,
-  #draft-view #timeline {
-    max-width: 340px;
-    width: 100%;
-    margin-inline: auto;
   }
 
   #draft-view .decision-candidates {
@@ -5195,21 +4940,6 @@ input:not([type=checkbox], [type=radio]) {
   color: var(--brass) !important;
 }
 
-#timeline .tree-turn .tree-row {
-  background: var(--surface);
-  border-color: var(--accent);
-}
-
-#timeline .tree-turn > .tree-number {
-  color: var(--muted);
-}
-
-#timeline .tree-turn .tree-row.is-current {
-  background: var(--brass);
-  border-color: var(--brass);
-  box-shadow: 0 0 0 2px var(--bg);
-}
-
 .cup-slots .cup-slot {
   background: var(--surface);
   border-color: var(--accent);
@@ -5275,10 +5005,6 @@ input:not([type=checkbox], [type=radio]) {
 
 #app-shell :is(button, input, select, textarea, summary):focus-visible {
   outline-color: var(--focus);
-}
-
-#timeline .tree-turn .tree-row.is-current .tree-placeholder {
-  color: var(--surface);
 }
 
 #draft-view :is(.panel-heading, .rec-row, .decision-evidence) {
