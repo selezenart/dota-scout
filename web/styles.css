@@ -891,16 +891,6 @@ dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
-@media (min-width: 1600px) {
-  .draft-layout {
-    gap: 24px;
-  }
-
-  .hero-grid {
-    gap: 8px;
-  }
-}
-
 @media (min-width: 1151px) and (max-width: 1350px) {
   main {
     padding-inline: 16px;
@@ -908,32 +898,12 @@ dialog::backdrop {
 
   .app-header {
     padding-inline: 16px;
-    gap: 20px;
-  }
-
-  .draft-layout {
-    grid-template-columns: 214px minmax(0, 1fr) 268px;
-    gap: 12px;
   }
 
   .match-strip {
     grid-template-columns: minmax(0, 1fr) 214px minmax(0, 1fr);
     gap: 16px;
-    padding: 16px 0;
     margin-bottom: 16px;
-  }
-
-  .hero-grid {
-    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-    gap: 5px;
-  }
-
-  .hero-workspace {
-    padding: 10px;
-  }
-
-  .header-tools {
-    gap: 6px;
   }
 
   .rec-feature > img {
@@ -943,7 +913,6 @@ dialog::backdrop {
 
 @media (min-width: 900px) and (max-width: 1150px) {
   .app-header {
-    gap: 16px;
     padding-inline: 16px;
   }
 
@@ -953,10 +922,6 @@ dialog::backdrop {
 
   .brand strong {
     font-size: var(--text-lg);
-  }
-
-  .header-tools {
-    gap: 4px;
   }
 
   .header-tools button {
@@ -970,10 +935,6 @@ dialog::backdrop {
   .match-strip {
     grid-template-columns: minmax(0, 1fr) 200px minmax(0, 1fr);
     gap: 16px;
-  }
-
-  .draft-layout {
-    grid-template-columns: 214px minmax(0, 1fr);
   }
 
   .history-panel {
@@ -1007,10 +968,6 @@ dialog::backdrop {
     margin-right: 12px;
   }
 
-  .rec-feature .rec-body {
-    padding: 10px;
-  }
-
   .rec-feature > button.primary {
     width: auto;
     min-width: 180px;
@@ -1027,12 +984,6 @@ dialog::backdrop {
 }
 
 @media (max-width: 899px) {
-  .app-header {
-    padding: 12px 16px;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
   .brand {
     margin-right: auto;
   }
@@ -1067,7 +1018,6 @@ dialog::backdrop {
   .match-strip {
     grid-template-columns: 1fr 1fr;
     gap: 16px 12px;
-    padding: 16px 0;
     margin-bottom: 12px;
   }
 
@@ -1077,10 +1027,6 @@ dialog::backdrop {
     position: relative;
     padding-right: 72px;
     text-align: left;
-  }
-
-  .turn-heading h1 {
-    font-size: var(--text-2xl);
   }
 
   .turn-heading button {
@@ -1108,7 +1054,6 @@ dialog::backdrop {
   .slot-name,
   .lineup-slot > span:last-child {
     font-size: var(--text-xs);
-    padding: 3px;
     min-height: 19px;
   }
 
@@ -1142,9 +1087,7 @@ dialog::backdrop {
   }
 
   .draft-layout {
-    display: flex;
     flex-direction: column;
-    gap: 12px;
   }
 
   .draft-layout > .panel {
@@ -1193,10 +1136,6 @@ dialog::backdrop {
     font-size: var(--text-xl);
   }
 
-  .rec-feature .rec-body {
-    padding: 10px;
-  }
-
   .rec-feature > button.primary {
     margin: 0 10px 10px;
     width: calc(100% - 20px);
@@ -1204,18 +1143,6 @@ dialog::backdrop {
 
   .search-help {
     gap: 12px;
-  }
-
-  .hero-grid {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  }
-
-  .hero-grid > button.hero-tile {
-    aspect-ratio: 16/11;
-  }
-
-  .hero-grid > button.hero-tile img + span {
-    font-size: var(--text-sm);
   }
 
   .draft-layout:has(#analysis:not([hidden])) .analysis {
@@ -1242,7 +1169,6 @@ dialog::backdrop {
 
   .view-heading {
     display: block;
-    margin-bottom: 16px;
   }
 
   .view-heading p {
@@ -1280,10 +1206,6 @@ dialog::backdrop {
     gap: 8px;
   }
 
-  .primary-nav {
-    gap: 0;
-  }
-
   .primary-nav button {
     padding-inline: 10px;
   }
@@ -1291,10 +1213,6 @@ dialog::backdrop {
   .header-tools button {
     font-size: var(--text-xs);
     padding: 6px 8px;
-  }
-
-  .header-tools {
-    gap: 6px;
   }
 
   .session-code-wrap {
@@ -2054,20 +1972,6 @@ label.auth-field {
   outline-offset: 2px;
 }
 
-@media (min-width: 1600px) {
-  .draft-layout {
-    grid-template-columns: 280px minmax(0, 1fr) 320px;
-  }
-
-  .hero-grid {
-    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  }
-
-  .hero-grid > button.hero-tile {
-    aspect-ratio: auto;
-  }
-}
-
 @media (max-width: 1100px) {
   .welcome-hero {
     gap: 32px;
@@ -2139,10 +2043,6 @@ label.auth-field {
 
   .welcome-approach p {
     max-width: 54ch;
-  }
-
-  .hero-workspace {
-    padding: 12px;
   }
 }
 
@@ -2568,12 +2468,6 @@ label.auth-field {
 .profile-role-card input[type=number] {
   width: 100%;
   border-radius: 6px;
-}
-
-@media (min-width: 1400px) {
-  .draft-layout {
-    grid-template-columns: 278px minmax(0,1fr) 326px;
-  }
 }
 
 @media (max-width: 1100px) {
@@ -3377,26 +3271,7 @@ label.auth-field {
   padding-top: 18px;
 }
 
-@media (max-width: 1100px) {
-  .draft-layout {
-    grid-template-columns: minmax(0,1fr) 300px;
-  }
-}
-
 @media (max-width: 750px) {
-  .draft-layout > .decision-panel {
-    position: static;
-    max-height: none;
-  }
-
-  .history-inspect {
-    flex-wrap: wrap;
-  }
-
-  .history-inspect span {
-    margin-left: 0;
-  }
-
   .hero-filters {
     padding: 0 10px 12px;
   }
@@ -4126,10 +4001,6 @@ label.auth-field {
     max-width: none;
   }
 
-  #draft-view .hero-grid {
-    grid-template-columns: repeat(auto-fill,minmax(74px,1fr));
-  }
-
   #draft-view #suggestions {
     padding: 12px;
   }
@@ -4231,14 +4102,6 @@ label.auth-field {
 
   #draft-view .hero-filters button {
     min-height: 42px;
-  }
-
-  #draft-view .hero-grid {
-    grid-template-columns: repeat(3,minmax(0,1fr));
-  }
-
-  #draft-view .rec-summary small {
-    font-size: var(--text-xs);
   }
 
   #draft-view .slot-name {
@@ -4403,10 +4266,6 @@ label.auth-field {
 @media (max-width: 650px) {
   .cup-slots {
     grid-template-columns: repeat(2,minmax(0,1fr));
-  }
-
-  .cup-slots .cup-slot {
-    padding: 12px;
   }
 
   .cup-toolbar button {
@@ -5680,7 +5539,6 @@ input:not([type=checkbox], [type=radio]) {
 
 body:has(#identity-download:not([hidden])) {
   min-height: 100vh;
-  background-repeat: no-repeat;
 }
 
 #identity-download .image-home {
@@ -5846,7 +5704,7 @@ body:has(#identity-download:not([hidden])) {
 }
 
 /* Staggered card heights; phones lay the cards out flat. */
-@media (min-width: 761px) {
+@media (width > 760px) {
   .team-home-card {
     transform: translateY(-18px);
   }
