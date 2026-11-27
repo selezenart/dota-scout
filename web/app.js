@@ -234,14 +234,15 @@ async function enterGated(go){
  if(gen!==generation||user?.id!==account||welcome.recovery||showTeamInvitation())return;
  if(profileSetupRequired)startProfileSetup(go);else await go();
 }
-// Opens what the address asks for: a shared draft, Battle Cup, or Team (practice stays put).
+// Opens what the address asks for: a shared draft, Battle Cup, the practice board, or Team.
 async function resumeRoute(){
  const params=new URLSearchParams(location.search);
  const draft=params.get('draft')||pendingDraft();
  if(validDraftId(draft)){
   try{await openDraft(draft);}catch(error){navigateTeam();notice(error.message);}finally{forgetDraft();}
  }else if(params.has('cup'))openCup();
- else if(!params.has('practice'))navigateTeam();
+ else if(params.has('practice'))welcome.board();
+ else navigateTeam();
 }
 
 function showTeamInvitation(force=false){

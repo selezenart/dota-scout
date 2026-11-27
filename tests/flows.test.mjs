@@ -963,6 +963,17 @@ test('declining a team invitation still requires profile setup',async()=>{
  }finally{h.w.close();}
 });
 
+test('declining a team invitation opened during practice returns to the practice board',async()=>{
+ const h=await harness({query:'?practice',backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  h.w.location.hash='invite='+inviteCode;h.w.dispatchEvent(new h.w.HashChangeEvent('hashchange'));await flush();
+  assert.ok(h.q('team-invite-heading'),'invitation shown');
+  await h.click(h.button('Decline invitation',h.q('welcome-auth')));
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('draft-view').hidden,false);
+ }finally{h.w.close();}
+});
+
 test('email sign-in from Battle Cup returns to Battle Cup instead of Team',async()=>{
  const h=await harness({query:'?cup',backend:accountBackend({getSession:async()=>null,signIn:async()=>({session:guestSession}),loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[]})});
  try{
