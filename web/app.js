@@ -44,7 +44,9 @@ const captainDemo=demo&&new URLSearchParams(location.search).has('captain');
 const playerDemo=demo&&new URLSearchParams(location.search).has('player');
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
 const draftIntentKey='captain-pending-draft';
-const validDraftId=value=>/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value||'');
+// Any 8-4-4-4-12 hex UUID (drafts use gen_random_uuid; the version digit is not checked).
+const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const validDraftId=value=>UUID.test(value||'');
 function pendingDraft(){try{const value=sessionStorage.getItem(draftIntentKey);return validDraftId(value)?value:null;}catch{return null;}}
 function forgetDraft(){try{sessionStorage.removeItem(draftIntentKey);}catch{}}
 const entryDraft=new URLSearchParams(location.search).get('draft');
@@ -1713,7 +1715,7 @@ $('hero-search').oninput=searchHeroes;$('claim-drafter').onclick=safe(()=>mutate
 
 $('create-session').onclick=safe(async()=>{if(!user||!team||demo)throw Error('Select a team first.');const teamId=team.id;if(!await loadTeam(teamId,{preserveSelection:true}))return;const row=await backend.createDraft(teamId,{actions:[],firstPick:true,enemyIds:[],roster:draftRoster(),assignments:{},source:'manual'});await openDraft(row.id);});
 
-$('join-session').onclick=safe(async()=>{let id=$('session-input').value.trim();try{id=new URL(id).searchParams.get('draft')||id;}catch{}if(!/^[a-f0-9-]{36}$/i.test(id)){$('session-input').setAttribute('aria-invalid','true');throw Error('Enter a valid draft UUID or full session URL.');}$('session-input').removeAttribute('aria-invalid');await openDraft(id);});$('copy-session').onclick=safe(async()=>{if(!shared)return;const url=new URL(location.origin+location.pathname);url.searchParams.set('draft',shared.id);await navigator.clipboard.writeText(url.href);notice('Session link copied. Team membership is required.');});
+$('join-session').onclick=safe(async()=>{let id=$('session-input').value.trim();try{id=new URL(id).searchParams.get('draft')||id;}catch{}if(!validDraftId(id)){$('session-input').setAttribute('aria-invalid','true');throw Error('Enter a valid draft UUID or full session URL.');}$('session-input').removeAttribute('aria-invalid');await openDraft(id);});$('copy-session').onclick=safe(async()=>{if(!shared)return;const url=new URL(location.origin+location.pathname);url.searchParams.set('draft',shared.id);await navigator.clipboard.writeText(url.href);notice('Session link copied. Team membership is required.');});
 
 document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=heroChoices().length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
 
@@ -1754,7 +1756,7 @@ if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:DAY_MS}).
 if(imageId!==null)void (async()=>{
  const root=$('identity-download');
  try{
-  if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(imageId))throw Error();
+  if(!UUID.test(imageId))throw Error();
   if(demo){await showIdentityDownload(root,demoIdentityBackend,imageId);return;}
   const config=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:await (await fetch('/api/config',{cache:'no-store'})).json();
   await showIdentityDownload(root,createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey}),imageId);
