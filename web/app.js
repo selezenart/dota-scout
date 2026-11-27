@@ -1188,7 +1188,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
  },footerActions,'primary profile-save');
 
  if(!continueAfterSave&&(joinedTeam||continueToCup))button(joinedTeam?'Back to team':'Skip to Battle Cup',()=>{$('profile-dialog').close();if(joinedTeam)navigateTeam(joinedTeam.id);else navigateCup();},footerActions);
- if(user)button('Sign out',safe(signOut),continueAfterSave?footerActions:extras);
+ if(user)button('Sign out',signOut,continueAfterSave?footerActions:extras);
 
  show('profile-dialog');
  if(profile.steamAccountId&&!profile.signatureHeroes?.length&&(!profileSaved||!profile.preferredRoles?.length))void importButton.click();
