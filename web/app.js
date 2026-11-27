@@ -6,8 +6,8 @@ import {createWelcome} from './welcome.js';
 
 import snapshot from './heroes.json';
 
-import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
-import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES} from './draft-stats.js';
+import {CM_ORDER,CM_PHASE_STARTS,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
+import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES,WARN_RATE} from './draft-stats.js';
 import {renderPlayerRail,resetAllyEntry} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
@@ -17,6 +17,21 @@ import * as matchData from './data.js';
 import {initialState,demoState,reduceDraft} from './demo.js';
 
 import {createBackend} from './backend.js';
+
+import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
+
+// Timings (ms) and local storage caps of the board.
+const SCOUT_RETRY_RATE_LIMITED_MS=20000,SCOUT_RETRY_MS=8000; // re-fetch a failed enemy profile
+const STRATZ_RETRY_BASE_MS=60000,STRATZ_RETRY_MAX_MS=900000; // doubles per failure, capped
+const ROSTER_REFRESH_MS=30000,SIGHTING_REFRESH_MS=15000;
+const LIVE_WATCH_RETRY_MS=5000,LIVE_WATCH_TIMEOUT_MS=14000; // local live-roster helper
+const SYNC_POLL_MS=3000;
+const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
+// Clears the account loading message after this long. index.html's head script
+// lifts its signed-out guard after its own literal 20000 ms (it runs before modules load).
+const LOADING_FALLBACK_MS=15000;
+const INVITE_KEEP_MS=30*DAY_MS; // a saved team invitation link is kept this long
+const LOCAL_MATCH_CAP=200,LOCAL_SIGHTING_CAP=2000;
 
 
 
@@ -40,7 +55,7 @@ let teamInvitation=null,invitationView=null,accountReady=Promise.resolve(),accou
 function saveInvitation(code){
  // Storage is shared by same-origin tabs so the confirmation email can open a new tab.
  // Never attach the invitation credential to an auth redirect or request URL.
- const record=JSON.stringify({code,until:Date.now()+30*86400000});
+ const record=JSON.stringify({code,until:Date.now()+INVITE_KEEP_MS});
  try{localStorage.setItem(teamInviteKey,record);}catch{try{sessionStorage.setItem(teamInviteKey,record);}catch{}}
 }
 
@@ -139,11 +154,11 @@ function matchupCoverage(){
 
 const canWrite=()=>!playerDemo&&!pending&&healthy&&(shared?!!user&&shared.drafter_user_id===user.id:localControl);
 
-const roleNames=['Carry','Mid','Offlane','Soft support','Hard support'];
+const roleNames=ROLE_NAMES;
 
 const heroName=id=>heroes[id]?.localized_name||'Unknown hero';
 
-function portrait(id){const h=heroes[id],img=el('img');img.alt=heroName(id);img.loading='lazy';img.src='https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/'+String(h?.name||'').replace('npc_dota_hero_','')+'.png';return img;}
+function portrait(id){const h=heroes[id],img=el('img');img.alt=heroName(id);img.loading='lazy';img.src=HERO_PORTRAIT_BASE+String(h?.name||'').replace('npc_dota_hero_','')+'.png';return img;}
 
 // Derived draft data, rebuilt only when a ranking input changes.
 function derived(){
@@ -188,7 +203,7 @@ function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){co
  const sources=Object.fromEntries(Object.entries(p.sources).map(([k,s])=>[k,s?.status==='error'?{...s,retrying:true}:s]));
  observations.set(key,{...p,sources});scheduleRender();
  // Re-scout through refreshScouting so a player removed meanwhile is not fetched again.
- setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?20000:8000);
+ setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?SCOUT_RETRY_RATE_LIMITED_MS:SCOUT_RETRY_MS);
 }).catch(e=>{if(gen===generation)notice(e.message);});}}
 
 // Credit for STRATZ counter and synergy data, shown once whenever it is in use.
@@ -202,13 +217,13 @@ function requestStratz(id){
  stratzRequested.add(String(id));
  void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;touch();scheduleRender();}})
   // Back off 1, 2, 4… minutes (at most 15), then retry on its own while the hero is still picked.
-  .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>{stratzRequested.delete(String(id));if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);},Math.min(900000,60000*2**(n-1)));});
+  .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>{stratzRequested.delete(String(id));if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);},Math.min(STRATZ_RETRY_MAX_MS,STRATZ_RETRY_BASE_MS*2**(n-1)));});
 }
 function requestMatchup(id){
  if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
  requestedMatchups.add(id);
  const gen=generation;
- void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
+ void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:DAY_MS}).then(rows=>{
   if(gen!==generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
   matchups[id]=rows;touch();
@@ -224,7 +239,7 @@ function requestAllyCounters(id){
  if(demo||allyCounterRequests.has(id)||allyCounterFailures.has(id))return;
  allyCounterRequests.add(id);
  const gen=generation;
- void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
+ void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:DAY_MS}).then(rows=>{
   if(gen!==generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
   allyCounterMatchups[id]=rows;
@@ -378,13 +393,13 @@ function renderView(){
   $('drafter-seat').hidden=true;
   $('session-status').textContent='Player demo · follow the captain’s picks and bans.';
  }
- $('turn-label').textContent=turn?(turn.side==='our'?'Our ':'Enemy ')+turn.action:'Draft complete';$('turn-progress').textContent=`${state.actions.length} / 24 actions · ${demo?'Invented demo':shared?'Shared team draft':'Manual practice'}`;
+ $('turn-label').textContent=turn?(turn.side==='our'?'Our ':'Enemy ')+turn.action:'Draft complete';$('turn-progress').textContent=`${state.actions.length} / ${CM_ORDER.length} actions · ${demo?'Invented demo':shared?'Shared team draft':'Manual practice'}`;
 
  $('undo').disabled=!write||!state.actions.length;$('reset-draft').disabled=!write;$('first-pick').checked=state.firstPick;$('first-pick').disabled=!write||!!state.actions.length;
 
  renderSeats();renderDraftTree();
 
- for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<5;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
+ for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<ROSTER_SIZE;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
 
  renderRecommendations(turn,write);appendStratzCredit();renderHeroes();renderRoster();renderDraftEnemies();
 
@@ -426,8 +441,8 @@ function seatData(player,side,taken,now){
 function renderSeats(){
  const taken=new Set(state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
  renderPlayerRail($('player-rail'),{
-  allies:roster().slice(0,5).map(player=>seatData(player,'ally',taken,now)),
-  enemies:opponents().slice(0,5).map(player=>seatData(player,'enemy',taken,now)),
+  allies:roster().slice(0,ROSTER_SIZE).map(player=>seatData(player,'ally',taken,now)),
+  enemies:opponents().slice(0,ROSTER_SIZE).map(player=>seatData(player,'enemy',taken,now)),
   focusId:focusedPlayer,portrait,heroName,
   onToggle:id=>{focusedPlayer=focusedPlayer===id?null:id;render();},
   onAddEnemy:safe(lobby),
@@ -439,7 +454,7 @@ async function addAllyById(text){
  const tokens=String(text||'').trim().split(/[\s,;]+/).filter(Boolean),ids=parseAccountIds(text);
  if(tokens.length!==1||ids.length!==1)throw Error('Enter one valid player ID or profile link.');
  const current=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
- if(current.length>=5)throw Error('Our team already has five players.');
+ if(current.length>=ROSTER_SIZE)throw Error('Our team already has five players.');
  const id=String(ids[0]);
  if(current.some(p=>String(p.steamAccountId||p.accountId||'')===id))throw Error('This player is already on our team.');
  await mutate('set_state',{roster:[...current,{id,name:id,steamAccountId:id}]});
@@ -454,7 +469,7 @@ function renderDraftTree(){
   const ours=step.team===(state.firstPick?'A':'B');
   const recorded=state.actions[index],current=index===state.actions.length;
   const row=el('div',null,'tree-turn');row.dataset.side=ours?'our':'enemy';row.dataset.action=step.action.toLowerCase();
-  row.classList.toggle('phase-start',[0,7,9,12,18,22].includes(index));
+  row.classList.toggle('phase-start',CM_PHASE_STARTS.includes(index));
   const slot=el('button',null,'tree-row');slot.type='button';slot.id='draft-turn-'+index;
   slot.dataset.action=step.action.toLowerCase();slot.dataset.turn=index;
   slot.classList.toggle('is-recorded',!!recorded);slot.classList.toggle('is-fresh',index===freshActionIndex&&!!recorded);slot.classList.toggle('is-current',current);
@@ -479,18 +494,18 @@ let heroFilter='all';
 function focusedHeroIds(taken){
  if(focusedPlayer==null)return null;
  const now=Math.floor(Date.now()/1000);
- const seat=[...roster().slice(0,5).map(p=>[p,'ally']),...opponents().slice(0,5).map(p=>[p,'enemy'])].find(([p])=>String(p.id)===focusedPlayer);
+ const seat=[...roster().slice(0,ROSTER_SIZE).map(p=>[p,'ally']),...opponents().slice(0,ROSTER_SIZE).map(p=>[p,'enemy'])].find(([p])=>String(p.id)===focusedPlayer);
  return seat?new Set(seatData(seat[0],seat[1],taken,now).heroIds):null;
 }
 
 function suggestionSets(){
- const c=derived(),top=mode=>new Set(ranking(mode).slice(0,8).map(row=>+row.heroId));
+ const c=derived(),top=mode=>new Set(ranking(mode).slice(0,TOP_RECOMMENDATIONS).map(row=>+row.heroId));
  return c.sets||={pick:top('ourPick'),ban:top('ourBan')};
 }
 function enemyWinChips(){
  const chips=new Map();
  for(const player of opponents())for(const row of heroStatRows(player.heroes)){
-  if(row.winRate==null||row.games<MIN_GAMES||row.winRate<55)continue;
+  if(row.winRate==null||row.games<MIN_GAMES||row.winRate<WARN_RATE)continue;
   const current=chips.get(row.heroId);
   if(!current||row.winRate>current.winRate)chips.set(row.heroId,{...row,player:player.name});
  }
@@ -569,7 +584,7 @@ function heroEvidence(heroId,sources,playerId){
  return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
 }
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=ranking(turn.mode);rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p',`All ${CM_ORDER.length} actions recorded.`));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=ranking(turn.mode);rankedIds=new Set(ranked.slice(0,TOP_RECOMMENDATIONS).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));
@@ -619,7 +634,7 @@ function enemyMatchTeam(){return typeof backend?.listEnemyMatches==='function'&&
 // Device storage is per account so another local user does not see this scouting.
 const localMatchKey=()=>enemyMatchKey+':'+(user?.id||'practice');
 function readLocalMatches(){try{const rows=JSON.parse(localStorage.getItem(localMatchKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
-function writeLocalMatches(){try{localStorage.setItem(localMatchKey(),JSON.stringify(enemyMatches.slice(0,200)));}catch{}}
+function writeLocalMatches(){try{localStorage.setItem(localMatchKey(),JSON.stringify(enemyMatches.slice(0,LOCAL_MATCH_CAP)));}catch{}}
 const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
 function syncEnemyMatches(){
  const teamId=enemyMatchTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===enemyMatchScope)return;
@@ -702,7 +717,7 @@ let sightings=[],sightingScope=null,sightingRemote=false,sightingState='ready',s
 const localSightingKey=()=>sightingKey+':'+(user?.id||'practice');
 function sightingTeam(){return typeof backend?.listEnemySightings==='function'&&shared?.team_id&&user?shared.team_id:null;}
 function readLocalSightings(){try{const rows=JSON.parse(localStorage.getItem(localSightingKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
-function writeLocalSightings(){try{localStorage.setItem(localSightingKey(),JSON.stringify(sightings.slice(-2000)));}catch{}}
+function writeLocalSightings(){try{localStorage.setItem(localSightingKey(),JSON.stringify(sightings.slice(-LOCAL_SIGHTING_CAP)));}catch{}}
 function syncSightings(){
  const teamId=sightingTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===sightingScope)return;
  sightingScope=scope;sightingRemote=false;
@@ -724,7 +739,7 @@ function listSightings(teamId){
 // Called from the draft poll so idle teammates also see a newly saved assignment.
 function refreshSightings(){
  const teamId=sightingTeam();
- if(teamId&&sightingRemote&&sightingState==='ready'&&state.actions.length>=24&&Date.now()-sightingLoadedAt>15000){sightingLoadedAt=Date.now();listSightings(teamId);}
+ if(teamId&&sightingRemote&&sightingState==='ready'&&state.actions.length>=CM_ORDER.length&&Date.now()-sightingLoadedAt>SIGHTING_REFRESH_MS){sightingLoadedAt=Date.now();listSightings(teamId);}
 }
 // One key per game. Reset keeps the draft id, so the key also uses the opening bans
 // and the enemy accounts; a later Undo and re-pick stays the same game.
@@ -867,7 +882,7 @@ async function poll(){
   // Every server-side draft update bumps revision; drafter is compared too as a cheap guard.
   changed=!healthy||row.revision!==shared.revision||row.drafter_user_id!==shared.drafter_user_id;
   if(changed)adopt(row);
-  if(Date.now()-lastRoster>30000){const fresh=await backend.loadRoster(row.team_id);if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}}
+  if(Date.now()-lastRoster>ROSTER_REFRESH_MS){const fresh=await backend.loadRoster(row.team_id);if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}}
  }catch(e){
   // The draft is no longer visible: the team was deleted or this account left / was removed.
   if(gen===generation&&e.code==='PGRST116'){leaving=true;void safe(()=>leaveVanishedDraft(gen))().finally(()=>{if(gen===generation)polling=false;});return;}
@@ -911,7 +926,7 @@ function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={})
 
   else{
 
-   if(selected.size>=12){onError('Choose up to 12 heroes in each list. Remove one first.');return;}
+   if(selected.size>=HERO_LIST_MAX){onError(`Choose up to ${HERO_LIST_MAX} heroes in each list. Remove one first.`);return;}
 
    selected.add(id);
 
@@ -926,7 +941,7 @@ function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={})
 
  function draw(){
 
-  count.textContent=selected.size+' / 12 selected';chips.replaceChildren();
+  count.textContent=selected.size+' / '+HERO_LIST_MAX+' selected';chips.replaceChildren();
 
   for(const id of selected){
 
@@ -975,7 +990,7 @@ function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={})
 
  search.oninput=draw;draw();
 
- return {values:()=>[...selected],draw,replace(values){if(values.length>12){onError('This list has more than 12 heroes. Choose up to 12 before copying it to Today.');return false;}selected.clear();for(const id of values)selected.add(id);draw();return true;}};
+ return {values:()=>[...selected],draw,replace(values){if(values.length>HERO_LIST_MAX){onError(`This list has more than ${HERO_LIST_MAX} heroes. Choose up to ${HERO_LIST_MAX} before copying it to Today.`);return false;}selected.clear();for(const id of values)selected.add(id);draw();return true;}};
 
 }
 
@@ -1169,7 +1184,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
    if(account.value.trim()&&ids.length!==1)throw Error('Enter one valid numeric public account ID or player URL.');
 
-   const p={...(avatar.value||profile.avatarHeroId?{avatarHeroId:Number(avatar.value)||null}:{}),displayName:name.value.trim().slice(0,80)||'Player',steamAccountId:ids[0]?String(ids[0]):'',preferredRoles:roleInputs.filter(r=>r.c.checked).map(r=>r.i),roleComfort:Object.fromEntries(roleInputs.map(r=>[r.i,+(r.radios.find(radio=>radio.checked)?.value||0)])),signatureHeroes:signatures.values(),desiredHeroes:desired.values(),avoidHeroes:avoid.values(),notes:notes.value.slice(0,500),availability:availability.value};
+   const p={...(avatar.value||profile.avatarHeroId?{avatarHeroId:Number(avatar.value)||null}:{}),displayName:name.value.trim().slice(0,DISPLAY_NAME_MAX)||'Player',steamAccountId:ids[0]?String(ids[0]):'',preferredRoles:roleInputs.filter(r=>r.c.checked).map(r=>r.i),roleComfort:Object.fromEntries(roleInputs.map(r=>[r.i,+(r.radios.find(radio=>radio.checked)?.value||0)])),signatureHeroes:signatures.values(),desiredHeroes:desired.values(),avoidHeroes:avoid.values(),notes:notes.value.slice(0,500),availability:availability.value};
 
    if(continueAfterSave&&(!name.value.trim()||!p.preferredRoles.length))throw Error('Enter your display name and choose at least one position.');
    const conflicts=p.avoidHeroes.filter(id=>p.signatureHeroes.includes(id)||p.desiredHeroes.includes(id));
@@ -1184,7 +1199,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
    profile=saved;profileSaved=true;
 
    if(!$('team-view').hidden){homeRoster=homeRoster.map(item=>item.userId===user?.id?{...item,...profile}:item);renderTeamHome();}
-   if(!shared){state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,5);touch();}
+   if(!shared){state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,ROSTER_SIZE);touch();}
 
    observations.clear();refreshScouting();saveLocal();render();
 
@@ -1225,12 +1240,12 @@ function stopLiveWatch() {
 async function checkLiveWatch(watch) {
  if(liveWatch!==watch)return;
  if(watch.generation!==generation||document.body.dataset.view!=='board'){stopLiveWatch();return;}
- const retry=()=>{if(liveWatch===watch)watch.timer=setTimeout(()=>void checkLiveWatch(watch),5000);};
+ const retry=()=>{if(liveWatch===watch)watch.timer=setTimeout(()=>void checkLiveWatch(watch),LIVE_WATCH_RETRY_MS);};
  const controller=new AbortController();
  watch.abort=controller;
- const timeout=setTimeout(()=>controller.abort(),14000);
+ const timeout=setTimeout(()=>controller.abort(),LIVE_WATCH_TIMEOUT_MS);
  try {
-  const response=await fetch('http://localhost:8765/live-roster',{signal:controller.signal,credentials:'omit',cache:'no-store'});
+  const response=await fetch(LOCAL_HELPER_ORIGIN+'/live-roster',{signal:controller.signal,credentials:'omit',cache:'no-store'});
   if(!response.ok)throw Error('The helper did not accept the connection.');
   const data=await response.json();
   if(liveWatch!==watch||watch.generation!==generation)return;
@@ -1291,7 +1306,7 @@ async function lobby(){
  else if(team&&!teamRoster.length)await loadTeam(team.id,{preserveSelection:true});
  const details=document.querySelector('[data-connection-details]'),manual=document.querySelector('[data-manual-entry]');
  details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
- const link=el('a','Open legacy live/replay helper');link.href='http://localhost:8765';link.target='_blank';link.rel='noopener';if(['localhost','127.0.0.1'].includes(location.hostname))details.append(link);
+ const link=el('a','Open legacy live/replay helper');link.href=LOCAL_HELPER_ORIGIN;link.target='_blank';link.rel='noopener';if(['localhost','127.0.0.1'].includes(location.hostname))details.append(link);
  const demoLink=el('a','Try the demo');demoLink.href='?demo';
  const links=el('div',null,'lobby-links');links.append(link,demoLink);details.append(links);manual.replaceChildren();manual.oninput=()=>{lobbyEdited=true;};
  const scouting=el('section',null,'lobby-card');scouting.setAttribute('aria-label','Enemy scouting');scouting.append(el('h3','Enemy scouting'));manual.append(scouting);
@@ -1336,7 +1351,7 @@ async function lobby(){
   const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
   const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
   const savedMembers=current.map(p=>p.id||p.userId).filter(id=>memberIds.has(id));
-  let picked=savedMembers.some(id=>id!==user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,5).map(p=>p.userId);
+  let picked=savedMembers.some(id=>id!==user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
   if(members.length){
    ours.append(el('p','Load players from '+team.name+':'));
    const list=el('div',null,'lobby-roster');ours.append(list);
@@ -1455,7 +1470,7 @@ async function loadTeam(id,{preserveSelection=false}={}){
 
  teamRoster=rows;
 
- selectedTeamIds=previous?previous.filter(id=>rows.some(p=>p.userId===id)):rows.filter(p=>p.availability!=='unavailable').slice(0,5).map(p=>p.userId);
+ selectedTeamIds=previous?previous.filter(id=>rows.some(p=>p.userId===id)):rows.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
 
  return true;
 
@@ -1543,7 +1558,7 @@ if(playerDemo){
   selected=null;
   render();
   result.textContent=(turn.side==='our'?'Our team':'Enemy team')+' '+(turn.action==='pick'?'picked ':'banned ')+heroName(heroId)+'.';
-  advance.disabled=state.actions.length===24;
+  advance.disabled=state.actions.length===CM_ORDER.length;
  },replay,'primary');
  button('Restart replay',()=>{
   state=demoState();
@@ -1770,7 +1785,7 @@ window.addEventListener('popstate',()=>void safe(async()=>{
 // A hidden tab skips its sync ticks and catches up once when shown again; poll() ignores
 // overlapping calls, so a focus event arriving with the visibility change cannot double it.
 const syncTick=()=>{if(document.hidden)return;void poll();refreshSightings();};
-setInterval(syncTick,3000);document.addEventListener('visibilitychange',syncTick);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
+setInterval(syncTick,SYNC_POLL_MS);document.addEventListener('visibilitychange',syncTick);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
 
 if(imageId!==null){
  $('welcome-view').hidden=true;
@@ -1780,7 +1795,7 @@ if(imageId!==null){
 
 if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));touch();render();}).catch(()=>{});
 
-if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};touch();render();}).catch(()=>{});
+if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:DAY_MS}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};touch();render();}).catch(()=>{});
 
 if(imageId!==null)void (async()=>{
  const root=$('identity-download');
@@ -1794,22 +1809,21 @@ if(imageId!==null)void (async()=>{
 else if(!demo)void (async()=>{try{
 
  const authFragment=new URLSearchParams(location.hash.slice(1));
- let oauthProvider;try{oauthProvider=sessionStorage.getItem('captain-oauth-provider');sessionStorage.removeItem('captain-oauth-provider');}catch{}
+ let oauthProvider;try{oauthProvider=sessionStorage.getItem(OAUTH_PROVIDER_KEY);sessionStorage.removeItem(OAUTH_PROVIDER_KEY);}catch{}
  const steamToken=authFragment.get('steam_token');
  // Direct Google sign-in returns #id_token&state. Remove it from the address at once, use the saved
  // attempt once, and only accept a matching state from the last 10 minutes.
- const googleAttemptKey='captain-google-oauth'; // same key as backend.js googleAttemptKey
  const googleToken=authFragment.get('id_token');let googleAttempt=null,googleRejected=false;
  if(googleToken||(authFragment.has('state')&&!authFragment.has('access_token'))){
-  let saved=null;try{saved=JSON.parse(sessionStorage.getItem(googleAttemptKey)||'null');sessionStorage.removeItem(googleAttemptKey);}catch{}
+  let saved=null;try{saved=JSON.parse(sessionStorage.getItem(GOOGLE_ATTEMPT_KEY)||'null');sessionStorage.removeItem(GOOGLE_ATTEMPT_KEY);}catch{}
   const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);
-  if(googleToken&&saved?.state&&saved.state===authFragment.get('state')&&Date.now()-saved.at<600000)googleAttempt=saved;
+  if(googleToken&&saved?.state&&saved.state===authFragment.get('state')&&Date.now()-saved.at<GOOGLE_ATTEMPT_MAX_AGE_MS)googleAttempt=saved;
   else if(googleToken)googleRejected=true;
  }
  // Show progress instead of a signed-out home while a callback or a stored session resolves.
  const callback=!googleRejected&&!!(steamToken||googleAttempt||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
  let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
- if(callback||storedSession||'authPending' in document.documentElement.dataset){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),15000);}
+ if(callback||storedSession||'authPending' in document.documentElement.dataset){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),LOADING_FALLBACK_MS);}
  // A rejected Google return shows its error after the loading state is set, so nothing covers it.
  if(googleRejected)welcome.linkError('google');
  if(steamToken){const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);}
