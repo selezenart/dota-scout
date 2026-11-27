@@ -50,6 +50,10 @@ const validDraftId=value=>UUID.test(value||'');
 // Public Supabase config baked in at build time (vite.config.js), or null when the build had none.
 function inlinedConfig(){return typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;}
 // Name an auth provider gave the account (email sign-up, Google, Steam), if any.
+// A player's public account ID, under either field name a roster entry may use.
+const accountOf=p=>p.steamAccountId||p.accountId;
+// A roster player's user ID, under either field name a roster entry may use.
+const memberId=p=>p.id||p.userId;
 const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
 function pendingDraft(){try{const value=sessionStorage.getItem(draftIntentKey);return validDraftId(value)?value:null;}catch{return null;}}
 function forgetDraft(){try{sessionStorage.removeItem(draftIntentKey);}catch{}}
@@ -195,7 +199,7 @@ function scheduleRender(){
  if(typeof requestAnimationFrame==='function'&&!document.hidden)requestAnimationFrame(run);else queueMicrotask(run);
 }
 
-function buildRoster(){return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(p.steamAccountId||p.accountId||'')),...p,name:p.displayName||p.name||observations.get(String(p.steamAccountId||p.accountId||''))?.name,id:p.id||p.userId,selfReport:p.selfReport||p}));}
+function buildRoster(){return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(accountOf(p)||'')),...p,name:p.displayName||p.name||observations.get(String(accountOf(p)||''))?.name,id:memberId(p),selfReport:p.selfReport||p}));}
 
 function buildOpponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));}
 
@@ -251,7 +255,7 @@ function requestAllyCounters(id){loadMatchups(id,()=>allyCounterMatchups,allyCou
 function refreshScouting(){
  if(demo)return;
  const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
- scout([...(state.enemyIds||[]),...members.map(p=>p.steamAccountId||p.accountId)]);
+ scout([...(state.enemyIds||[]),...members.map(p=>accountOf(p))]);
  for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){requestMatchup(action.heroId);requestStratz(action.heroId);}
 }
 
@@ -409,7 +413,7 @@ function renderView(){
 // The two likeliest positions of a scouted player, e.g. 'Pos 1 · Pos 3'.
 function likelyPositions(s){return s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · ');}
 function seatData(player,side,taken,now){
- const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
+ const hasAccount=side==='enemy'||accountOf(player);
  const summary=playerSummary(player,now),state=hasAccount?summary.state:'ready';
  const usable=state==='ready'||(side==='ally'&&!hasAccount);
  const stats={topHeroes:heroStatRows(player.heroes)};
@@ -455,7 +459,7 @@ async function addAllyById(text){
  const current=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
  if(current.length>=ROSTER_SIZE)throw Error('Our team already has five players.');
  const id=String(ids[0]);
- if(current.some(p=>String(p.steamAccountId||p.accountId||'')===id))throw Error('This player is already on our team.');
+ if(current.some(p=>String(accountOf(p)||'')===id))throw Error('This player is already on our team.');
  await mutate('set_state',{roster:[...current,{id,name:id,steamAccountId:id}]});
  // mutate() returns quietly while another change is still saving; only confirm a real change.
  if(!(state.roster||[]).some(p=>String(p?.steamAccountId||'')===id))throw Error('Another change is still saving. Try again.');
@@ -1222,8 +1226,8 @@ async function checkLiveWatch(watch) {
   if(liveWatch!==watch||watch.generation!==generation)return;
   const profiles=[...(state.roster||[]),...teamRoster];
   const roster=lineup.ours.map(id=>{
-   const profile=profiles.find(player=>String(player.steamAccountId||player.accountId)===id);
-   return profile?{...profile,id:profile.id||profile.userId}:{id,steamAccountId:id};
+   const profile=profiles.find(player=>String(accountOf(player))===id);
+   return profile?{...profile,id:memberId(profile)}:{id,steamAccountId:id};
   });
   if(state.actions.some(action=>action.playerId&&!roster.some(player=>player.id===action.playerId))){
    stopLiveWatch();
@@ -1310,14 +1314,14 @@ async function lobby(){
   const ours=el('section',null,'lobby-card lobby-local');ours.setAttribute('aria-label','Our team');ours.append(el('h3','Our team'));manual.append(ours);
   const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
   const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
-  const savedMembers=current.map(p=>p.id||p.userId).filter(id=>memberIds.has(id));
+  const savedMembers=current.map(p=>memberId(p)).filter(id=>memberIds.has(id));
   let picked=savedMembers.some(id=>id!==user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
   if(members.length){
    ours.append(el('p','Load players from '+team.name+':'));
    const list=el('div',null,'lobby-roster');ours.append(list);
    for(const p of members){const label=el('label',p.displayName),check=el('input');check.type='checkbox';check.checked=picked.includes(p.userId);check.onchange=()=>{picked=check.checked?[...new Set([...picked,p.userId])]:picked.filter(id=>id!==p.userId);};label.prepend(check);list.append(label);}
   }else if(user&&!demo)ours.append(el('p',teams.length?'Select an active team under Team management to load your teammates.':'Create or join a team to load your teammates.','secondary'));
-  const manualIds=current.filter(p=>!memberIds.has(p.id||p.userId)).map(p=>p.steamAccountId||p.accountId).filter(Boolean);
+  const manualIds=current.filter(p=>!memberIds.has(memberId(p))).map(p=>accountOf(p)).filter(Boolean);
   const ownIds=field(ours,members.length?'Add other players by public ID or URL':'Teammate public player IDs or URLs (up to 5)',manualIds.join(' '),'textarea');ownIds.rows=3;ownIds.placeholder='One player ID or link per line';
   const ourActions=el('div',null,'lobby-actions');ours.append(ourActions);
   button('Save our team',async()=>{
@@ -1386,7 +1390,7 @@ async function lobby(){
    }
    if(shared&&team.id===shared.team_id)button('Refresh draft roster snapshot',async()=>{
     if(!await loadTeam(shared.team_id,{preserveSelection:true}))return;
-    const roster=draftRoster(),removed=(state.roster||[]).filter(p=>p&&!roster.some(current=>current.id===(p.id||p.userId)));
+    const roster=draftRoster(),removed=(state.roster||[]).filter(p=>p&&!roster.some(current=>current.id===memberId(p)));
     section.querySelector('.roster-refresh-preview')?.remove();
     if(removed.length){const preview=el('div',null,'roster-refresh-preview snapshot-preview');preview.setAttribute('role','status');preview.append(el('p','This refresh will remove: '+removed.map(p=>p.displayName||p.name||p.id).join(', ')+'.'));button('Apply roster refresh',async()=>{await mutate('set_state',{roster});preview.remove();notice('Roster snapshot refreshed.');},preview);button('Cancel roster refresh',()=>preview.remove(),preview);section.append(preview);}
     else{await mutate('set_state',{roster});notice('Roster snapshot refreshed.');}
