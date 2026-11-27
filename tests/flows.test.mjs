@@ -600,7 +600,7 @@ test('captain renews an expired team invite link and copies the new one',async()
 
 test('only the captain sees Renew link and a renewal finishing after an account switch is ignored',async()=>{
  const code='a'.repeat(64),future=new Date(Date.now()+864e5).toISOString();
- let callback,finish;
+ let callback,finish,renewCalls=0,confirms=0;
  const member=await harness({backend:accountBackend({
   listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'captain'}],
   loadRoster:async()=>[{userId:'captain',displayName:'Captain'},{userId:'owner',displayName:'Me'}],
@@ -615,16 +615,24 @@ test('only the captain sees Renew link and a renewal finishing after an account 
   onAuthChange:fn=>{callback=fn;},
   listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:code,invite_expires_at:future}],
   loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],
-  renewTeamInvite:()=>new Promise(resolve=>{finish=resolve;}),
+  renewTeamInvite:()=>{renewCalls++;return new Promise(resolve=>{finish=resolve;});},
  })});
  try{
   await h.click(h.q('setup-button'));
   const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
   if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
-  await h.click(h.button('Renew link',h.w.document.querySelector('[data-manual-entry] .team-management')));
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  h.w.confirm=()=>{confirms++;return false;};
+  await h.click(h.button('Renew link',section()));
+  assert.equal(confirms,1,'a still-valid link asks before renewing');
+  assert.equal(renewCalls,0,'cancel keeps the current link');
+  h.w.confirm=()=>true;
+  await h.click(h.button('Renew link',section()));
+  assert.equal(renewCalls,1);
   callback(guestSession,'SIGNED_IN');await flush();
   finish({invite_code:'e'.repeat(64),invite_expires_at:future});await flush();
   assert.doesNotMatch(h.w.document.body.textContent,/New invite link ready/);
+  assert.equal(h.w.document.body.innerHTML.includes('e'.repeat(64)),false,'late code never reaches the next account');
  }finally{h.w.close();}
 });
 
