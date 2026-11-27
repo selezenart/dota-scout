@@ -26,8 +26,6 @@
 #timeline .tree-row[data-action=ban],#timeline .tree-turn[data-action=ban] .tree-row{min-height:26px}
 #timeline .tree-row[data-action=pick],#timeline .tree-turn[data-action=pick] .tree-row{min-height:54px}
 #timeline .tree-row .tree-hero{object-fit:cover;object-position:50% 25%}
-#timeline .tree-row[data-action=ban] .tree-hero{width:28px;height:22px}
-#timeline .tree-row[data-action=pick] .tree-hero{width:52px;height:46px}
 #timeline .tree-row .tree-hero.tree-preview{border:2px dashed var(--text);opacity:.8;filter:none}
 /* Player focus: ring on their heroes, dim the rest; a search miss never hides the state. */
 #draft-view .hero-tile.is-player-hero{z-index:2;box-shadow:0 0 0 2px var(--text),0 0 0 4px color-mix(in srgb, var(--text) 35%, transparent)}
@@ -133,7 +131,7 @@
 @keyframes wr-pulse{50%{box-shadow:0 0 0 3px color-mix(in srgb, var(--text) 20%, transparent)}}
 @keyframes wr-slot{from{opacity:0;transform:scale(1.7)}to{opacity:1;transform:scale(1)}}
 @keyframes wr-reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){#draft-view *,#draft-view *::before,#draft-view *::after{animation:none!important;transition:none!important}#draft-view .seat-card:hover,#draft-view .hero-grid>button.hero-tile:hover{transform:none!important}}
+@media(prefers-reduced-motion:reduce){#draft-view .seat-card:hover,#draft-view .hero-grid>button.hero-tile:hover:not(:disabled){transform:none}}
 #draft-view .seat-add-ally{align-items:stretch;justify-content:center;gap:8px;text-align:left}
 #draft-view .seat-add-ally input{min-width:0;padding:7px 8px;color:var(--wr-ink);background:var(--wr-s2);border:1px solid var(--wr-line);border-radius:6px;font:inherit}
 #draft-view .seat-add-actions{display:flex;gap:6px}#draft-view .seat-add-actions button{flex:1;padding:6px 8px}
