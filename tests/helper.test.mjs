@@ -199,6 +199,19 @@ test('redact replaces every occurrence and ignores empty secrets', () => {
   assert.equal(redact('unchanged', undefined), 'unchanged');
 });
 
+test('default allowlist accepts the production site and refuses the unrelated captains-draft.vercel.app', async () => {
+  const production = 'https://captains-board.vercel.app';
+  await withServer({allowedOrigins: undefined}, async ({port, calls}) => {
+    const foreign = await request({port, headers: {Origin: 'https://captains-draft.vercel.app'}});
+    assert.equal(foreign.status, 403);
+    assert.equal(foreign.headers['access-control-allow-origin'], undefined);
+    assert.equal(calls.fetch, 0);
+    const board = await request({port, headers: {Origin: production}});
+    assert.equal(board.status, 200);
+    assert.equal(board.headers['access-control-allow-origin'], production);
+  });
+});
+
 // --- HTTP server ---
 
 async function withServer(overrides, run) {
@@ -391,7 +404,7 @@ test('repo: .vercelignore excludes everything and never re-includes helper', asy
 });
 
 test('review: the default allowlist trusts the board, not the unrelated captains-draft.vercel.app site', () => {
-  assert.deepEqual(DEFAULT_ALLOWED_ORIGINS, ['https://captains-draft-three.vercel.app', 'http://127.0.0.1:5173']);
+  assert.deepEqual(DEFAULT_ALLOWED_ORIGINS, ['https://captains-board.vercel.app', 'https://captains-draft-three.vercel.app', 'http://127.0.0.1:5173']);
   assert.equal(corsHeaders('https://captains-draft.vercel.app'), null);
   assert.deepEqual(corsHeaders('https://captains-draft-three.vercel.app'), {'Access-Control-Allow-Origin': 'https://captains-draft-three.vercel.app', 'Vary': 'Origin'});
 });
