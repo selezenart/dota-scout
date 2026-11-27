@@ -82,6 +82,16 @@ test('loadStratz fetches, caches for 12h, refetches after, throws on non-OK', as
   t += 2*3600e3; await data.loadStratz(3,opts); assert.equal(urls.length,2);
   await assert.rejects(data.loadStratz(4,{...opts,fetcher:async()=>({ok:false,status:502,json:async()=>({})})}));
 });
+test('loadStratz rejects a hung request after its timeout so the retry backoff can run', async () => {
+  let signal;
+  // Never answers unless aborted, like a stalled proxy.
+  const fetcher = (u,init) => new Promise((_,reject) => {signal = init?.signal; signal?.addEventListener('abort',()=>reject(signal.reason));});
+  const started = Date.now();
+  await assert.rejects(data.loadStratz(5,{fetcher,storage:null,timeout:20}));
+  assert.ok(signal,'fetch receives an abort signal');
+  assert.ok(signal.aborted);
+  assert.ok(Date.now()-started < 2000);
+});
 
 const enemy = [act('enemyPick',2),act('enemyPick',3)];
 const counterData = {2:{heroId:2,vs:[row(1,100,0.4,-4),row(4,100,0.5,0)],with:[]},3:{heroId:3,vs:[row(1,200,0.45,-2),row(4,100,0.5,6)],with:[]}};

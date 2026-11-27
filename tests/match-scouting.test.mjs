@@ -19,6 +19,53 @@ test('PublicQueue accepts /matches/<id> and caches only the transformed value',a
  assert.ok(saved,'stored');assert.deepEqual(JSON.parse(saved).value,{id:123});assert.doesNotMatch(saved,/chat/);
  assert.deepEqual(await queue.request('/matches/123'),{id:123});assert.equal(log.length,1);
 });
+// Behaves like localStorage: entries are own enumerable properties, the API is not.
+const webStorage=()=>{
+ const s={};
+ Object.defineProperties(s,{
+  getItem:{value:k=>Object.hasOwn(s,k)?s[k]:null},
+  setItem:{value:(k,v)=>{s[k]=String(v);}},
+  removeItem:{value:k=>{delete s[k];}},
+  key:{value:i=>Object.keys(s)[i]??null},
+  length:{get:()=>Object.keys(s).length},
+ });
+ return s;
+};
+test('PublicQueue honours a TTL longer than a day, so match summaries are not refetched daily',async()=>{
+ let t=1e12;const log=[];
+ const queue=new data.PublicQueue({storage:store(),now:()=>t,sleep:async()=>{},fetcher:fakeFetch({match_id:9,players:[]},log)});
+ await data.loadMatch(9,queue);
+ t+=2*86400000;
+ assert.equal((await data.loadMatch(9,queue)).matchId,'9');
+ assert.equal(log.length,1,'a 30-day TTL must still serve the cached summary after 2 days');
+ t+=29*86400000;
+ await data.loadMatch(9,queue);
+ assert.equal(log.length,2,'refetched once the 30-day TTL has passed');
+});
+test('PublicQueue storage evicts the oldest entries by saved time, never the one just written',async()=>{
+ const storage=webStorage(),cap=80;
+ // Newest first in key order, so key order and age disagree.
+ storage.setItem('od-public-v1:/heroStats',JSON.stringify({at:5000,value:'stats'}));
+ for(let i=1;i<cap;i++)storage.setItem('od-public-v1:/players/'+i,JSON.stringify({at:1000+i,value:i}));
+ storage.setItem('other-key','kept');
+ const queue=new data.PublicQueue({storage,now:()=>6000,sleep:async()=>{},fetcher:fakeFetch({x:1})});
+ await queue.request('/players/999');
+ const keys=Object.keys(storage).filter(k=>k.startsWith('od-public-v1:'));
+ assert.equal(keys.length,cap);
+ assert.ok(storage.getItem('od-public-v1:/players/999'),'new entry kept');
+ assert.ok(storage.getItem('od-public-v1:/heroStats'),'newer entry kept');
+ assert.equal(storage.getItem('od-public-v1:/players/1'),null,'oldest entry evicted');
+ assert.equal(storage.getItem('other-key'),'kept');
+});
+test('PublicQueue storage keeps the entry just written even when its clock is behind other tabs',async()=>{
+ const storage=webStorage();
+ for(let i=1;i<=80;i++)storage.setItem('od-public-v1:/players/'+i,JSON.stringify({at:9000+i,value:i}));
+ const queue=new data.PublicQueue({storage,now:()=>100,sleep:async()=>{},fetcher:fakeFetch({x:1})});
+ await queue.request('/players/999');
+ assert.ok(storage.getItem('od-public-v1:/players/999'),'just-written entry kept');
+ assert.equal(storage.getItem('od-public-v1:/players/1'),null,'oldest other entry evicted');
+ assert.equal(Object.keys(storage).filter(k=>k.startsWith('od-public-v1:')).length,80);
+});
 test('PublicQueue still rejects non-numeric match paths',async()=>{
  const queue=new data.PublicQueue({storage:null,fetcher:fakeFetch({})});
  await assert.rejects(queue.request('/matches/abc'),/Unsupported/);
