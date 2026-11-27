@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,flush,observed,boardWindow,stubDialogs} from './board-harness.js';
 import {PublicQueue,loadPlayer} from '../web/data.js';
 import {reduceDraft,initialState} from '../web/demo.js';
 import {publicConfig} from '../api/config.js';
@@ -38,12 +37,11 @@ test('local actions enforce control, uniqueness, assignment locks and completion
  assert.equal(reduceDraft(state,'undo',{}, {canWrite:true}).actions.length,0);
 });
 test('DOM integration stages and confirms manually, undoes, resets and renders 24 rows',async()=>{
- const result=await build({logLevel:'silent',build:{write:false,minify:false}});
- const js=result.output.find(o=>o.type==='chunk'&&o.isEntry).code;
- const html=await readFile('web/index.html','utf8');const dom=new JSDOM(html,{url:'https://board.example/?demo',runScripts:'outside-only'});const w=dom.window;
- w.fetch=async()=>{throw Error('Offline test');};w.setInterval=()=>0;w.confirm=()=>true;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- w.eval(js);await new Promise(r=>setTimeout(r,10));
- const q=id=>w.document.getElementById(id),click=async node=>{node.click();await new Promise(r=>setTimeout(r,5));};
+ const js=await boardCode();
+ const dom=boardWindow('?demo');const w=dom.window;
+ w.fetch=async()=>{throw Error('Offline test');};w.setInterval=()=>0;w.confirm=()=>true;stubDialogs(w);
+ w.eval(js);await flush();
+ const q=id=>w.document.getElementById(id),click=async node=>{node.click();await flush();};
  assert.equal(q('timeline').querySelectorAll('.tree-row').length,24);assert.match(q('connection-status').textContent,/Demo/);
  assert.equal(q('suggestions').querySelector('details.decision-evidence').open,false);
  assert.ok(q('suggestions').querySelector('.decision-candidates').querySelectorAll('.rec-row').length<=6);
@@ -60,26 +58,26 @@ test('DOM integration stages and confirms manually, undoes, resets and renders 2
 });
 
 test('shared controller confirms ownership, refetches conflicts without replay and clears on signout',async()=>{
- const result=await build({logLevel:'silent',plugins:[{name:'test-backend',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/web/backend.js'))return 'export const createBackend = () => globalThis.__backend;';}}],build:{write:false,minify:false}});
- const dom=new JSDOM(await readFile('web/index.html','utf8'),{url:'https://board.example/?draft=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',runScripts:'outside-only'}),w=dom.window;
+ const code=await boardCode({'/web/backend.js':BACKEND_STUB});
+ const dom=boardWindow('?draft=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),w=dom.window;
  const id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';let row={id,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,enemyIds:[],roster:[{id:'user-a',displayName:'Private teammate',preferredRoles:[1],signatureHeroes:[1]}]}};let callback,calls=[],conflict=false;
  w.__backend={getSession:async()=>({user:{id:'user-a'}}),onAuthChange:fn=>{callback=fn;},loadProfile:async()=>({displayName:'Private own profile'}),listTeams:async()=>[{id:'team',name:'Test team',owner_user_id:'user-a'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row),mutateDraft:async(_id,rev,op,payload)=>{calls.push(op);assert.equal(rev,row.revision);if(op==='claim')row={...row,drafter_user_id:'user-a',revision:row.revision+1};if(op==='append'){if(conflict){row={...row,revision:row.revision+1,state:{...row.state,actions:[{mode:'ourBan',heroId:2}]}};throw Error('revision conflict');}row={...row,revision:row.revision+1,state:{...row.state,actions:[...row.state.actions,payload]}};}return structuredClone(row);}};
  w.fetch=async url=>{if(url==='/api/config')return {ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})};throw Error('Offline');};w.setInterval=()=>0;w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);const wait=()=>new Promise(r=>setTimeout(r,25));await wait();const q=id=>w.document.getElementById(id);
+ w.eval(code);const wait=()=>flush();await wait();const q=id=>w.document.getElementById(id);
  assert.equal(q('claim-drafter').disabled,false);q('hero-groups').querySelector('.hero-tile:not(:disabled)').click();await wait();assert.equal(q('suggestions').querySelector('button.primary').disabled,true);assert.match(q('suggestions').querySelector('.decision-readonly').textContent,/Become drafter/);q('suggestions').querySelector('.clear-staged').click();await wait();assert.equal(q('suggestions').querySelector('.rec-feature'),null);assert.deepEqual(calls,[]);
  q('claim-drafter').click();await wait();assert.match(q('draft-owner').textContent,/Private teammate/);conflict=true;q('hero-groups').querySelector('.hero-tile:not(:disabled)').click();await wait();q('suggestions').querySelector('button.primary').click();await wait();assert.deepEqual(calls,['claim','append']);assert.match(q('turn-progress').textContent,/1 \/ 24/);assert.match(q('notice').textContent,/conflict/);
- callback(null,'SIGNED_OUT');await wait();assert.equal(q('session-code').textContent,'Local');assert.doesNotMatch(w.document.body.textContent,/Private teammate/);assert.match(q('turn-progress').textContent,/0 \/ 24/);dom.window.close();
+ callback(null,'SIGNED_OUT');await observed(w,()=>q('session-code').textContent==='Local','signed out');assert.equal(q('session-code').textContent,'Local');assert.doesNotMatch(w.document.body.textContent,/Private teammate/);assert.match(q('turn-progress').textContent,/0 \/ 24/);dom.window.close();
 });
 
 
 async function welcomeHarness(query='',backend){
- const result=await build({logLevel:'silent',plugins:[{name:'welcome-backend',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/web/backend.js'))return 'export const createBackend = () => globalThis.__backend;';}}],build:{write:false,minify:false}});
- const dom=new JSDOM(await readFile('web/index.html','utf8'),{url:'https://board.example/'+query,runScripts:'outside-only'}),w=dom.window;
+ const code=await boardCode({'/web/backend.js':BACKEND_STUB});
+ const dom=boardWindow(query),w=dom.window;
  assert.ok(w.document.getElementById('welcome-view'),'actual design markup includes welcome');
- w.__backend=backend;w.fetch=async url=>{if(backend&&url==='/api/config')return {ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})};throw Error('Offline');};w.setInterval=()=>0;w.HTMLDialogElement.prototype.close=function(){this.open=false;};w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
- w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);await new Promise(r=>setTimeout(r,25));return dom;
+ w.__backend=backend;w.fetch=async url=>{if(backend&&url==='/api/config')return {ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})};throw Error('Offline');};w.setInterval=()=>0;stubDialogs(w);
+ w.eval(code);await flush();return dom;
 }
-const settle=()=>new Promise(r=>setTimeout(r,25));
+const settle=()=>flush();
 test('welcome is the default, practice and demo enter board, home typing is untouched',async()=>{
  const dom=await welcomeHarness(),w=dom.window,q=id=>w.document.getElementById(id);
  assert.equal(w.document.body.dataset.view,'welcome');w.document.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:'a',bubbles:true}));assert.equal(q('hero-search').value,'');
@@ -93,7 +91,7 @@ test('configured register confirms email, signin opens deferred draft and recove
  const dom=await welcomeHarness('?draft=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',backend),w=dom.window,q=id=>w.document.getElementById(id);
  assert.equal(opened,0);q('welcome-register').click();let form=q('welcome-auth').querySelector('form');const inputs=form.querySelectorAll('input');inputs[0].value='Captain';inputs[1].value='captain@example.com';inputs[2].value='password';form.requestSubmit();await settle();assert.deepEqual(calls[0],['captain@example.com','password','Captain','/']);assert.ok(form.querySelector('button[data-loading=true]').disabled);finishSignup({session:null});await settle();assert.match(form.textContent,/confirm your account/);assert.match(form.textContent,/captain@example.com/);assert.equal(inputs[2].value,'');assert.equal(form.querySelector('[type=password]'),null);
  q('welcome-signin').click();form=q('welcome-auth').querySelector('form');form.querySelector('[type=email]').value='captain@example.com';form.querySelector('[type=password]').value='password';form.requestSubmit();await settle();assert.equal(opened,1);assert.equal(w.document.body.dataset.view,'board');assert.equal(q('welcome-auth').children.length,0);dom.window.close();
- const recovery=await welcomeHarness('',backend);callback(session,'PASSWORD_RECOVERY');await settle();const r=recovery.window.document.querySelector('.auth-form');assert.match(r.textContent,/Choose a new password/);r.querySelector('input').value='new-password';r.requestSubmit();await settle();assert.equal(calls.at(-1),'new-password');recovery.window.close();
+ const recovery=await welcomeHarness('',backend);callback(session,'PASSWORD_RECOVERY');await observed(recovery.window,()=>recovery.window.document.querySelector('.auth-form'),'recovery form');const r=recovery.window.document.querySelector('.auth-form');assert.match(r.textContent,/Choose a new password/);r.querySelector('input').value='new-password';r.requestSubmit();await settle();assert.equal(calls.at(-1),'new-password');recovery.window.close();
 });
 
 
@@ -111,10 +109,10 @@ test('board search supports arrows, empty feedback, native button activation and
 test('redesign sorts heroes alphabetically, records portraits and preserves explicit role choices',async()=>{
  const fixture={1:{id:1,name:'npc_dota_hero_antimage',localized_name:'Alpha',primary_attr:'agi',pub_pick:20},2:{id:2,name:'npc_dota_hero_axe',localized_name:'Zulu',primary_attr:'agi',pub_pick:900},3:{id:3,name:'npc_dota_hero_bane',localized_name:'Beta',primary_attr:'agi',pub_pick:20},4:{id:4,name:'npc_dota_hero_bloodseeker',localized_name:'Absent',primary_attr:'agi'},5:{id:5,name:'npc_dota_hero_crystal_maiden',localized_name:'Strength low',primary_attr:'str',pub_pick:1},6:{id:6,name:'npc_dota_hero_drow_ranger',localized_name:'Strength high',primary_attr:'str',pub_pick:100}};
  for(let id=7;id<=20;id++)fixture[id]={...fixture[1],id,primary_attr:'all',localized_name:'Hero '+id};
- const result=await build({logLevel:'silent',plugins:[{name:'popularity-fixture',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/web/data.js'))return `export const publicData={request:()=>({then(fn){globalThis.__stats=fn;return {catch(){}};}})};export const loadHeroes=()=>new Promise(resolve=>globalThis.__constants=resolve);export const loadPlayer=async()=>({});`;if(id.replaceAll('\\','/').endsWith('/web/heroes.json'))return JSON.stringify(fixture);}}],build:{write:false,minify:false}});
- const dom=new JSDOM(await readFile('web/index.html','utf8'),{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>{throw Error('Offline');};w.setInterval=()=>0;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);await settle();const q=id=>w.document.getElementById(id),click=async n=>{n.click();await settle();},ids=attr=>[...w.document.querySelectorAll(`[data-attribute="${attr}"] .hero-tile`)].map(n=>+n.dataset.heroId);
+ const code=await boardCode({'/web/data.js':`export const publicData={request:()=>({then(fn){globalThis.__stats=fn;return {catch(){}};}})};export const loadHeroes=()=>new Promise(resolve=>globalThis.__constants=resolve);export const loadPlayer=async()=>({});`,'/web/heroes.json':JSON.stringify(fixture)});
+ const dom=boardWindow(),w=dom.window;
+ w.fetch=async()=>{throw Error('Offline');};w.setInterval=()=>0;stubDialogs(w);
+ w.eval(code);await settle();const q=id=>w.document.getElementById(id),click=async n=>{n.click();await settle();},ids=attr=>[...w.document.querySelectorAll(`[data-attribute="${attr}"] .hero-tile`)].map(n=>+n.dataset.heroId);
  assert.deepEqual(ids('agi'),[4,1,3,2]);assert.deepEqual(ids('str'),[6,5]);
  w.__stats([{id:1,pub_pick:1000}]);await settle();w.__constants(Object.fromEntries(Object.entries(fixture).map(([id,h])=>{const {pub_pick,...constant}=h;return [id,constant];})));await settle();assert.deepEqual(ids('agi'),[4,1,3,2]);assert.match(w.document.querySelector('[data-hero-id="1"]').title,/1[,. ]000/);
  assert.equal(w.document.querySelectorAll('.tree-row').length,24);const turns=[...q('timeline').querySelectorAll('.tree-row')].map(row=>row.getAttribute('aria-label')).sort((a,b)=>Number(a.match(/^Turn (\d+)/)[1])-Number(b.match(/^Turn (\d+)/)[1]));CM_ORDER.forEach((step,index)=>assert.match(turns[index],new RegExp('^Turn '+(index+1)+', '+(step.team==='A'?'our':'enemy')+' '+step.action.toLowerCase())));assert.equal(q('timeline').querySelectorAll('.tree-turn.phase-start').length,6);const orderedRows=[...q('timeline').querySelectorAll('.tree-turn')];assert.equal(orderedRows.length,24);CM_ORDER.forEach((step,index)=>{const row=orderedRows[index];assert.equal(row.dataset.side,step.team==='A'?'our':'enemy');assert.match(row.querySelector('.tree-row').getAttribute('aria-label'),new RegExp('^Turn '+(index+1)+','));assert.equal(Number(row.querySelector('.tree-number').textContent),index+1);});assert.equal(w.document.querySelectorAll('.is-current').length,1);assert.ok(w.document.querySelector('.tree-placeholder [aria-hidden="true"]'));
@@ -137,12 +135,12 @@ test('redesign sorts heroes alphabetically, records portraits and preserves expl
 
 test('allied picks prioritize available unassigned teammates wanted heroes within each attribute',async()=>{
  const fixture=Object.fromEntries(Array.from({length:30},(_,i)=>{const id=i+1;return [id,{id,name:'npc_dota_hero_axe',localized_name:'Hero '+id,primary_attr:'agi',pub_pick:id===9?1000:id===11?500:id===8?1:id===10?2:100}];}));
- const result=await build({logLevel:'silent',plugins:[{name:'wanted-fixture',enforce:'pre',load(id){const path=id.replaceAll('\\','/');if(path.endsWith('/web/heroes.json'))return JSON.stringify(fixture);if(path.endsWith('/web/data.js'))return 'export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async()=>({});';}}],build:{write:false,minify:false}});
- const dom=new JSDOM(await readFile('web/index.html','utf8'),{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
+ const code=await boardCode({'/web/heroes.json':JSON.stringify(fixture),'/web/data.js':'export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async()=>({});'});
+ const dom=boardWindow(),w=dom.window;
  w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{...initialState(),actions:CM_ORDER.slice(0,7).map((step,i)=>({mode:(step.team==='A'?'our':'enemy')+step.action,heroId:i+1})),roster:[{id:'waiting',displayName:'Waiting player',desiredHeroes:[8,10],signatureHeroes:[8],availability:'available'},{id:'away',displayName:'Absent player',desiredHeroes:[11],availability:'unavailable'}]}}));
- w.fetch=async()=>{throw Error('Offline');};w.setInterval=()=>0;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ w.fetch=async()=>{throw Error('Offline');};w.setInterval=()=>0;stubDialogs(w);
  try{
-  w.eval(result.output.find(o=>o.type==='chunk'&&o.isEntry).code);await settle();const q=id=>w.document.getElementById(id),click=async node=>{assert.ok(node);node.click();await settle();};
+  w.eval(code);await settle();const q=id=>w.document.getElementById(id),click=async node=>{assert.ok(node);node.click();await settle();};
   const ids=()=>[...q('hero-groups').querySelectorAll('.hero-tile')].map(tile=>+tile.dataset.heroId);
   const names=()=>[...q('hero-groups').querySelectorAll('.hero-tile>span')].map(n=>n.textContent),assertAlphabetical=()=>assert.deepEqual(names(),[...names()].sort((a,b)=>a.localeCompare(b)));
   assertAlphabetical();assert.equal(q('hero-groups').querySelector('[data-hero-id="8"]').classList.contains('is-wanted'),true);assert.equal(q('hero-groups').querySelector('[data-hero-id="11"]').classList.contains('is-wanted'),false);

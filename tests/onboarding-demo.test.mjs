@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {build} from 'vite';
 import {JSDOM} from 'jsdom';
+import {observed} from './board-harness.js';
 
 const input=fileURLToPath(new URL('../web/onboarding-demo.js',import.meta.url));
 const built=await build({logLevel:'silent',build:{
@@ -88,7 +89,6 @@ test('the demo completes without config or auth and saves only demo state throug
  }finally{refreshed.window.close();}
 });
 
-const flush=async()=>{for(let i=0;i<12;i++)await new Promise(resolve=>setTimeout(resolve,0));};
 const response=value=>({ok:true,status:200,json:async()=>value,headers:{get:()=>null}});
 test('public import converts SteamID64 and keeps imported suggestions editable',async()=>{
  const h=start({},async url=>{
@@ -99,7 +99,7 @@ test('public import converts SteamID64 and keeps imported suggestions editable',
  try{
   h.action('accept');
   h.change(h.field('Dota account link or Steam ID'),'76561198083722517','input');
-  h.action('import-account'); await flush();
+  h.action('import-account'); await observed(h.window,()=>[...h.root.querySelectorAll('label')].some(label=>label.textContent.startsWith('Display name')&&label.querySelector('input')?.value==='Public Player'),'import fills the display name');
   assert.equal(h.field('Display name').value,'Public Player');
   assert.equal(h.requests.length,4);
   assert.ok(h.requests.every(url=>url.startsWith('https://api.opendota.com/api/players/123456789')));
@@ -128,7 +128,7 @@ test('invalid and vanity account inputs avoid requests and manual setup has no i
 test('failed public sources remain on import with a retry and manual continuation',async()=>{
  const h=start({},async()=>{throw Error('Network unavailable');});try{
   h.action('accept');h.change(h.field('Dota account link or Steam ID'),'123456789','input');
-  h.action('import-account');await flush();
+  h.action('import-account');await observed(h.window,()=>/could not|unable|try again/i.test(h.root.textContent),'import reports the failure');
   assert.ok(h.root.querySelector('[data-demo-action=import-account]'));
   assert.match(h.root.textContent,/could not|unable|try again/i);
   assert.equal(h.requests.length,4);
