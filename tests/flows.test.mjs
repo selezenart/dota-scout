@@ -762,6 +762,51 @@ test('a direct Google return with a wrong or stale state is rejected without con
  }
 });
 
+test('clicking an open seat in local practice adds a teammate by ID without Setup or a team',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  const rail=h.q('player-rail');
+  const seat=[...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat'));
+  assert.ok(seat,'open seat is clickable');
+  await h.click(seat);
+  const input=rail.querySelector('input[aria-label="Player ID or link"]');
+  assert.ok(input,'inline ID field opens in the seat');
+  input.value='not-an-id';await h.click(h.button('Add',rail));
+  assert.match(rail.textContent,/valid player ID/i,'invalid input explained');
+  assert.equal(JSON.parse(h.w.localStorage.getItem('captain-practice-v1')||'{"state":{"roster":[]}}').state.roster.length,0);
+  rail.querySelector('input[aria-label="Player ID or link"]').value='https://www.dotabuff.com/players/86745912';
+  await h.click(h.button('Add',rail));
+  const roster=JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster;
+  assert.deepEqual(roster.map(p=>p.steamAccountId),['86745912']);
+  assert.equal(h.q('session-dialog').open,false,'Setup did not open');
+  assert.ok(rail.querySelector('[data-seat-id="86745912"]'),'seat now shows the player');
+  const next=[...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat'));await h.click(next);
+  rail.querySelector('input[aria-label="Player ID or link"]').value='86745912';await h.click(h.button('Add',rail));
+  assert.match(rail.textContent,/already/i,'duplicate refused');
+  assert.equal(JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster.length,1);
+ }finally{h.w.close();}
+});
+
+test('Escape closes the open-seat ID field and returns focus to the seat',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  const rail=h.q('player-rail');
+  await h.click([...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat')));
+  const input=rail.querySelector('input[aria-label="Player ID or link"]');assert.ok(input);
+  input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+  assert.equal(rail.querySelector('input[aria-label="Player ID or link"]'),null,'form closed');
+  assert.equal(h.w.document.activeElement?.dataset.allySeat,'0','focus back on the seat');
+ }finally{h.w.close();}
+});
+
+test('open seats in a shared team draft stay non-interactive',async()=>{
+ const row={id:draftId,team_id:'team',revision:0,drafter_user_id:'owner',state:{actions:[],firstPick:true,roster:[]}};
+ const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row)})});
+ try{
+  assert.equal([...h.q('player-rail').querySelectorAll('button')].filter(b=>b.textContent.includes('Open seat')).length,0);
+ }finally{h.w.close();}
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{

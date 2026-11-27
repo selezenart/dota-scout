@@ -8,7 +8,7 @@ import snapshot from './heroes.json';
 
 import {CM_ORDER,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
 import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES} from './draft-stats.js';
-import {renderPlayerRail} from './war-room.js';
+import {renderPlayerRail,resetAllyEntry} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
@@ -113,7 +113,7 @@ function restorePractice(){
 }
 function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();suggestionCache={key:'',pick:new Set(),ban:new Set()};focusedPlayer=null;}
 function detachWorkspace(){
- stopLiveWatch();
+ stopLiveWatch();resetAllyEntry();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
  state=demo?demoState():initialState();
  resetDraftData();reviewVisible=true;
@@ -381,8 +381,22 @@ function renderSeats(){
   enemies:opponents().slice(0,5).map(player=>seatData(player,'enemy',taken,now)),
   focusId:focusedPlayer,portrait,heroName,
   onToggle:id=>{focusedPlayer=focusedPlayer===id?null:id;render();},
-  onAddEnemy:safe(lobby)
+  onAddEnemy:safe(lobby),
+  // Local practice only: add a teammate to an open seat by public ID, no Setup or team needed.
+  onAddAlly:!shared&&!demo&&canWrite()?addAllyById:null
  });
+}
+async function addAllyById(text){
+ const tokens=String(text||'').trim().split(/[\s,;]+/).filter(Boolean),ids=parseAccountIds(text);
+ if(tokens.length!==1||ids.length!==1)throw Error('Enter one valid player ID or profile link.');
+ const current=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
+ if(current.length>=5)throw Error('Our team already has five players.');
+ const id=String(ids[0]);
+ if(current.some(p=>String(p.steamAccountId||p.accountId||'')===id))throw Error('This player is already on our team.');
+ await mutate('set_state',{roster:[...current,{id,name:id,steamAccountId:id}]});
+ // mutate() returns quietly while another change is still saving; only confirm a real change.
+ if(!(state.roster||[]).some(p=>String(p?.steamAccountId||'')===id))throw Error('Another change is still saving. Try again.');
+ notice('Player '+id+' added to our team.');
 }
 let freshActionIndex=-1;
 function renderDraftTree(){
@@ -1386,7 +1400,7 @@ async function authChanged(session,event){
 
  const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation)welcome.signedIn();return;}
 
- stopLiveWatch();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
+ stopLiveWatch();resetAllyEntry();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
  const gen=++generation,acct=++accountGen;user=session?.user||null;welcome.setAccount(!!user,recovery);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
  ++cupAccountVersion;cup.sync();
  const inviteOnEntry=!!teamInvitation;
