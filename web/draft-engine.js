@@ -190,16 +190,21 @@ function experienceText(h) {
   return h ? [h.games && h.games+' historical games',h.recent && h.recent+' games in 30 days',h.cup && h.cup+' Battle Cup games in 180 days',h.currentCup && h.currentCup+' Battle Cup games in the last 16 hours'].filter(Boolean).join(', ') : '';
 }
 // Lookup of the first row whose key(row) === id and that is usable, as
-// `rows.find` would return it. Built once per list; a list holding null or
-// undefined rows keeps the linear find, so it fails exactly where the find would.
+// `rows.find` would return it. Built once per list. When a row cannot be read
+// (null rows, holes, Symbol or BigInt ids), the list keeps the linear find, so it
+// fails exactly where, and only when, the find would.
 // With `only`, rows for other ids are left out: the lookup must then be asked for those ids only.
 function firstRowIndex(rows, key, usable = () => true, only = null) {
-  if (rows.some(r => r == null)) return id => rows.find(r => key(r) === id && usable(r));
+  const linear = id => rows.find(r => key(r) === id && usable(r));
   const index = new Map();
-  for (const r of rows) {
-    const id = key(r);
-    // NaN never equals an id, so it must not match (a Map would match NaN to NaN).
-    if (id === id && !index.has(id) && (!only || only.has(id)) && usable(r)) index.set(id, r);
+  try {
+    for (const r of rows) {
+      const id = key(r);
+      // NaN never equals an id, so it must not match (a Map would match NaN to NaN).
+      if (id === id && !index.has(id) && (!only || only.has(id)) && usable(r)) index.set(id, r);
+    }
+  } catch {
+    return linear;
   }
   return id => index.get(id);
 }
