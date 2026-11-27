@@ -109,7 +109,8 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
      const continueButton=action('Continue to board',continueToBoard,f);continueButton.className='primary';continueButton.focus();
     }else{
      const result=mode==='register'?await backend.signUp(address,password.value,name.value,'/'):await backend.signIn(address,password.value);
-     if(result?.session){await onSession(result.session);if(mode==='register'&&!hasInvitation?.())onRegistered?.();else continueToBoard();}
+     // onSession runs the sign-in gates and opens the requested draft, Battle Cup or Team.
+     if(result?.session){await onSession(result.session);onInvitation?.();}
      else if(mode==='register'){
       confirmation=true;
       password.value='';

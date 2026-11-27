@@ -31,9 +31,9 @@ test('Google button refreshes availability, preserves disabled state after email
 test('confirmation signup returns to the signed-in destination and late Steam availability preserves form input',async()=>{
  const dom=new JSDOM('<div id="welcome-auth"></div>',{url:'https://board.example/'});
  for(const key of ['document','location','history'])globalThis[key]=dom.window[key];
- let enabled=false,cup=0;
+ let enabled=false,sessions=0,registered=0;
  try{
-  const welcome=createWelcome({getBackend:()=>({signUp:async()=>({}),signIn:async()=>({session:{user:{id:'test'}}})}),steamEnabled:()=>enabled,onSession:async()=>{},onRegistered:()=>cup++});
+  const welcome=createWelcome({getBackend:()=>({signUp:async()=>({}),signIn:async()=>({session:{user:{id:'test'}}})}),steamEnabled:()=>enabled,onSession:async()=>{sessions++;},onRegistered:()=>registered++});
   welcome.form('register');
   const root=document.getElementById('welcome-auth'),form=root.querySelector('form');
   form.querySelector('[autocomplete=name]').value='Friend';
@@ -48,6 +48,8 @@ test('confirmation signup returns to the signed-in destination and late Steam av
   [...root.querySelectorAll('button')].find(b=>b.textContent==='Go to sign in').click();
   const signin=root.querySelector('form');signin.querySelector('[type=password]').value='password123';
   await signin.onsubmit({preventDefault(){}});
-  assert.equal(cup,1);
+  // onSession routes to the destination; a second navigation would leave Battle Cup for Team.
+  assert.equal(sessions,1);
+  assert.equal(registered,0);
  }finally{dom.window.close();for(const key of ['document','location','history'])delete globalThis[key];}
 });
