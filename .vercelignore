@@ -18,6 +18,7 @@
 !web/welcome.js
 !web/data.js
 !web/demo.js
+!web/team-store.js
 !web/draft-engine.js
 !web/backend.js
 !web/heroes.json

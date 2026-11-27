@@ -1,4 +1,5 @@
 import {WEIGHTS} from './engine-weights.js';
+import {heroStatRows, playerWon} from './draft-stats.js';
 import {BATTLE_CUP_LOBBY, CURRENT_CUP_HOURS, DAY_MS, DAY_SECONDS, HISTORY_WINDOW_DAYS, RECENT_WINDOW_DAYS, ROSTER_SIZE, STEAM_ID64_BASE, TOP_RECOMMENDATIONS} from './constants.js';
 export {WEIGHTS};
 const phases = [['Ban','AABBABB'],['Pick','AB'],['Ban','AAB'],['Pick','BAABBA'],['Ban','ABAB'],['Pick','AB']];
@@ -54,13 +55,9 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     // Rate-limited or about to be retried: not a final failure.
     : Object.values(sources).some(s => s?.status === 'waiting' || s?.status === 'error' && (s.rateLimited || s.retrying)) ? 'waiting'
     : statuses.includes('error') ? 'error' : 'closed';
-  const topHeroes = heroRows.filter(h => +h.games > 0)
-    .map(h => ({heroId: +h.hero_id, games: +h.games, wins: h.win == null ? null : Math.max(0, +h.win || 0)}))
-    .sort((a, b) => b.games - a.games || (b.wins ?? 0) - (a.wins ?? 0)).slice(0, 5)
-    .map(h => ({...h, winRate: h.wins == null ? null : Math.round(100 * h.wins / h.games)}));
-  const won = m => Boolean(m.radiant_win) === (+m.player_slot < 128);
+  const topHeroes = heroStatRows(heroRows).slice(0, 5);
   const recent = {wins: 0, losses: 0};
-  for (const m of recentRows) if (m.radiant_win != null) won(m) ? recent.wins++ : recent.losses++;
+  for (const m of recentRows) if (m.radiant_win != null) playerWon(m) ? recent.wins++ : recent.losses++;
   // Recent rows always carry hero_id, so they win the dedupe over older cached match rows.
   const seen = new Set(), cup = new Map(), counts = [0, 0, 0, 0, 0, 0];
   for (const m of [...recentRows, ...matchRows]) {
@@ -71,7 +68,7 @@ export function enemySummary(player = {}, {now = Date.now() / 1000, heroes = []}
     if (position) counts[position]++;
     if (+m.lobby_type === BATTLE_CUP_LOBBY && m.hero_id != null) {
       const row = cup.get(+m.hero_id) || {heroId: +m.hero_id, games: 0, wins: 0};
-      row.games++; if (m.radiant_win != null && won(m)) row.wins++;
+      row.games++; if (m.radiant_win != null && playerWon(m)) row.wins++;
       cup.set(row.heroId, row);
     }
   }

@@ -1,7 +1,8 @@
 import snapshot from './heroes.json' with {type:'json'};
 import {BATTLE_CUP_LOBBY,DAY_MS,HISTORY_WINDOW_DAYS} from './constants.js';
 const BASE='https://api.opendota.com/api';
-export const PRIORITY={constants:0,profile:1,recent:2,heroes:3,history:4,matchups:5};
+// Queue order, lowest first. app.js passes its own matchups (5) and heroStats (0) values.
+const PRIORITY={constants:0,profile:1,recent:2,heroes:3,history:4,matchups:5,match:6};
 const REQUEST_TIMEOUT_MS=12000;
 const DEFAULT_TTL_MS=300000;
 const PUBLIC_CACHE_PREFIX='od-public-v1:';
@@ -84,7 +85,7 @@ export class PublicQueue {
 export const publicData=new PublicQueue();
 export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
  const player={id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[],cupMatches:[]};
- const sources=[['profile','',1],['recent','/recentMatches',2],['heroes','/heroes?date='+HISTORY_WINDOW_DAYS,3],['matches','/matches?date='+HISTORY_WINDOW_DAYS+'&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id&project=start_time',4]];
+ const sources=[['profile','',PRIORITY.profile],['recent','/recentMatches',PRIORITY.recent],['heroes','/heroes?date='+HISTORY_WINDOW_DAYS,PRIORITY.heroes],['matches','/matches?date='+HISTORY_WINDOW_DAYS+'&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id&project=start_time',PRIORITY.history]];
  await Promise.all(sources.map(async([key,suffix,priority])=>{
   player.sources[key]={status:'fetching'};
   onUpdate(player);
@@ -108,7 +109,7 @@ export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
  }));
  return player;
 }
-export async function loadHeroes(queue=publicData){try{return await queue.request('/constants/heroes',{priority:0,ttl:DAY_MS});}catch{return snapshot;}}
+export async function loadHeroes(queue=publicData){try{return await queue.request('/constants/heroes',{priority:PRIORITY.constants,ttl:DAY_MS});}catch{return snapshot;}}
 // Battle Cup scouting by match ID. Only a compact summary is cached: full match
 // responses are hundreds of KB. Closed players stay anonymous (accountId null).
 export function parseMatchIds(text){
@@ -129,7 +130,7 @@ export function summarizeMatch(raw={}){
  return {matchId:String(raw.match_id),startTime:+raw.start_time||0,lobbyType:raw.lobby_type==null?null:+raw.lobby_type,
   radiantWin:typeof raw.radiant_win==='boolean'?raw.radiant_win:null,players,picksBans};
 }
-export function loadMatch(id,queue=publicData){return queue.request('/matches/'+id,{priority:6,ttl:30*DAY_MS,transform:summarizeMatch});}
+export function loadMatch(id,queue=publicData){return queue.request('/matches/'+id,{priority:PRIORITY.match,ttl:30*DAY_MS,transform:summarizeMatch});}
 // Divine+ counters and synergy for one hero from our STRATZ proxy, cached for 12 h.
 export async function loadStratz(heroId,{fetcher=(...args)=>globalThis.fetch(...args),storage=globalThis.localStorage,now=Date.now,timeout=REQUEST_TIMEOUT_MS}={}){
  const key=STRATZ_CACHE_PREFIX+heroId;
