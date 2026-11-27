@@ -47,6 +47,10 @@ const draftIntentKey='captain-pending-draft';
 // Any 8-4-4-4-12 hex UUID (drafts use gen_random_uuid; the version digit is not checked).
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const validDraftId=value=>UUID.test(value||'');
+// Public Supabase config baked in at build time (vite.config.js), or null when the build had none.
+function inlinedConfig(){return typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;}
+// Name an auth provider gave the account (email sign-up, Google, Steam), if any.
+const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
 function pendingDraft(){try{const value=sessionStorage.getItem(draftIntentKey);return validDraftId(value)?value:null;}catch{return null;}}
 function forgetDraft(){try{sessionStorage.removeItem(draftIntentKey);}catch{}}
 const entryDraft=new URLSearchParams(location.search).get('draft');
@@ -295,7 +299,7 @@ function showTeamInvitation(force=false){
  for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  welcome.invitation({
   teamName:invitation.teamName,
-  account:user&&(profile?.displayName||user.user_metadata?.display_name||user.user_metadata?.full_name||user.user_metadata?.name||(user.email&&!user.email.endsWith('.invalid')?user.email:'Steam player')),invalid:!invitation.code,
+  account:user&&(profile?.displayName||providerName(user)||(user.email&&!user.email.endsWith('.invalid')?user.email:'Steam player')),invalid:!invitation.code,
   onAccept:async()=>{
    const gen=generation,ready=accountReady,eventAtClick=authEvent;
    const isCurrent=()=>gen===generation&&user?.id===account&&invitation===teamInvitation
@@ -1464,7 +1468,7 @@ async function authChanged(session,event){
    // must not leave profile setup and teams unloaded.
    if(acct!==accountGen)return;
    profileSaved=p.status==='fulfilled'&&!!p.value;
-   profile=(p.status==='fulfilled'&&p.value)||{displayName:activeUser.user_metadata?.display_name||activeUser.user_metadata?.full_name||activeUser.user_metadata?.name||'',steamAccountId:activeUser.user_metadata?.steam_account_id||''};
+   profile=(p.status==='fulfilled'&&p.value)||{displayName:providerName(activeUser)||'',steamAccountId:activeUser.user_metadata?.steam_account_id||''};
    profileSetupRequired=p.status==='fulfilled'&&(!p.value||!!activeUser.user_metadata?.steam_account_id&&!p.value.preferredRoles?.length);
    if(t.status==='fulfilled')teams=t.value;
    if(gen===generation){restorePractice();refreshScouting();}
@@ -1758,7 +1762,7 @@ if(imageId!==null)void (async()=>{
  try{
   if(!UUID.test(imageId))throw Error();
   if(demo){await showIdentityDownload(root,demoIdentityBackend,imageId);return;}
-  const config=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:await (await fetch('/api/config',{cache:'no-store'})).json();
+  const config=inlinedConfig()||await (await fetch('/api/config',{cache:'no-store'})).json();
   await showIdentityDownload(root,createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey}),imageId);
  }catch{root.textContent='This image is unavailable.';}
 })();
@@ -1797,8 +1801,7 @@ else if(!demo)void (async()=>{try{
  }
 
  // Use the config baked in at build time; fall back to /api/config when the build had none.
- const inlined=typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;
- let config=inlined;
+ const inlined=inlinedConfig();let config=inlined;
  if(!config){const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
  if(teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
  if(new URLSearchParams(location.search).has('steam-error')){
