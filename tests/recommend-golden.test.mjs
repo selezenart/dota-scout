@@ -17,8 +17,12 @@ const summary = out => ({
   ranking: out.map(r => `${r.heroId}:${r.score}:${r.playerId ?? '-'}:${r.position ?? '-'}:${r.tags.join('+')}`).join(' '),
   top: out.slice(0, 3).map(r => ({heroId: r.heroId, score: r.score, reasons: r.reasons, evidence: r.evidence})),
 });
+// A thrown error is part of the output: malformed data must fail the same way.
+const run = input => { try { return recommend(input); } catch (e) { return [{error: `${e.name}: ${e.message}`}]; } };
 const capture = () => scenarios().map(({name, input}) => {
-  const text = serialize(recommend(input));
+  const out = run(input);
+  if (out[0]?.error) return {name, error: out[0].error};
+  const text = serialize(out);
   return {name, sha256: createHash('sha256').update(text).digest('hex'), bytes: text.length, ...summary(JSON.parse(text))};
 });
 

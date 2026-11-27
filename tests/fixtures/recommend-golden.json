@@ -5281,6 +5281,1062 @@
    ]
   },
   {
+   "name": "tight roles first at 7",
+   "sha256": "920f76392c3fb026d309026a2d04edbd51b17af663a4bf15afb966c6e441a729",
+   "bytes": 211839,
+   "count": 120,
+   "ranking": "83:57.99:a5:5:team+meta 35:54.92:a2:1:team 49:50.36:a2:1:team 92:48.79:a2:2:team+meta 71:48.76:a2:1:team 123:48.57:a2:2:team+meta 17:48.24:a5:4:team 60:47.49:a1:1:team+meta 138:46.79:a2:1:team+meta 97:45.76:a4:4:team 129:45.26:a2:1:team+meta 23:44.85:a4:4:team 89:44.64:a4:4:team 101:44.41:a1:2:team 8:44.37:a2:1:team+meta 110:43.5:a4:4:team 18:43.49:a2:1:team 107:43.3:a5:4:team 51:42.94:a2:2:team 85:42.91:a2:2:team+meta 155:42.8:a4:4:team+meta 81:42.61:a4:4:team+meta 93:42.34:a4:4:team+meta 91:42.07:a2:2:team 88:42:a4:4:team 87:41.9:a3:3:team 104:41.86:a5:4:team 120:41.63:a4:4:team 47:41.5:a2:1:team 45:41.27:a3:3:team+meta 94:41.24:a2:1:team+meta 28:40.6:a5:4:team 96:40.49:a1:2:team 40:40.31:a1:2:team 114:40.27:a2:1:team+meta 7:40:a3:3:team 68:38.57:a5:5:team 65:38.48:a3:3:team 1:38.26:a5:5:team+meta 90:38.08:a2:2:team 119:37.98:a3:3:team 29:37.12:a1:1:team 36:36.92:a1:1:team 135:36.85:a5:5:team 128:36.63:a4:4:team 9:36.45:a4:4:team+meta 3:36.38:a3:3:team 32:36.26:a2:1:team 77:36.09:a1:1:team 121:35.96:a1:2:team 100:35.92:a1:2:team 22:34.64:a2:1:team 61:34.3:a1:1:team 98:34.27:a3:3:team 38:34.08:a1:2:team 75:34.03:a2:1:team 78:33.31:a5:4:team 57:33.08:a4:4:team 41:32.66:a5:4:team+meta 52:32.49:a2:1: 2:32.43:a1:1:team 56:32.21:a4:4:team 136:31.63:a2:1: 50:31.53:a2:2:meta 82:30.71:a2:1: 73:30.45:a2:1:meta 69:30.27:a2:1: 46:30.24:a2:1:team+meta 59:30:a3:3:team 16:29.84:a2:2:meta 27:29.68:a2:2: 12:28.93:a3:3:team 109:28.43:a2:1: 43:28.36:a2:1:meta 37:28.14:a4:4: 13:28.11:a2:2: 33:28.03:a4:4: 19:27.86:a2:1: 79:27.43:a2:2: 64:27.37:a2:2: 95:27.22:a2:1: 86:27.03:a2:2: 42:26.77:a2:1: 67:26.59:a2:1:meta 34:26.43:a2:1:meta 26:26.35:a2:2: 4:26.32:a2:1: 108:26.32:a2:2: 137:26.14:a4:4: 54:26.09:a2:1: 112:25.97:a2:2: 25:25.83:a2:1: 111:25.78:a2:2:meta 113:25.51:a2:1:meta 131:25.48:a2:2: 63:25.36:a5:5:team 74:25.32:a2:1: 6:25.3:a2:1: 53:25.3:a2:1: 58:25.2:a4:4: 21:25.16:a2:1: 76:25.13:a2:1: 48:25.12:a2:1: 20:25.08:a2:2: 84:25.04:a2:2: 55:24.75:a2:2: 72:24.71:a2:1: 70:24.54:a2:1: 39:24.5:a2:1:meta 106:24.5:a2:1: 62:24.43:a5:5:team 99:24:a2:1: 103:24:a2:2: 5:23.5:a2:2: 105:23.36:a2:2: 80:23.18:a2:1: 15:22.58:a2:1: 14:22.5:a2:2: 102:22.5:a2:1: 145:22.5:a2:1:",
+   "top": [
+    {
+     "heroId": 83,
+     "score": 57.99,
+     "reasons": [
+      "Adds Initiator, Disabler, Support",
+      "Position 5 fit",
+      "Meta: 53.1% win in Divine+ (11.3% of games), pro 15 picks / 5 bans"
+     ],
+     "evidence": [
+      "122 historical games, 2 games in 30 days, 3 Battle Cup games in 180 days"
+     ]
+    },
+    {
+     "heroId": 35,
+     "score": 54.92,
+     "reasons": [
+      "Reported signature hero",
+      "Adds Carry",
+      "Position 1 fit",
+      "Meta: 50.7% win in Divine+ (10.1% of games), pro 50 picks / 8 bans"
+     ],
+     "evidence": [
+      "252 historical games"
+     ]
+    },
+    {
+     "heroId": 49,
+     "score": 50.36,
+     "reasons": [
+      "Reported signature hero",
+      "Adds Initiator, Disabler, Carry, Pusher",
+      "Denies Enemy 5 a played hero (28 historical games, 2 games in 30 days)",
+      "Position 1 fit",
+      "Meta: 50.5% win in Divine+ (4.7% of games), pro 48 picks / 33 bans"
+     ],
+     "evidence": []
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 7",
+   "sha256": "d4221c9973a1658ac3ccf5c61c48b83445f30f0df6ad2c8fbd48b4d5689d72bc",
+   "bytes": 211595,
+   "count": 120,
+   "ranking": "30:65.5:e3:2: 50:64.53:e1:2: 17:61.87:e3:1: 9:57.45:e1:1: 31:57.33:e5:2: 123:53.82:e1:2: 52:53.49:e3:1: 60:53.24:e2:1: 129:52.88:e3:1: 77:52.59:e2:1: 137:52.14:e1:3: 47:52:e2:1: 69:51.27:e5:1: 33:51.03:e4:3: 44:49.93:e2:1: 96:48.87:e5:2: 37:48.26:e5:3: 109:46.56:e4:1: 13:46.24:e4:2: 1:43.76:e1:1: 120:43.38:e5:1: 155:39.3:e5:3: 45:37.9:e5:2: 119:37.23:e3:2: 29:34.99:e2:1: 126:32.21:e2:1: 27:32.06:e1:2: 28:31.98:e1:1: 101:31.79:e1:2: 136:31.38:e2:1: 54:31.09:e5:1: 11:30.64:e2:1: 49:30.11:e5:1: 67:28.96:e2:1: 75:28.78:e5:1: 82:27.84:e1:1: 85:26.91:e5:2: 86:26.78:e1:2: 108:26.07:e4:2: 100:25.93:e5:2: 16:25.87:e2:2: 65:25.85:e5:2: 112:25.72:e5:2: 128:25.26:e1:2: 71:24.89:e5:1: 55:24.5:e5:2: 87:24.02:e5:2: 3:23.75:e1:2: 66:22.22:e2:4: 72:21.84:e4:1: 70:21.66:e1:1: 38:21.45:e4:2: 7:20.5:e1:2: 32:20.26:e4:1: 113:20.01:e2:1: 88:20:e4:2: 22:19.77:e4:1: 46:19.74:e4:1: 63:19.36:e4:1: 57:19.08:e5:2: 98:19.02:e4:2: 99:18.5:e3:1: 103:18.5:e2:2: 25:18.15:e2:1: 83:16.49:e1:2: 23:15.1:e1:1: 89:14.89:e1:1: 73:14.45:e1:1: 92:14.41:e1:2: 114:13.77:e1:1: 41:13.54:e1:1: 8:13:e1:1: 93:12.59:e1:1: 138:12.41:e1:1: 43:12.36:e1:1: 104:12.23:e1:1: 94:12.12:e1:1: 2:11.93:e1:1: 19:11.86:e1:1: 18:11.74:e1:1: 78:11.56:e1:1: 79:11.43:e1:2: 64:11.37:e1:2: 95:11.22:e1:1: 58:11.2:e1:3: 51:11.19:e1:2: 61:11.18:e1:1: 110:11.13:e1:2: 107:11.05:e1:2: 42:10.77:e1:1: 97:10.76:e1:2: 34:10.43:e1:1: 26:10.35:e1:2: 4:10.32:e1:1: 121:10.21:e1:2: 135:9.85:e1:1: 12:9.8:e1:1: 111:9.78:e1:2: 131:9.48:e1:2: 56:9.46:e1:1: 74:9.32:e1:1: 6:9.3:e1:1: 53:9.3:e1:1: 35:9.17:e1:1: 21:9.16:e1:1: 48:9.12:e1:1: 84:9.04:e1:2: 68:8.57:e1:2: 39:8.5:e1:1: 106:8.5:e1:1: 10:8.15:e1:1: 91:7.7:e1:2: 5:7.5:e1:2: 80:7.18:e1:1: 36:6.92:e1:1: 15:6.58:e1:1: 14:6.5:e1:2: 102:6.5:e1:1: 145:6.5:e1:1: 62:5.3:e1:2:",
+   "top": [
+    {
+     "heroId": 30,
+     "score": 65.5,
+     "reasons": [
+      "Adds Disabler, Support",
+      "Denies Ally 2 a played hero (219 historical games, 1 games in 30 days)",
+      "Position 2 fit",
+      "Meta: 53.6% win in Divine+ (5.7% of games), pro 59 picks / 31 bans"
+     ],
+     "evidence": [
+      "96 historical games, 4 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 50,
+     "score": 64.53,
+     "reasons": [
+      "Meta: 56.8% win in Divine+ (12.2% of games), pro 55 picks / 51 bans",
+      "Adds Disabler, Support",
+      "Position 2 fit"
+     ],
+     "evidence": [
+      "250 historical games, 5 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 17,
+     "score": 61.87,
+     "reasons": [
+      "Adds Initiator, Disabler, Carry",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 1 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles first at 8",
+   "sha256": "4750b0b512d8e646b0c8d639b69a56b0cd1b358505325426295262e454e2095e",
+   "bytes": 216943,
+   "count": 119,
+   "ranking": "50:64.92:e1:2: 17:62.89:e3:1: 9:55.74:e1:1: 123:54.81:e1:2: 40:54.03:e4:2: 129:53.99:e3:1: 52:53.16:e3:1: 60:52.89:e2:1: 77:52.27:e2:1: 47:52.16:e2:1: 33:50.85:e4:3: 96:50.73:e5:2: 69:49.71:e5:1: 37:47.57:e5:3: 13:46.54:e4:2: 109:45.76:e4:1: 155:42.94:e5:3: 120:42.24:e5:1: 1:41.9:e1:1: 45:40.02:e5:2: 119:39.01:e3:2: 28:33.5:e1:1: 101:32.67:e1:2: 29:32.6:e2:1: 54:31.81:e5:1: 67:31.79:e2:1: 76:30.97:e5:1: 27:30.82:e1:2: 136:30.82:e2:1: 108:29.82:e4:2: 75:29.79:e5:1: 82:28.04:e1:1: 65:27.75:e5:2: 86:26.74:e1:2: 49:26.73:e5:1: 16:26.47:e2:2: 55:25.71:e5:2: 87:25.31:e5:2: 90:25.16:e2:2: 112:25.11:e5:2: 71:24.89:e5:1: 128:24.42:e1:2: 100:23.73:e5:2: 85:23.38:e5:2: 38:23.34:e4:2: 3:22.94:e1:2: 57:22.51:e5:2: 32:21.57:e4:1: 98:21.55:e4:2: 7:20.71:e1:2: 46:20.38:e4:1: 103:20.02:e2:2: 70:19.82:e1:1: 99:19.63:e3:1: 113:18.9:e2:1: 63:18.45:e4:1: 89:18.16:e1:1: 72:18.1:e4:1: 59:18:e1:1: 88:17.62:e4:2: 23:17.35:e1:1: 22:17.3:e4:1: 105:17.19:e2:2: 93:16.33:e1:1: 81:15.8:e1:1: 25:15.75:e2:1: 114:15.3:e1:1: 18:15.1:e1:1: 138:14.9:e1:1: 8:14.89:e1:1: 79:14.71:e1:2: 61:14.66:e1:1: 73:14.1:e1:1: 92:14.01:e1:2: 43:13.62:e1:1: 135:13.22:e1:1: 110:13.13:e1:2: 53:13.12:e1:1: 83:12.86:e1:2: 6:12.75:e1:1: 64:12.17:e1:2: 41:12.13:e1:1: 51:12.09:e1:2: 104:12.07:e1:1: 26:11.93:e1:2: 34:11.74:e1:1: 48:11.72:e1:1: 68:11.4:e1:2: 42:11.22:e1:1: 121:10.98:e1:2: 58:10.86:e1:3: 39:10.77:e1:1: 35:10.63:e1:1: 14:10.37:e1:2: 94:9.95:e1:1: 5:9.64:e1:2: 107:9.64:e1:2: 12:9.57:e1:1: 19:9.49:e1:1: 78:9.43:e1:1: 21:9.28:e1:1: 20:9.26:e1:2: 4:9.24:e1:1: 2:8.83:e1:1: 95:8.51:e1:1: 56:8.4:e1:1: 131:8.35:e1:2: 111:8.18:e1:2: 102:8.14:e1:1: 91:7.5:e1:2: 15:7.24:e1:1: 97:7.02:e1:2: 36:6.93:e1:1: 106:6.63:e1:1: 84:6.35:e1:2: 74:5.7:e1:1: 62:4.08:e1:2: 80:3.19:e1:1: 145:2.96:e1:1:",
+   "top": [
+    {
+     "heroId": 50,
+     "score": 64.92,
+     "reasons": [
+      "Meta: 56.8% win in Divine+ (12.2% of games), pro 55 picks / 51 bans",
+      "Adds Disabler, Support",
+      "Position 2 fit"
+     ],
+     "evidence": [
+      "250 historical games, 5 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 17,
+     "score": 62.89,
+     "reasons": [
+      "Counters Primal Beast: wins 60% (1468 games, Divine+)",
+      "Adds Initiator, Disabler, Carry",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 1 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 9,
+     "score": 55.74,
+     "reasons": [
+      "Meta: 56.3% win in Divine+ (14.8% of games), pro 42 picks / 9 bans",
+      "Weak vs Primal Beast: wins 58% (844 games)",
+      "Adds Disabler, Support, Carry",
+      "Position 1 fit"
+     ],
+     "evidence": [
+      "296 historical games, 3 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 8",
+   "sha256": "711094f5a692eca02a10302d48b838ff4159b25ba66a25965d4a44de27786013",
+   "bytes": 224063,
+   "count": 119,
+   "ranking": "126:59.69:a3:3:team 83:56.43:a5:5:team+meta 35:55.64:a2:1:team 49:49.9:a2:1:team 123:48.57:a2:2:team+meta 138:48.13:a2:1:team+counter+meta 60:47.73:a1:1:team+meta 92:47.11:a2:2:team+meta 8:46.96:a2:1:team+counter+meta 71:46.96:a2:1:team 30:46.8:a2:2:team+counter+meta 97:46.2:a4:4:team 17:45.97:a5:4:team 18:45.91:a2:1:team+counter 101:45.4:a1:2:team 89:45.23:a4:4:team 129:44.7:a2:1:team+meta 93:44.34:a4:4:team+counter+meta 23:43.83:a4:4:team 155:43.56:a4:4:team+meta 85:43.47:a2:2:team+meta 107:43.3:a5:4:team 47:43.21:a2:1:team+counter 87:43.05:a3:3:team+counter 51:42.73:a2:2:team 7:42.51:a3:3:team+counter 94:42.46:a2:1:team+counter+meta 120:41.94:a4:4:team 110:41.76:a4:4:team 96:41.34:a1:2:team 88:41.25:a4:4:team 104:40.94:a5:4:team 31:40.48:a1:2:team 114:40.46:a2:1:team+meta 28:40.09:a5:4:team 11:39.93:a1:1:team+counter 45:39.57:a3:3:team+meta 91:39.57:a2:2:team 68:39.48:a5:5:team 65:39.34:a3:3:team 29:38.55:a1:1:team+counter 119:37.93:a3:3:team 135:37.53:a5:5:team 1:37.47:a5:5:team+meta 3:37.19:a3:3:team 121:36.64:a1:2:team 36:36.59:a1:1:team 77:36.52:a1:1:team 66:36.35:a3:3:team+counter 100:36.05:a1:2:team 128:35.73:a4:4:team 61:35.23:a1:1:team 38:35.2:a1:2:team+counter 22:34.82:a2:1:team 9:34.61:a4:4:team+meta 98:34.54:a3:3:team 2:34.28:a1:1:team+counter 41:33.98:a5:4:team+counter+meta 78:33.79:a5:4:team 57:33.22:a4:4:team 82:31.96:a2:1:counter 73:31.92:a2:1:counter+meta 75:31.8:a2:1:team 46:31.74:a2:1:team+counter+meta 56:31.1:a4:4:team 136:31.07:a2:1: 52:30.64:a2:1: 50:30.53:a2:2:meta 44:30.09:a2:1:counter+meta 43:29.61:a2:1:counter+meta 69:29.34:a2:1: 42:29.09:a2:1:counter 16:29.02:a2:2:meta 67:28.83:a2:1:counter+meta 109:28.29:a2:1: 26:27.99:a2:2:counter 19:27.95:a2:1: 108:27.95:a2:2:counter 27:27.93:a2:2: 33:27.93:a4:4: 131:27.88:a2:2:counter 95:27.53:a2:1: 79:27.14:a2:2: 21:26.94:a2:1:counter 53:26.85:a2:1:counter 86:26.78:a2:2: 4:26.7:a2:1: 12:26.69:a3:3:team 55:26.44:a2:2:counter 34:26.26:a2:1:meta 13:26.23:a2:2: 39:26.13:a2:1:counter+meta 63:26.08:a5:5:team 25:26.04:a2:1: 64:25.81:a2:2: 37:25.73:a4:4: 62:25.64:a5:5:team+counter 74:25.32:a2:1: 70:25.12:a2:1: 113:25.12:a2:1:meta 72:25.07:a2:1: 99:24.87:a2:1: 58:24.82:a4:4: 84:24.8:a2:2: 48:24.73:a2:1: 111:24.49:a2:2:meta 54:24.13:a2:1: 106:23.81:a2:1: 5:23.8:a2:2: 112:23.77:a2:2: 145:23.61:a2:1:counter 10:23.6:a2:1: 6:23.56:a2:1: 137:23.53:a4:4: 14:23.03:a2:2: 80:22.78:a2:1: 103:22.49:a2:2: 15:21.52:a2:1: 102:20.65:a2:1:",
+   "top": [
+    {
+     "heroId": 126,
+     "score": 59.69,
+     "reasons": [
+      "Adds Disabler, Carry",
+      "Denies Enemy 2 a played hero (88 historical games, 1 Battle Cup games in 180 days)",
+      "Position 3 fit",
+      "Meta: 54.9% win in Divine+ (4.2% of games), pro 23 picks / 52 bans"
+     ],
+     "evidence": [
+      "20 historical games, 4 games in 30 days, 3 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (390 games)"
+     ]
+    },
+    {
+     "heroId": 83,
+     "score": 56.43,
+     "reasons": [
+      "Adds Initiator, Disabler, Support",
+      "Position 5 fit",
+      "Meta: 53.1% win in Divine+ (11.3% of games), pro 15 picks / 5 bans"
+     ],
+     "evidence": [
+      "122 historical games, 2 games in 30 days, 3 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (367 games)"
+     ]
+    },
+    {
+     "heroId": 35,
+     "score": 55.64,
+     "reasons": [
+      "Reported signature hero",
+      "Adds Carry",
+      "Position 1 fit",
+      "Meta: 50.7% win in Divine+ (10.1% of games), pro 50 picks / 8 bans"
+     ],
+     "evidence": [
+      "252 historical games",
+      "Observed matchup data for 1 opposing picks (19 games)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles first at 13",
+   "sha256": "372084942105140420942ecd3ad903b76634786e9d35641d8d91aef1fe32886b",
+   "bytes": 223201,
+   "count": 114,
+   "ranking": "35:59.94:a2:1:team 71:53.53:a2:1:team+counter 123:52.35:a2:2:team+counter+meta 92:51.66:a2:2:team+meta 8:51.53:a2:1:team+counter+meta 17:49.97:a5:4:team+counter 83:49.84:a5:5:team+meta 101:48.34:a1:2:team 91:46.49:a2:2:team 49:46.46:a2:1:team 129:46.44:a2:1:team+meta 138:45.99:a2:1:team+meta 97:45.66:a4:4:team+counter 96:45.21:a1:2:team+counter 60:44.8:a1:1:team+meta 47:44.09:a2:1:team+counter 94:43.12:a2:1:team+meta 40:42.62:a1:2:team+counter 18:42.55:a2:1:team 77:42.31:a1:1:team+counter 23:42.17:a4:4:team+counter 29:42.13:a1:1:team+counter 110:41.9:a4:4:team+counter 85:41.87:a2:2:team+counter+meta 32:41.86:a2:1:team+counter 120:41.46:a2:1:team+counter 22:41.4:a2:1:team 93:41.06:a1:1:team+meta 81:40.68:a4:4:team+counter+meta 107:40.42:a5:4:team 36:40.37:a1:1:team+counter 88:40.37:a4:4:team+counter 90:39.95:a2:2:team 38:39.8:a1:2:team+counter 61:38.65:a1:1:team 50:38.19:a2:2:counter+meta 51:37.84:a2:2:team 114:37.66:a2:1:team+meta 100:37.42:a1:2:team 28:36.92:a5:4:team 68:36.57:a5:5:team+counter 52:36.25:a2:1:counter 155:36.17:a4:4:team+meta 104:35.89:a5:4:team 135:35.84:a5:5:team 109:35.2:a2:1: 45:34.92:a2:2:counter+meta 128:34.81:a4:4:team+counter 57:34.49:a4:4:team+counter 111:34.42:a2:2:counter+meta 69:34.38:a2:1:counter 121:34.17:a1:2:team 113:33.95:a2:1:counter+meta 82:33.63:a2:1: 46:33.52:a2:1:team+counter+meta 2:33.45:a1:1:team+counter 27:32.93:a2:2:counter 9:32.91:a2:1:meta 16:32.81:a2:2:counter+meta 34:32.23:a2:1:counter+meta 1:31.94:a5:5:team+meta 75:31.92:a2:1:team 56:31.86:a4:4:team 65:31.16:a2:2:counter 64:31.05:a2:2:counter 84:30.93:a2:2:counter 119:30.61:a1:2:team 74:29.94:a2:1:counter 3:29.88:a2:2:counter 53:29.62:a2:1: 19:29.32:a2:1: 5:29.23:a2:2:counter 4:29.19:a2:1:counter 63:28.87:a2:1: 42:28.46:a2:1:counter 39:28.41:a2:1:meta 112:28.37:a2:2: 136:28.28:a2:1: 12:28.2:a2:1: 76:28.06:a2:1: 79:27.97:a2:2:counter 6:27.15:a2:1:counter 7:27.09:a2:2:counter 102:27:a2:1:counter 108:26.9:a2:2: 67:26.87:a2:1:meta 78:26.87:a5:4:team 86:26.77:a2:2:counter 15:26.73:a2:1:counter 25:26.49:a2:1: 21:26.04:a2:1: 72:25.88:a2:1: 54:25.66:a2:1: 43:25.58:a2:1:meta 13:25.52:a2:2: 14:25.45:a2:2:counter 37:25.42:a2:1: 33:25.38:a2:1:counter 70:25.24:a2:1: 41:25.16:a5:4:team+meta 26:25.08:a2:2: 73:25.05:a2:1:meta 58:24.88:a2:1: 131:23.9:a2:2:counter 106:23.61:a2:1: 62:23.45:a5:5:team+counter 98:23.12:a2:2: 105:22.75:a2:2: 20:22.09:a2:2: 55:21.53:a2:2: 59:20.94:a2:1: 145:19.92:a2:1:counter 87:19.75:a2:2: 103:19.39:a2:2:counter",
+   "top": [
+    {
+     "heroId": 35,
+     "score": 59.94,
+     "reasons": [
+      "Reported signature hero",
+      "Adds Carry",
+      "Position 1 fit",
+      "Meta: 50.7% win in Divine+ (10.1% of games), pro 50 picks / 8 bans"
+     ],
+     "evidence": [
+      "252 historical games",
+      "Observed matchup data for 1 opposing picks (11 games)"
+     ]
+    },
+    {
+     "heroId": 71,
+     "score": 53.53,
+     "reasons": [
+      "Counters Troll Warlord: wins 59% (1162 games, Divine+)",
+      "Pairs with Primal Beast: +6.692 (Divine+)",
+      "Adds Carry",
+      "Denies Enemy 5 a played hero (288 historical games)",
+      "Position 1 fit",
+      "Meta: 51.3% win in Divine+ (2.7% of games), pro 39 picks / 31 bans"
+     ],
+     "evidence": [
+      "50 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (43 games)"
+     ]
+    },
+    {
+     "heroId": 123,
+     "score": 52.35,
+     "reasons": [
+      "Counters Troll Warlord: wins 61% (661 games, Divine+)",
+      "Adds Support",
+      "Denies Enemy 1 a played hero (284 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours)",
+      "Position 2 fit",
+      "Meta: 53.7% win in Divine+ (7.1% of games), pro 10 picks / 25 bans"
+     ],
+     "evidence": [
+      "171 historical games, 1 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (382 games)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 13",
+   "sha256": "7f332d25bd6cf8884867978be120d8a693955c2e99f10ef36150ba2c7521e0ab",
+   "bytes": 208386,
+   "count": 114,
+   "ranking": "50:62.15:e1:2: 30:60.38:e3:2: 17:55.95:e3:2: 31:55.45:e5:2: 9:52.6:e1:2: 137:50.54:e1:3: 52:50.36:e3:2: 77:50.31:e2:2: 37:48.4:e5:3: 47:47.99:e2:3: 129:47.96:e3:3: 44:47.92:e2:2: 60:47.59:e2:2: 123:46.82:e1:2: 96:44.6:e5:2: 69:44.22:e5:2: 120:39.73:e5:2: 1:38.05:e1:2: 155:36.73:e5:3: 45:36.62:e5:2: 119:31.85:e3:2: 29:31.2:e2:2: 27:29.37:e1:2: 126:28.69:e2:2: 75:28.41:e5:2: 11:27.66:e2:2: 28:27.58:e1:2: 136:27.49:e2:2: 101:26.39:e1:2: 33:26.22:e2:3: 82:25.45:e1:2: 112:25.44:e5:2: 87:25.39:e5:2: 65:25.18:e5:2: 109:25.06:e5:2: 54:24.99:e5:2: 86:24.38:e1:2: 85:23.85:e5:2: 100:23.7:e5:2: 16:22.91:e2:2: 55:22.56:e5:2: 49:22.33:e5:2: 128:22.03:e1:2: 3:21.16:e1:2: 57:19.81:e5:2: 7:19.67:e1:2: 71:18.5:e5:2: 113:17.46:e2:2: 70:17.01:e1:3: 83:16.26:e1:2: 99:15.53:e3:2: 103:15.17:e2:2: 92:14.5:e1:2: 111:13.4:e1:2: 25:13.13:e2:2: 56:12.91:e1:2: 89:12.25:e1:2: 23:11.14:e1:2: 79:10.83:e1:2: 104:10.8:e1:2: 107:10.43:e1:2: 93:10.27:e1:2: 64:10.25:e1:2: 95:10.18:e1:3: 98:10.15:e1:2: 41:9.98:e1:2: 48:9.62:e1:2: 110:9.48:e1:2: 73:9.41:e1:2: 43:9.31:e1:2: 26:9.24:e1:2: 58:8.94:e1:3: 35:8.88:e1:2: 34:8.49:e1:2: 78:8.45:e1:2: 38:8.21:e1:2: 135:8.17:e1:3: 114:7.99:e1:2: 94:7.95:e1:3: 84:7.64:e1:2: 61:7.6:e1:2: 2:7.44:e1:3: 138:7.32:e1:2: 68:7.13:e1:2: 121:6.96:e1:2: 80:6.73:e1:3: 51:6.7:e1:2: 46:6.66:e1:2: 12:6.42:e1:2: 63:6.32:e1:2: 97:6.19:e1:2: 15:5.9:e1:2: 19:5.87:e1:2: 53:5.87:e1:2: 6:5.66:e1:4: 5:5.63:e1:2: 88:5.3:e1:2: 39:5.28:e1:2: 42:4.99:e1:3: 4:4.92:e1:2: 131:4.87:e1:2: 102:4.74:e1:3: 13:4.54:e1:2: 21:4.46:e1:2: 18:4.32:e1:2: 106:4.2:e1:2: 91:4.08:e1:2: 14:3.85:e1:2: 108:3.6:e1:2: 22:3.1:e1:2: 145:2.91:e1:2: 72:2.39:e1:2: 62:2.03:e1:2: 36:1.2:e1:2:",
+   "top": [
+    {
+     "heroId": 50,
+     "score": 62.15,
+     "reasons": [
+      "Meta: 56.8% win in Divine+ (12.2% of games), pro 55 picks / 51 bans",
+      "Adds Support",
+      "Position 2 fit"
+     ],
+     "evidence": [
+      "250 historical games, 5 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 30,
+     "score": 60.38,
+     "reasons": [
+      "Weak vs Invoker: wins 39% (191 games)",
+      "Adds Support",
+      "Position 2 fit",
+      "Meta: 53.6% win in Divine+ (5.7% of games), pro 59 picks / 31 bans"
+     ],
+     "evidence": [
+      "96 historical games, 4 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 17,
+     "score": 55.95,
+     "reasons": [
+      "Weak vs Chen: wins 42% (1408 games)",
+      "Adds Initiator",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 2 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles first at 15",
+   "sha256": "c91b7e7fad993507cd147d5a4f1b0cd133f511e5220d008c8713c95f0a4c3073",
+   "bytes": 206570,
+   "count": 112,
+   "ranking": "17:61.21:e3:2: 40:48.29:e4:2: 33:48.16:e4:4: 129:47.86:e3:4: 37:47.26:e5:4: 96:46.21:e5:2: 52:46.02:e3:2: 13:45.2:e4:2: 109:41.56:e4:2: 155:39.58:e5:4: 120:36.4:e5:2: 119:34.58:e3:2: 45:32.11:e5:2: 112:25.77:e5:2: 54:25.7:e5:2: 50:25.53:e4:2: 76:24.16:e5:2: 65:23.96:e5:2: 85:23.89:e5:2: 108:23.76:e4:2: 87:23.74:e5:2: 100:23.11:e5:2: 75:22.72:e5:2: 27:22.44:e5:2: 49:20.96:e5:2: 55:20.96:e5:2: 38:20.39:e4:2: 57:19.75:e5:2: 63:19.43:e4:2: 22:18.28:e4:2: 71:17.65:e5:2: 29:17.21:e4:2: 46:16.83:e4:2: 88:16.08:e4:2: 98:15.93:e4:2: 32:14.73:e4:2: 72:14.53:e4:2: 136:13.18:e3:2: 92:12.57:e3:2: 83:12.09:e3:2: 81:11.85:e3:4: 8:11.51:e3:2: 93:11.42:e3:2: 97:11.34:e3:2: 128:11.03:e3:2: 79:10.83:e3:2: 110:10.79:e3:2: 16:10.66:e3:2: 111:10.49:e3:2: 23:9.91:e3:2: 61:9.83:e3:2: 107:9.64:e3:2: 7:9.11:e3:2: 101:9.06:e3:2: 28:8.97:e3:2: 5:8.67:e3:2: 26:8.39:e3:2: 9:8.33:e3:2: 86:8.32:e3:2: 39:8.31:e3:2: 60:8.09:e3:2: 82:7.99:e3:2: 51:7.9:e3:2: 138:7.88:e3:2: 64:7.85:e3:2: 2:7.67:e3:4: 90:7.67:e3:2: 67:7.6:e3:2: 121:7.52:e3:2: 131:7.5:e3:2: 123:7.39:e3:2: 114:7.35:e3:2: 73:7.31:e3:2: 91:7.18:e3:2: 42:7.03:e3:4: 94:6.96:e3:4: 84:6.76:e3:2: 77:6.53:e3:2: 53:6.37:e3:2: 62:6.34:e3:2: 18:6.32:e3:2: 56:6.29:e3:2: 104:6.15:e3:2: 47:6.14:e3:4: 12:6.02:e3:2: 25:5.63:e3:2: 20:5.6:e3:2: 58:5.36:e3:4: 43:5.35:e3:2: 4:5.29:e3:2: 41:5.28:e3:2: 21:5.18:e3:2: 78:5.02:e3:2: 68:4.98:e3:2: 34:4.92:e3:2: 19:4.72:e3:2: 103:4.39:e3:2: 102:4.14:e3:4: 35:3.96:e3:2: 15:3.79:e3:2: 14:3.52:e3:2: 145:3.21:e3:2: 135:3.12:e3:2: 36:2.89:e3:2: 59:2.71:e3:2: 6:2.69:e3:4: 3:2.03:e3:2: 1:1.65:e3:2: 105:1.6:e3:2: 106:1.19:e3:2: 74:0.49:e3:2: 70:0.12:e3:4:",
+   "top": [
+    {
+     "heroId": 17,
+     "score": 61.21,
+     "reasons": [
+      "Counters Primal Beast: wins 60% (1468 games, Divine+)",
+      "Pairs with Troll Warlord: +5.818 (Divine+)",
+      "Adds Initiator",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 2 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "Observed matchup data for 2 opposing picks (138 games)"
+     ]
+    },
+    {
+     "heroId": 40,
+     "score": 48.29,
+     "reasons": [
+      "Counters Arc Warden: wins 54% (70 games, Divine+)",
+      "Weak vs Doom: wins 52% (1822 games)",
+      "Adds Initiator, Support",
+      "Denies Ally 1 a played hero (183 historical games)",
+      "Position 2 fit",
+      "Meta: 56.2% win in Divine+ (5.7% of games), pro 8 picks / 48 bans"
+     ],
+     "evidence": [
+      "62 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 33,
+     "score": 48.16,
+     "reasons": [
+      "Counters Arc Warden: wins 52% (1767 games, Divine+)",
+      "Weak vs Doom: wins 49% (483 games)",
+      "Pairs with Troll Warlord: +3.849 (Divine+)",
+      "Adds Initiator",
+      "Position 4 fit",
+      "Meta: 42.9% win in Divine+ (9.9% of games), pro 1 picks / 54 bans"
+     ],
+     "evidence": [
+      "279 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 15",
+   "sha256": "5c0d9d94a7c874a3552a1fa219eb5d90467fa5241bebdecc74968bdc259eb636",
+   "bytes": 218217,
+   "count": 112,
+   "ranking": "83:55.39:a5:5:team+meta 97:49.91:a4:4:team+counter 17:48.88:a5:4:team+counter 60:47.35:a1:2:team+meta 107:46.13:a5:4:team+counter 96:42.18:a1:2:team 93:41.66:a1:2:team+meta 88:41.64:a4:4:team+counter 92:41.63:a1:2:team+counter+meta 101:40.32:a1:2:team 126:39.77:a4:4:team 38:39.65:a1:2:team+counter 23:39.36:a4:4:team 120:39.35:a4:4:team 104:38.57:a5:4:team 31:38.52:a1:2:team 110:38.01:a4:4:team 85:37.5:a1:2:team+meta 89:37.03:a4:4:team 155:36.88:a4:4:team+meta 68:36.65:a5:5:team 77:36.65:a1:2:team+counter 1:35.89:a5:5:team+meta 47:35.37:a4:4:team 100:35.28:a1:2:team 11:35.08:a1:2:team 57:35.04:a4:4:team+counter 135:34.87:a5:5:team 28:34.57:a5:4:team 35:34.29:a4:4:team 94:34.04:a4:4:team+meta 121:33.91:a1:2:team 61:33.88:a1:2:team+counter 78:32.73:a5:4:team+counter 9:31.96:a4:4:team+counter+meta 36:31.62:a1:2:team 128:30.83:a4:4:team 119:28.97:a1:2:team 63:28.8:a5:5:team+counter 41:28.71:a5:4:team+meta 56:27.91:a4:4:team 129:27.48:a4:4:meta 44:27.15:a1:2:counter+meta 136:26.37:a1:2: 50:25.17:a1:2:meta 39:25.01:a1:2:counter+meta 46:24.98:a1:2:counter+meta 73:24.87:a1:2:counter+meta 69:24.58:a1:2: 30:24.34:a1:2:meta 2:24.26:a1:2:team 18:24.1:a1:2:counter 123:24.09:a1:2:meta 82:23.55:a1:2:counter 16:23.49:a1:2:meta 113:23.45:a1:2:meta 55:23.4:a1:2:counter 86:23.2:a5:5:team 87:23.1:a1:2:counter 108:22.93:a1:2: 45:22.68:a1:2:counter+meta 137:22.65:a4:4: 26:22.54:a1:2:counter 25:22.52:a1:2:team 37:22.45:a4:4: 54:22.14:a1:2: 34:22.08:a1:2:meta 91:22.06:a1:2:counter 102:22.03:a4:4:counter 33:21.78:a4:4: 79:21.48:a1:2:counter 5:21.42:a1:2:team 99:21.42:a1:2:counter 131:21.4:a1:2:counter 49:21.36:a1:2: 52:21.3:a1:2: 106:21.21:a1:2: 3:21.1:a1:2:counter 65:20.97:a1:2: 111:20.92:a1:2:meta 58:20.64:a4:4: 62:20.4:a5:5:team 64:20.32:a1:2:counter 70:20.23:a4:4:counter 19:20.19:a1:2: 109:20.14:a1:2: 14:19.64:a1:2: 112:19.6:a1:2:counter 27:19.56:a1:2: 7:19.51:a1:2:counter 43:19.51:a1:2:meta 51:19.47:a1:2: 4:19.46:a1:2: 42:19.32:a4:4:counter 84:19.03:a1:2: 53:18.84:a1:2:counter 95:18.77:a4:4: 98:18.69:a1:2:counter 22:18.35:a1:2: 13:18.31:a1:2: 145:17.76:a1:2: 138:17.75:a1:2:counter+meta 75:17.53:a1:2: 114:17.43:a1:2:meta 48:16.86:a1:2: 72:16.83:a1:2:counter 12:16.37:a1:2:counter 71:16.23:a1:2: 103:15.14:a1:2: 6:14.8:a4:4: 80:13.86:a1:2:counter 15:13.12:a1:2:",
+   "top": [
+    {
+     "heroId": 83,
+     "score": 55.39,
+     "reasons": [
+      "Pairs with Chen: +7.674 (Divine+)",
+      "Adds Initiator",
+      "Position 5 fit",
+      "Meta: 53.1% win in Divine+ (11.3% of games), pro 15 picks / 5 bans"
+     ],
+     "evidence": [
+      "122 historical games, 2 games in 30 days, 3 Battle Cup games in 180 days",
+      "Observed matchup data for 3 opposing picks (794 games)"
+     ]
+    },
+    {
+     "heroId": 97,
+     "score": 49.91,
+     "reasons": [
+      "Counters Tidehunter: wins 49% (1594 games, Divine+)",
+      "Pairs with Chen: +5.949 (Divine+)",
+      "Adds Initiator",
+      "Position 4 fit",
+      "Meta: 45.7% win in Divine+ (14.4% of games), pro 40 picks / 77 bans"
+     ],
+     "evidence": [
+      "61 historical games, 2 Battle Cup games in 180 days",
+      "Observed matchup data for 2 opposing picks (396 games)"
+     ]
+    },
+    {
+     "heroId": 17,
+     "score": 48.88,
+     "reasons": [
+      "Wants to play",
+      "Counters Tidehunter: wins 55% (1310 games, Divine+)",
+      "Pairs with Chen: +7.774 (Divine+)",
+      "Adds Initiator",
+      "Denies Enemy 3 a played hero (28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours)",
+      "Position 4 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days",
+      "Observed matchup data for 2 opposing picks (600 games)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles first at 16",
+   "sha256": "453df364e290a1ac529a1b9a326acdc2c2825ca1cdec6bde40d1d3e23cce351f",
+   "bytes": 202607,
+   "count": 111,
+   "ranking": "17:58.88:e3:4: 52:47.81:e3:4: 129:47.8:e3:4: 40:47.68:e4:4: 33:46.51:e4:4: 13:43.8:e4:4: 109:38.04:e4:4: 119:34.58:e3:4: 50:26.12:e4:4: 108:23.76:e4:4: 76:21.79:e4:4: 38:18.46:e4:4: 63:15.45:e4:4: 72:15.35:e4:4: 88:14.92:e4:4: 22:14.28:e4:4: 29:14.2:e4:4: 92:13.76:e3:4: 98:13.69:e4:4: 32:13.41:e4:4: 155:12.57:e3:4: 46:10.94:e4:4: 128:10.81:e3:4: 87:10.66:e3:4: 101:10.49:e3:4: 93:10.2:e3:4: 111:9.97:e3:4: 83:9.93:e3:4: 81:9.85:e3:4: 85:9.22:e3:4: 136:8.93:e3:4: 97:8.72:e3:4: 16:8.66:e3:4: 79:8.54:e3:4: 49:8.27:e4:4: 110:8.26:e3:4: 94:7.89:e3:4: 9:7.86:e3:4: 5:7.85:e3:4: 43:7.79:e3:4: 57:7.75:e3:4: 123:7.75:e3:4: 121:7.74:e3:4: 23:7.67:e3:4: 131:7.21:e3:4: 21:7.17:e3:4: 8:7.03:e3:4: 65:6.96:e3:4: 28:6.75:e3:4: 86:6.67:e3:4: 138:6.61:e3:4: 68:6.42:e3:4: 26:6.39:e3:4: 18:6.12:e3:4: 90:6.05:e3:4: 112:6.05:e3:4: 107:5.93:e3:4: 64:5.88:e3:4: 25:5.82:e3:4: 78:5.69:e3:4: 2:5.55:e3:4: 102:5.52:e3:4: 82:5.27:e3:4: 37:5.22:e3:4: 100:5.21:e3:4: 91:5.17:e3:4: 7:5.12:e3:4: 60:5.12:e3:4: 73:5.11:e3:4: 61:4.73:e3:4: 51:4.71:e3:4: 41:4.63:e3:4: 58:4.46:e3:4: 39:4.31:e3:4: 47:4.04:e3:4: 84:3.97:e3:4: 4:3.87:e3:4: 104:3.77:e3:4: 20:3.6:e3:4: 34:3.59:e3:4: 42:3.59:e3:4: 67:3.54:e3:4: 62:3.43:e3:4: 36:3.28:e3:4: 53:3.12:e3:4: 135:3.12:e3:4: 12:2.98:e3:4: 114:2.87:e3:4: 14:2.71:e3:4: 6:2.69:e3:4: 103:2.43:e3:4: 3:2.35:e3:4: 19:2.34:e3:4: 75:2.29:e3:4: 77:2.22:e3:4: 27:2.17:e3:4: 35:2.11:e3:4: 71:1.87:e3:4: 54:1.7:e3:4: 70:1.28:e3:4: 145:1.05:e3:4: 55:0.96:e3:4: 56:0.79:e3:4: 105:0.03:e3:4: 120:-0.05:e3:4: 15:-0.15:e3:4: 45:-0.25:e3:4: 59:-0.26:e3:4: 74:-0.28:e3:4: 106:-1.86:e3:4: 1:-2.35:e3:4:",
+   "top": [
+    {
+     "heroId": 17,
+     "score": 58.88,
+     "reasons": [
+      "Counters Primal Beast: wins 60% (1468 games, Divine+)",
+      "Pairs with Troll Warlord: +5.818 (Divine+)",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 4 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "Observed matchup data for 2 opposing picks (138 games)"
+     ]
+    },
+    {
+     "heroId": 52,
+     "score": 47.81,
+     "reasons": [
+      "Weak vs Doom: wins 52% (683 games)",
+      "Pairs with Centaur Warrunner: +2.874 (Divine+)",
+      "Adds Support",
+      "Position 4 fit",
+      "Meta: 49.5% win in Divine+ (2.7% of games), pro 30 picks / 65 bans"
+     ],
+     "evidence": [
+      "276 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "Observed matchup data for 1 opposing picks (247 games)"
+     ]
+    },
+    {
+     "heroId": 129,
+     "score": 47.8,
+     "reasons": [
+      "Meta: 56.5% win in Divine+ (10.7% of games), pro 51 picks / 54 bans",
+      "Counters Arc Warden: wins 47% (649 games, Divine+)",
+      "Pairs with Centaur Warrunner: +4.456 (Divine+)",
+      "Position 4 fit"
+     ],
+     "evidence": [
+      "114 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 16",
+   "sha256": "d00bffe6c11bfd8c92cc2e418b2dde68b62278f4d1cce6513eee0de6ab445b10",
+   "bytes": 215333,
+   "count": 111,
+   "ranking": "97:53.46:a4:4:team+counter 60:47.43:a1:2:team+meta 88:46.05:a4:4:team+counter 93:44.29:a4:4:team+meta 23:43.92:a4:4:team 126:43.29:a4:4:team 120:42.46:a4:4:team 96:42.34:a1:2:team 110:42.01:a4:4:team 92:41.98:a1:2:team+counter+meta 89:41.03:a4:4:team 155:40.88:a4:4:team+meta 101:40.38:a1:2:team 47:40.29:a4:4:team 31:38.93:a1:2:team 38:38.91:a1:2:team+counter 35:38.29:a4:4:team 94:38.04:a4:4:team+meta 77:37.44:a1:2:team+counter 57:37.4:a4:4:team+counter 85:36.42:a1:2:team+meta 100:36.2:a1:2:team 11:35.96:a1:2:team 9:35.08:a4:4:team+counter+meta 128:34.83:a4:4:team 61:34.47:a1:2:team+counter 121:33.66:a1:2:team 17:33.09:a4:4:counter 56:31.91:a4:4:team 36:31.88:a1:2:team 129:31.64:a4:4:meta 73:30.12:a4:4:counter+meta 119:29.67:a1:2:team 63:29.38:a4:4:team+counter 50:29.26:a4:4:meta 123:28.85:a4:4:meta 18:28.71:a4:4:counter 82:28.59:a4:4:counter 136:28.46:a4:4: 30:28.43:a4:4:meta 107:28.13:a4:4:counter 87:28:a4:4:counter 69:27.36:a4:4: 26:27.19:a4:4:counter 16:27.06:a4:4:meta 55:26.94:a4:4:counter 108:26.93:a4:4: 37:26.76:a4:4: 44:26.75:a1:2:counter+meta 79:26.69:a4:4:counter 33:26.67:a4:4: 78:26.15:a4:4:counter 86:25.99:a4:4: 102:25.92:a4:4:counter 137:25.89:a4:4: 131:25.73:a4:4:counter 65:25.66:a4:4: 54:25.47:a4:4: 111:25.37:a4:4:meta 46:25.34:a1:2:counter+meta 52:25.3:a4:4: 91:25.29:a4:4:counter 28:25.22:a4:4: 83:25.15:a4:4:meta 39:24.97:a1:2:counter+meta 106:24.91:a4:4: 3:24.8:a4:4:counter 64:24.66:a4:4:counter 68:24.65:a4:4: 41:24.31:a4:4:meta 2:24.26:a1:2:team 49:24.17:a4:4: 112:24.14:a4:4:counter 95:23.95:a4:4: 58:23.88:a4:4: 104:23.76:a4:4: 84:23.73:a4:4: 113:23.66:a1:2:meta 13:23.55:a4:4: 19:23.53:a4:4: 43:23.51:a4:4:meta 4:23.38:a4:4: 42:23.3:a4:4:counter 27:23.12:a4:4: 51:22.98:a4:4: 45:22.96:a1:2:counter+meta 7:22.88:a4:4:counter 14:22.76:a4:4: 70:22.55:a4:4:counter 1:22.42:a1:2:meta 75:22.19:a4:4: 5:21.92:a1:2:team 138:21.92:a4:4:counter+meta 114:21.9:a4:4:meta 25:21.78:a1:2:team 99:21.26:a1:2:counter 145:20.81:a4:4: 109:20.25:a1:2: 72:20.15:a4:4:counter 71:20.11:a4:4: 34:20.1:a1:2:meta 53:19.1:a1:2:counter 103:18.38:a4:4: 6:18.22:a4:4: 98:18.02:a1:2:counter 22:17.57:a1:2: 80:17.56:a4:4:counter 48:16.91:a1:2: 12:16.63:a1:2:counter 62:14.08:a1:2: 15:13.12:a1:2:",
+   "top": [
+    {
+     "heroId": 97,
+     "score": 53.46,
+     "reasons": [
+      "Counters Tidehunter: wins 49% (1594 games, Divine+)",
+      "Pairs with Chen: +5.949 (Divine+)",
+      "Adds Initiator",
+      "Position 4 fit",
+      "Meta: 45.7% win in Divine+ (14.4% of games), pro 40 picks / 77 bans"
+     ],
+     "evidence": [
+      "61 historical games, 2 Battle Cup games in 180 days",
+      "Observed matchup data for 2 opposing picks (396 games)"
+     ]
+    },
+    {
+     "heroId": 60,
+     "score": 47.43,
+     "reasons": [
+      "Counters Tidehunter: wins 55% (495 games, Divine+)",
+      "Adds Initiator",
+      "Denies Enemy 2 a played hero (108 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours)",
+      "Position 2 fit",
+      "Meta: 51.8% win in Divine+ (11.7% of games), pro 55 picks / 1 bans"
+     ],
+     "evidence": [
+      "123 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days",
+      "Observed matchup data for 2 opposing picks (329 games)"
+     ]
+    },
+    {
+     "heroId": 88,
+     "score": 46.05,
+     "reasons": [
+      "Reported signature hero",
+      "Counters Tidehunter: wins 39% (437 games, Divine+)",
+      "Pairs with Chen: +7.387 (Divine+)",
+      "Adds Initiator",
+      "Denies Enemy 4 a played hero (210 historical games)",
+      "Position 4 fit",
+      "Meta: 46.8% win in Divine+ (3.7% of games), pro 7 picks / 21 bans"
+     ],
+     "evidence": [
+      "Observed matchup data for 2 opposing picks (612 games)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles first at 17",
+   "sha256": "44fe0ae3b2f4f76a8388a0ce9c13a653c39f2d14f2ebb973cf9a6da688d0dd09",
+   "bytes": 218108,
+   "count": 110,
+   "ranking": "83:52.8:a5:5:team+meta 101:48.18:a1:2:team 92:45.28:a1:2:team+meta 17:43.65:a5:5:team 60:42.6:a1:2:team+meta 36:40.81:a1:2:team+counter 40:39.96:a1:2:team 107:39.78:a5:5:team 85:37.97:a1:2:team+counter+meta 38:37.95:a1:2:team+counter 29:37.16:a1:2:team 93:37.1:a1:2:team+meta 68:37.08:a5:5:team 8:37.02:a5:5:team+counter+meta 100:36.81:a1:2:team 77:36.8:a1:2:team+counter 104:36.78:a5:5:team 135:36.09:a5:5:team 121:35.32:a1:2:team 1:34.94:a5:5:team+meta 119:34.87:a1:2:team 61:32.81:a1:2:team 28:32.6:a5:5:team 81:32.37:a1:2:team+counter+meta 50:32.06:a1:2:counter+meta 45:30.58:a1:2:counter+meta 2:28.62:a1:2:team+counter 27:28.34:a1:2:counter 78:28.32:a5:5:team 52:27.31:a1:2:counter 9:26.56:a1:2:meta 123:26.55:a1:2:meta 109:25.84:a1:2: 16:25.75:a1:2:counter+meta 64:25.33:a1:2: 82:23.89:a1:2: 111:23.74:a1:2:counter+meta 47:23.66:a1:2:team+counter 65:23.58:a1:2:counter 25:23.56:a1:2:team 128:23.17:a1:2:counter 136:23:a1:2: 41:22.99:a5:5:team+meta 62:22.97:a5:5:team 7:22.94:a1:2:counter 84:22.9:a1:2:counter 63:22.84:a5:5:team 5:22.77:a1:2:team 23:22.69:a1:2:counter 110:22.57:a1:2:counter 46:22.46:a1:2:counter+meta 13:22.22:a1:2:counter 57:22.12:a1:2:counter 86:21.94:a5:5:team+counter 43:21.9:a1:2:meta 79:21.89:a1:2: 74:21.73:a1:2:counter 35:21.62:a1:2:counter 4:21.58:a1:2:counter 108:21.49:a1:2: 71:21.45:a1:2: 112:21.37:a1:2: 91:21.31:a1:2:counter 75:21.24:a1:2: 37:21.23:a1:2: 26:21.22:a1:2: 34:20.98:a1:2:meta 32:20.88:a1:2: 98:20.55:a1:2: 120:20.41:a1:2:counter 67:20.27:a1:2:meta 90:20.24:a1:2: 131:20.08:a1:2: 114:20.03:a1:2:meta 3:19.89:a1:2: 53:19.88:a1:2: 39:19.87:a1:2:meta 20:19.85:a1:2: 19:19.76:a1:2: 18:19.54:a1:2:counter 22:19.42:a1:2: 49:19.3:a1:2: 73:19.27:a1:2:meta 138:19.27:a1:2:meta 129:18.99:a1:2:meta 21:18.95:a1:2:counter 155:18.92:a1:2:meta 12:18.88:a1:2: 54:18.42:a1:2: 15:18.18:a1:2:counter 105:17.93:a1:2: 58:17.89:a1:2: 6:17.83:a1:2:counter 76:17.83:a1:2: 87:17.65:a1:2: 33:17.62:a1:2: 88:17.33:a1:2: 106:17.23:a1:2: 72:16.94:a1:2: 103:16.92:a1:2: 102:16.54:a1:2:counter 51:16.29:a1:2: 14:16.1:a1:2:counter 94:16.02:a1:2:meta 42:15.53:a1:2:counter 56:14.95:a1:2: 97:13.96:a5:5:counter 70:13.43:a1:2: 145:13.38:a1:2:counter 59:12.7:a1:2:",
+   "top": [
+    {
+     "heroId": 83,
+     "score": 52.8,
+     "reasons": [
+      "Weak vs Centaur Warrunner: wins 54% (1681 games)",
+      "Pairs with Arc Warden: +7.36 (Divine+)",
+      "Adds Support",
+      "Position 5 fit",
+      "Meta: 53.1% win in Divine+ (11.3% of games), pro 15 picks / 5 bans"
+     ],
+     "evidence": [
+      "122 historical games, 2 games in 30 days, 3 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (121 games)"
+     ]
+    },
+    {
+     "heroId": 101,
+     "score": 48.18,
+     "reasons": [
+      "Counters Centaur Warrunner: wins 49% (1512 games, Divine+)",
+      "Pairs with Doom: +7.59 (Divine+)",
+      "Adds Support",
+      "Denies Enemy 1 a played hero (172 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 2 fit",
+      "Meta: 49.4% win in Divine+ (6.5% of games), pro 18 picks / 40 bans"
+     ],
+     "evidence": [
+      "217 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (248 games)"
+     ]
+    },
+    {
+     "heroId": 92,
+     "score": 45.28,
+     "reasons": [
+      "Reported signature hero",
+      "Counters Dark Seer: wins 42% (435 games, Divine+)",
+      "Pairs with Primal Beast: +6.61 (Divine+)",
+      "Adds Support, Pusher",
+      "Position 2 fit",
+      "Meta: 55.4% win in Divine+ (6.3% of games), pro 43 picks / 60 bans"
+     ],
+     "evidence": [
+      "Observed matchup data for 1 opposing picks (124 games)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 17",
+   "sha256": "95a458a1ae2b2758c0324827c4f7862e03807579a618fb17a47eae47a6a0a85b",
+   "bytes": 203764,
+   "count": 110,
+   "ranking": "30:61.11:e3:5: 17:55.95:e3:3: 31:53.18:e5:5: 52:49.32:e3:5: 129:46.89:e3:3: 96:43.82:e5:3: 37:41.57:e5:3: 69:40.57:e5:3: 155:37.66:e5:3: 120:36.04:e5:3: 119:31.87:e3:5: 45:29.81:e5:3: 54:25.04:e5:3: 100:23.85:e5:3: 75:23.45:e5:3: 27:22.98:e5:3: 85:22.58:e5:3: 65:22.02:e5:3: 112:21.58:e5:5: 49:21.13:e5:3: 57:20.43:e5:3: 109:19.78:e5:3: 55:18.65:e5:3: 137:18.31:e5:3: 87:18.26:e5:3: 71:17.92:e5:3: 99:16.06:e3:3: 92:15.78:e3:3: 95:11.08:e3:3: 83:9.84:e3:3: 77:9.67:e3:3: 73:9.63:e3:3: 94:9.33:e3:3: 104:8.48:e3:3: 50:8.15:e3:5: 82:7.97:e3:3: 128:7.84:e3:5: 23:7.47:e3:3: 79:7.32:e3:3: 68:7:e3:5: 121:6.99:e3:5: 38:6.97:e3:3: 51:6.96:e3:3: 93:6.96:e3:3: 26:6.89:e3:3: 80:6.87:e3:3: 86:6.63:e3:5: 7:6.6:e3:3: 111:6.46:e3:5: 64:6.38:e3:5: 107:6.29:e3:3: 89:6.08:e3:3: 48:5.72:e3:3: 28:5.58:e3:3: 41:5.57:e3:3: 60:5.49:e3:3: 16:5.43:e3:3: 34:5.34:e3:3: 11:5.24:e3:3: 78:5.01:e3:3: 58:4.75:e3:3: 56:4.73:e3:3: 136:4.7:e3:3: 61:4.69:e3:3: 42:4.57:e3:3: 131:4.55:e3:5: 9:4.46:e3:5: 18:4.43:e3:3: 98:4.41:e3:3: 5:4.36:e3:5: 19:4.34:e3:3: 110:4.14:e3:3: 33:4.07:e3:3: 13:3.96:e3:3: 44:3.89:e3:3: 126:3.76:e3:3: 15:3.75:e3:3: 3:3.69:e3:3: 63:3.37:e3:3: 123:3.25:e3:5: 113:3.22:e3:3: 97:3.17:e3:3: 53:3.14:e3:3: 6:3.09:e3:3: 2:3.06:e3:3: 102:3:e3:3: 106:2.7:e3:3: 43:2.67:e3:3: 1:2.64:e3:3: 39:2.59:e3:3: 47:2.51:e3:3: 101:2.08:e3:5: 108:1.94:e3:3: 35:1.77:e3:3: 114:1.67:e3:3: 70:1.54:e3:3: 91:1.47:e3:5: 4:1.44:e3:3: 138:0.86:e3:3: 46:0.79:e3:3: 36:0.76:e3:3: 103:0.72:e3:3: 88:0.41:e3:3: 72:0.18:e3:3: 14:-0.02:e3:3: 25:-0.17:e3:5: 62:-0.37:e3:3: 84:-0.98:e3:3: 22:-1.32:e3:3: 145:-2.16:e3:3:",
+   "top": [
+    {
+     "heroId": 30,
+     "score": 61.11,
+     "reasons": [
+      "Counters Phantom Lancer: wins 43% (1114 games, Divine+)",
+      "Weak vs Invoker: wins 39% (191 games)",
+      "Pairs with Tidehunter: +5.834 (Divine+)",
+      "Position 5 fit",
+      "Meta: 53.6% win in Divine+ (5.7% of games), pro 59 picks / 31 bans"
+     ],
+     "evidence": [
+      "96 historical games, 4 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 17,
+     "score": 55.95,
+     "reasons": [
+      "Weak vs Chen: wins 42% (1408 games)",
+      "Pairs with Tidehunter: +2.7 (Divine+)",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 3 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 31,
+     "score": 53.18,
+     "reasons": [
+      "Counters Phantom Lancer: wins 51% (412 games, Divine+)",
+      "Weak vs Chen: wins 40% (285 games)",
+      "Denies Ally 1 a played hero (66 historical games, 1 Battle Cup games in 180 days)",
+      "Position 5 fit",
+      "Meta: 50.8% win in Divine+ (9.1% of games), pro 23 picks / 78 bans"
+     ],
+     "evidence": [
+      "172 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles first at 22",
+   "sha256": "813793bfcb59d05ab3357da24f49608c841ae00f95a1db79470d3af998ca53f0",
+   "bytes": 204504,
+   "count": 104,
+   "ranking": "83:50.02:a5:5:team+meta 17:44.27:a5:5:team 107:39.26:a5:5:team 92:38.54:a5:5:team+meta 104:35.91:a5:5:team 135:35.65:a5:5:team 8:35.02:a5:5:team+counter+meta 68:34.94:a5:5:team 1:34.87:a5:5:team+meta 28:32.1:a5:5:team 78:28.14:a5:5:team 50:26.21:a5:5:counter+meta 60:25.6:a5:5:team+meta 62:23.63:a5:5:team 41:23.17:a5:5:team+meta 63:23.16:a5:5:team 45:21.31:a5:5:counter+meta 86:21.07:a5:5:team+counter 123:20.74:a5:5:meta 9:20.09:a5:5:meta 27:19.42:a5:5:counter 37:19.39:a5:5: 52:19.29:a5:5:counter 16:19.2:a5:5:counter+meta 85:19.18:a5:5:counter+meta 40:18.92:a5:5: 111:18.14:a5:5:counter+meta 101:17.94:a5:5: 136:17.69:a5:5: 155:16.92:a5:5:meta 23:16.83:a5:5:counter 119:16.72:a5:5: 7:16.68:a5:5:counter 77:16.45:a5:5:counter 84:16.37:a5:5:counter 110:16.37:a5:5:counter 79:16.19:a5:5: 57:16.12:a5:5:counter 108:15.87:a5:5: 109:15.71:a5:5: 47:15.5:a5:5:counter 112:15.43:a5:5: 75:15.41:a5:5: 91:15.33:a5:5:counter 26:15.22:a5:5: 38:15.03:a5:5:counter 131:14.97:a5:5: 65:14.93:a5:5:counter 81:14.62:a5:5:counter+meta 13:14.55:a5:5:counter 20:14.44:a5:5: 129:14.37:a5:5:meta 42:14.36:a5:5:counter 102:14.18:a5:5:counter 100:14.01:a5:5: 58:13.9:a5:5: 3:13.89:a5:5: 12:13.88:a5:5:team 90:13.8:a5:5: 82:13.39:a5:5: 98:13.29:a5:5: 73:13.27:a5:5:meta 29:13.24:a5:5: 97:13.16:a5:5:counter 120:13.12:a5:5:counter 67:12.92:a5:5:meta 35:12.91:a5:5:counter 4:12.81:a5:5:counter 71:12.76:a5:5: 2:12.51:a5:5:counter 21:12.5:a5:5:counter 32:12.48:a5:5: 36:12.44:a5:5:counter 6:12.43:a5:5:counter 25:12.26:a5:5: 74:12.14:a5:5:counter 39:12.04:a5:5:meta 33:11.96:a5:5: 5:11.86:a5:5: 94:11.86:a5:5:meta 114:11.8:a5:5:meta 18:11.54:a5:5:counter 43:11.51:a5:5:meta 22:11.42:a5:5: 87:11.37:a5:5: 93:11.19:a5:5:meta 121:11.17:a5:5: 34:10.98:a5:5:meta 105:10.49:a5:5: 54:9.97:a5:5: 53:9.88:a5:5: 103:9.86:a5:5: 49:9.85:a5:5: 106:9.77:a5:5: 19:9.43:a5:5: 70:9.39:a5:5: 88:9.33:a5:5: 76:9.11:a5:5: 15:9.01:a5:5:counter 14:8.73:a5:5:counter 59:8.61:a5:5: 72:8.55:a5:5: 145:6.13:a5:5:counter 56:4.95:a5:5:",
+   "top": [
+    {
+     "heroId": 83,
+     "score": 50.02,
+     "reasons": [
+      "Weak vs Centaur Warrunner: wins 54% (1681 games)",
+      "Pairs with Arc Warden: +7.36 (Divine+)",
+      "Position 5 fit",
+      "Meta: 53.1% win in Divine+ (11.3% of games), pro 15 picks / 5 bans"
+     ],
+     "evidence": [
+      "122 historical games, 2 games in 30 days, 3 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (121 games)"
+     ]
+    },
+    {
+     "heroId": 17,
+     "score": 44.27,
+     "reasons": [
+      "Wants to play",
+      "Counters Troll Warlord: wins 51% (947 games, Divine+)",
+      "Weak vs Centaur Warrunner: wins 48% (1902 games)",
+      "Pairs with Jakiro: +6.939 (Divine+)",
+      "Denies Enemy 3 a played hero (28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours)",
+      "Position 5 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (32 games)"
+     ]
+    },
+    {
+     "heroId": 107,
+     "score": 39.26,
+     "reasons": [
+      "Counters Centaur Warrunner: wins 46% (1103 games, Divine+)",
+      "Weak vs Dark Seer: wins 50% (326 games)",
+      "Pairs with Arc Warden: +4.44 (Divine+)",
+      "Position 5 fit",
+      "Meta: 48.1% win in Divine+ (6.7% of games), pro 60 picks / 21 bans"
+     ],
+     "evidence": [
+      "197 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days",
+      "Observed matchup data for 1 opposing picks (218 games)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "tight roles second at 22",
+   "sha256": "e90baf3ecb9ceb2b50c87b212068ad94457ac050a1f4f877d33f9b6e891b3dc5",
+   "bytes": 194162,
+   "count": 105,
+   "ranking": "31:55.27:e5:5: 37:42.82:e5:5: 96:38.15:e5:5: 155:38.06:e5:5: 69:35.98:e5:5: 120:32.14:e5:5: 45:27.42:e5:5: 27:23.73:e5:5: 112:23.33:e5:5: 75:22.61:e5:5: 85:21.51:e5:5: 54:21.04:e5:5: 57:20.22:e5:5: 87:19.91:e5:5: 100:19.45:e5:5: 65:18.86:e5:5: 109:18.62:e5:5: 49:18.58:e5:5: 119:15.11:e5:5: 55:14.46:e5:5: 137:14.31:e5:5: 71:14.27:e5:5: 92:13.98:e5:5: 83:10.61:e5:5: 73:9.68:e5:5: 50:8.68:e5:5: 111:7.37:e5:5: 79:7.2:e5:5: 77:7.07:e5:5: 121:6.99:e5:5: 56:6.86:e5:5: 89:6.54:e5:5: 128:6.34:e5:5: 64:5.88:e5:5: 23:5.87:e5:5: 95:5.58:e5:5: 9:5.55:e5:5: 11:5.52:e5:5: 52:5.5:e5:5: 104:5.42:e5:5: 68:5.27:e5:5: 48:5.25:e5:5: 16:5.01:e5:5: 26:4.87:e5:5: 30:4.76:e5:5: 86:4.76:e5:5: 93:4.72:e5:5: 94:4.72:e5:5: 43:4.71:e5:5: 34:4.63:e5:5: 110:4.54:e5:5: 7:4.47:e5:5: 82:4.38:e5:5: 39:4.08:e5:5: 113:4.08:e5:5: 131:3.99:e5:5: 136:3.65:e5:5: 61:3.5:e5:5: 126:3.22:e5:5: 91:3.08:e5:5: 129:2.99:e5:5: 51:2.96:e5:5: 123:2.85:e5:5: 138:2.84:e5:5: 38:2.46:e5:5: 63:2.38:e5:5: 35:2.37:e5:5: 102:2.35:e5:5: 53:2.28:e5:5: 5:2.27:e5:5: 42:2.24:e5:5: 1:2.23:e5:5: 44:2.05:e5:5: 108:1.94:e5:5: 80:1.92:e5:5: 25:1.79:e5:5: 98:1.74:e5:5: 3:1.73:e5:5: 101:1.71:e5:5: 107:1.69:e5:5: 28:1.57:e5:5: 41:1.57:e5:5: 33:1.3:e5:5: 78:1.25:e5:5: 60:0.92:e5:5: 62:0.88:e5:5: 46:0.6:e5:5: 99:0.45:e5:5: 13:0.4:e5:5: 2:0.12:e5:5: 84:0.05:e5:5: 145:-0.06:e5:5: 22:-0.21:e5:5: 114:-0.28:e5:5: 15:-0.31:e5:5: 4:-0.52:e5:5: 47:-0.96:e5:5: 19:-1.16:e5:5: 18:-1.21:e5:5: 36:-2.38:e5:5: 70:-2.46:e5:5: 103:-2.47:e5:5: 106:-3.2:e5:5: 88:-3.22:e5:5: 14:-4.02:e5:5:",
+   "top": [
+    {
+     "heroId": 31,
+     "score": 55.27,
+     "reasons": [
+      "Counters Phantom Lancer: wins 51% (412 games, Divine+)",
+      "Weak vs Chen: wins 40% (285 games)",
+      "Pairs with Storm Spirit: +6.072 (Divine+)",
+      "Denies Ally 1 a played hero (66 historical games, 1 Battle Cup games in 180 days)",
+      "Position 5 fit",
+      "Meta: 50.8% win in Divine+ (9.1% of games), pro 23 picks / 78 bans"
+     ],
+     "evidence": [
+      "172 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 37,
+     "score": 42.82,
+     "reasons": [
+      "Counters Invoker: wins 60% (1313 games, Divine+)",
+      "Weak vs Phantom Lancer: wins 42% (1692 games)",
+      "Pairs with Storm Spirit: +3.572 (Divine+)",
+      "Position 5 fit",
+      "Meta: 44.1% win in Divine+ (11.8% of games), pro 46 picks / 16 bans"
+     ],
+     "evidence": [
+      "215 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "Observed matchup data for 1 opposing picks (69 games)"
+     ]
+    },
+    {
+     "heroId": 96,
+     "score": 38.15,
+     "reasons": [
+      "Weak vs Chen: wins 41% (907 games)",
+      "Denies Ally 1 a played hero (154 historical games, 2 games in 30 days)",
+      "Meta: 44.6% win in Divine+ (13.4% of games), pro 41 picks / 63 bans"
+     ],
+     "evidence": [
+      "125 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "null rows after usable rows at 9",
+   "sha256": "f0e88bf4f36614a7d42a313fbbd03ae215154deb247dbe1481cc51fff9576461",
+   "bytes": 132365,
+   "count": 76,
+   "ranking": "17:52.24:e3:2: 129:45.38:e3:4: 77:44.54:e2:4: 33:43.73:e4:2: 69:42.82:e5:3: 60:42.47:e2:3: 47:42.2:e2:3: 40:42.14:e4:4: 52:41.49:e3:-: 96:40.32:e5:5: 37:39.41:e5:4: 109:39.41:e4:2: 13:37.79:e4:-: 120:33.8:e5:2: 155:32.72:e5:4: 45:31.9:e5:5: 119:30.06:e3:4: 29:26.42:e2:3: 67:25.81:e2:4: 54:25.79:e5:2: 76:23.05:e5:4: 108:22.07:e4:4: 136:21.38:e2:3: 1:21.06:e2:2: 27:20.61:e5:4: 50:19.83:e4:4: 49:19.56:e5:2: 85:19.33:e5:4: 112:19.17:e5:2: 55:18.05:e5:2: 75:17.48:e5:2: 100:17.2:e5:5: 16:17.02:e2:4: 65:16.75:e5:3: 113:16.31:e2:3: 105:15.93:e2:3: 98:15.22:e4:4: 72:14.99:e4:3: 46:14.59:e4:2: 63:14.31:e4:2: 57:13.88:e5:2: 71:13.56:e5:3: 87:13.4:e5:4: 90:13.13:e2:2: 99:12.8:e3:3: 32:12.61:e5:3: 38:12.58:e4:4: 88:12.35:e4:4: 22:11.44:e4:-: 103:10.2:e2:-: 25:10:e2:2: 8:2.67:-:-: 43:2.66:-:-: 9:2.6:-:-: 93:2.49:-:-: 73:2.45:-:-: 114:2.42:-:-: 39:2.35:-:-: 94:2.24:-:-: 92:2.09:-:-: 34:1.98:-:-: 28:1.8:-:-: 64:1.67:-:-: 79:1.58:-:-: 83:1.54:-:-: 138:1.49:-:-: 81:1.46:-:-: 123:1.42:-:-: 58:1.35:-:-: 111:1.33:-:-: 41:1.21:-:-: 131:1.18:-:-: 53:1.15:-:-: 95:1.07:-:-: 61:1:-:-: 48:0.67:-:-:",
+   "top": [
+    {
+     "heroId": 17,
+     "score": 52.24,
+     "reasons": [
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "3 lane observations suggest position 2 (180 days)"
+     ]
+    },
+    {
+     "heroId": 129,
+     "score": 45.38,
+     "reasons": [
+      "Meta: 56.5% win in Divine+ (10.7% of games), pro 51 picks / 54 bans"
+     ],
+     "evidence": [
+      "114 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "4 lane observations suggest position 4 (180 days)"
+     ]
+    },
+    {
+     "heroId": 77,
+     "score": 44.54,
+     "reasons": [
+      "Counters Primal Beast: wins 50% (500 games, Divine+)",
+      "Meta: 53.1% win in Divine+ (4.4% of games), pro 38 picks / 5 bans"
+     ],
+     "evidence": [
+      "214 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "1 lane observations suggest position 4 (180 days)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "null rows after usable rows at 13",
+   "sha256": "8d7cf2820953969a35e2aa4b6d489224923ba3f8c4ed1e604598883fc2f8e76b",
+   "bytes": 209073,
+   "count": 114,
+   "ranking": "35:55.37:a2:2:team+counter 83:51.54:a5:5:team+meta 60:49.34:a1:1:team+meta 92:47.09:a2:2:team+meta 49:46.81:a2:2:team+counter 123:46.42:a2:2:team+meta 71:45.06:a2:2:team 8:44.67:a2:2:team+meta 138:44.49:a2:2:team+meta 101:44.41:a1:1:team 97:43.31:a4:4:team 155:43.09:a4:4:team+meta 23:43:a4:4:team 77:42.54:a1:1:team+counter 91:42.52:a2:2:team+counter 93:42.49:a1:1:team+meta 17:42.24:a5:5:team 36:41.22:a1:1:team 85:41.2:a2:2:team+meta 110:41.2:a4:4:team 81:40.46:a4:4:team+meta 61:40:a1:1:team 120:39.92:a4:4:team 88:39.85:a4:4:team 29:39.42:a1:1:team 18:39.34:a2:2:team 51:39.09:a2:2:team 96:38.2:a1:1:team 40:38.02:a1:1:team 107:37.45:a5:5:team 129:37.26:a2:2:team+meta 47:37.2:a4:4:team 128:36.78:a4:4:team 9:36.6:a4:4:team+meta 1:36.56:a5:5:team+meta 114:36.42:a2:2:team+meta 94:36.24:a4:4:team+meta 121:36.11:a1:1:team 90:35.63:a2:2:team 104:35.41:a5:5:team 57:35.38:a4:4:team 28:35.05:a5:5:team+counter 135:35:a5:5:team 22:34.94:a2:2:team 56:34.66:a4:4:team+counter 2:34.58:a1:1:team 68:34.27:a5:5:team 32:34.11:a2:2:team 100:34.07:a1:1:team 119:33.44:a1:1:team+counter 38:32.08:a1:1:team 52:30.49:a1:1: 46:30.09:a2:2:team+meta 50:29.83:a2:2:meta 75:29.73:a2:2:team 25:28.68:a1:1:team 109:28.29:a1:1: 136:27.63:a1:1: 78:27.61:a5:5:team 45:27.27:a2:2:meta 43:26.66:a1:1:meta 73:26.45:a1:1:meta 67:26.44:a1:1:meta 82:26.41:a1:1: 37:26.29:a4:4: 41:26.21:a5:5:team+meta 16:25.99:a2:2:meta 34:25.98:a1:1:meta 69:25.82:a1:1: 113:25.81:a1:1:meta 33:25.73:a4:4: 64:25.67:a2:2: 58:25.35:a4:4: 27:25.23:a2:2: 86:25.18:a2:2: 53:25.15:a1:1: 63:24.81:a4:4:team+counter 112:24.42:a2:2:counter 39:24.35:a1:1:meta 108:24.32:a2:2: 54:23.79:a1:1: 13:23.66:a2:2: 12:23.63:a1:1: 21:23.61:a1:1:counter 79:23.58:a2:2: 19:23.56:a1:1: 111:23.33:a2:2:meta 42:23.22:a1:1:counter 131:23.18:a2:2: 74:23.17:a1:1: 70:22.98:a1:1:counter 87:22.9:a2:2: 15:22.88:a1:1: 72:22.86:a1:1: 6:22.85:a1:1: 98:22.72:a2:2:counter 76:22.68:a1:1: 65:22.63:a2:2: 7:22.45:a2:2:counter 3:22.38:a2:2: 102:22.35:a1:1: 5:22.2:a1:1:team 4:22.17:a1:1: 26:22.05:a2:2: 59:22:a1:1: 62:21.98:a5:5:team 105:21.8:a2:2:counter 84:21.49:a2:2:counter 106:20.8:a1:1: 20:20.63:a2:2: 55:20.3:a2:2: 145:20.2:a1:1: 103:19.7:a2:2: 14:18.95:a2:2:counter",
+   "top": [
+    {
+     "heroId": 35,
+     "score": 55.37,
+     "reasons": [
+      "Reported signature hero",
+      "Counters Lone Druid: wins 50% (500 games, Divine+)",
+      "Adds Carry",
+      "Position 2 fit",
+      "Meta: 50.7% win in Divine+ (10.1% of games), pro 50 picks / 8 bans"
+     ],
+     "evidence": [
+      "252 historical games"
+     ]
+    },
+    {
+     "heroId": 83,
+     "score": 51.54,
+     "reasons": [
+      "Weak vs Troll Warlord: wins 50% (500 games)",
+      "Pairs with Primal Beast: +3 (Divine+)",
+      "Adds Support",
+      "Position 5 fit",
+      "Meta: 53.1% win in Divine+ (11.3% of games), pro 15 picks / 5 bans"
+     ],
+     "evidence": [
+      "122 historical games, 2 games in 30 days, 3 Battle Cup games in 180 days"
+     ]
+    },
+    {
+     "heroId": 60,
+     "score": 49.34,
+     "reasons": [
+      "Adds Carry",
+      "Denies Enemy 2 a played hero (108 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours)",
+      "Position 1 fit",
+      "Meta: 51.8% win in Divine+ (11.7% of games), pro 55 picks / 1 bans"
+     ],
+     "evidence": [
+      "123 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "null rows after usable rows at 16",
+   "sha256": "fc2931f6a083b9fe957934e3caf485a9de4101f72dee34b14781a3da45e5c00e",
+   "bytes": 192613,
+   "count": 111,
+   "ranking": "17:55.87:e3:4: 40:47.64:e4:4: 52:47.49:e3:4: 129:45.38:e3:4: 33:44.73:e4:4: 13:41.79:e4:4: 109:38.41:e4:4: 119:34.56:e3:4: 108:24.07:e4:4: 50:23.83:e4:4: 76:20.05:e4:4: 72:17.99:e4:4: 38:17.45:e4:4: 29:17.3:e4:4: 32:14.61:e4:4: 88:14.35:e4:4: 22:14.07:e4:4: 63:13.81:e4:4: 46:13.59:e4:4: 98:13.22:e4:4: 83:12.04:e3:4: 49:11.53:e4:4: 92:10.71:e3:4: 155:10.6:e3:4: 85:10.21:e3:4: 23:9.25:e3:4: 101:8.79:e3:4: 93:8.74:e3:4: 9:8.6:e3:4: 73:8.45:e3:4: 28:8.42:e3:4: 128:8.41:e3:4: 121:8.36:e3:4: 16:8.27:e3:4: 60:8.1:e3:4: 94:7.74:e3:4: 64:7.67:e3:4: 79:7.58:e3:4: 123:7.42:e3:4: 57:7.38:e3:4: 136:7.38:e3:4: 58:7.35:e3:4: 81:7.33:e3:4: 111:7.33:e3:4: 107:7.2:e3:4: 131:7.18:e3:4: 41:7.08:e3:4: 100:7.08:e3:4: 86:6.93:e3:4: 110:6.83:e3:4: 43:6.66:e3:4: 114:6.42:e3:4: 97:6.31:e3:4: 68:6.27:e3:4: 112:6.17:e3:4: 90:6.13:e3:4: 2:6.08:e3:4: 26:6.05:e3:4: 78:5.86:e3:4: 104:5.79:e3:4: 21:5.61:e3:4: 91:5.52:e3:4: 84:5.49:e3:4: 138:5.49:e3:4: 37:5.41:e3:4: 87:5.4:e3:4: 8:5.29:e3:4: 42:5.22:e3:4: 5:5.2:e3:4: 51:5.09:e3:4: 7:4.95:e3:4: 65:4.75:e3:4: 120:4.67:e3:4: 20:4.63:e3:4: 27:4.61:e3:4: 71:4.56:e3:4: 82:4.54:e3:4: 3:4.5:e3:4: 25:4.49:e3:4: 75:4.48:e3:4: 102:4.35:e3:4: 4:4.17:e3:4: 135:4:e3:4: 105:3.93:e3:4: 47:3.7:e3:4: 35:3.62:e3:4: 19:3.56:e3:4: 18:3.34:e3:4: 36:3.22:e3:4: 74:3.17:e3:4: 70:3.11:e3:4: 77:3.04:e3:4: 14:2.95:e3:4: 61:2.88:e3:4: 6:2.85:e3:4: 106:2.8:e3:4: 54:2.79:e3:4: 39:2.35:e3:4: 103:2.2:e3:4: 145:2.2:e3:4: 1:2.06:e3:4: 55:2.05:e3:4: 34:1.98:e3:4: 45:1.9:e3:4: 67:1.81:e3:4: 56:1.53:e3:4: 53:1.15:e3:4: 62:0.86:e3:4: 12:-0.37:e3:4: 15:-1.12:e3:4: 59:-1.5:e3:4:",
+   "top": [
+    {
+     "heroId": 17,
+     "score": 55.87,
+     "reasons": [
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 4 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 40,
+     "score": 47.64,
+     "reasons": [
+      "Weak vs Doom: wins 50% (500 games)",
+      "Pairs with Lone Druid: +2 (Divine+)",
+      "Adds Support",
+      "Denies Ally 1 a played hero (183 historical games)",
+      "Position 4 fit",
+      "Meta: 56.2% win in Divine+ (5.7% of games), pro 8 picks / 48 bans"
+     ],
+     "evidence": [
+      "62 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    },
+    {
+     "heroId": 52,
+     "score": 47.49,
+     "reasons": [
+      "Adds Support",
+      "Position 4 fit",
+      "Meta: 49.5% win in Divine+ (2.7% of games), pro 30 picks / 65 bans"
+     ],
+     "evidence": [
+      "276 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "null STRATZ row first",
+   "error": "TypeError: Cannot read properties of null (reading 'h')"
+  },
+  {
+   "name": "null matchup row first",
+   "error": "TypeError: Cannot read properties of undefined (reading 'hero_id')"
+  },
+  {
+   "name": "odd ids at 0",
+   "sha256": "305c9aa36fb5dc8d965af72d2843b1a3fe0dfbc629d2fee2c59474f7ef28e3ff",
+   "bytes": 152697,
+   "count": 91,
+   "ranking": "50:60.53:e1:4: 30:59.62:e3:5: 31:53.09:e5:4: 17:52.25:e3:2: 9:49.46:e1:3: 137:46.15:e1:5: 44:45.93:e2:1: 123:45.58:e1:2: 129:45.38:e3:4: 77:45.1:e2:1: 33:44.04:e4:2: 69:43.28:e5:1: 60:42.62:e2:3: 47:42.5:e2:1: 40:42.45:e4:4: 1:41.77:e1:2: 52:41.49:e3:-: 96:40.62:e5:5: 109:39.56:e4:2: 37:39.27:e5:4: 13:38.24:e4:-: 120:33.5:e5:2: 155:32.43:e5:4: 45:31.9:e5:5: 119:29.62:e3:4: 29:26.13:e2:3: 54:26.1:e5:2: 67:25.96:e2:4: 101:24.8:e1:4: 11:24.39:e2:2: 76:23.5:e5:4: 126:23.22:e2:1: 86:22.79:e1:2: 27:22.07:e1:4: 108:22.07:e4:4: 136:21.39:e2:3: 28:20.36:e1:2: 49:20.12:e5:1: 85:19.04:e5:4: 112:18.73:e5:2: 55:18.5:e5:2: 75:17.78:e5:2: 100:17.04:e5:5: 16:16.88:e2:4: 82:16.84:e1:2: 128:16.77:e1:2: 65:16.61:e5:3: 66:16.23:e2:4: 113:16.01:e2:3: 70:15.66:e1:3: 3:15.5:e1:4: 105:15.49:e2:3: 72:14.85:e4:3: 98:14.78:e4:4: 46:14.75:e4:2: 63:13.87:e4:2: 57:13.59:e5:2: 90:13.59:e2:2: 7:13.5:e1:4: 99:13.5:e3:1: 87:13.4:e5:4: 71:13.26:e5:1: 32:12.76:e5:3: 38:12.58:e4:4: 88:12.5:e4:4: 22:11.13:e4:-: 59:10.5:e1:-: 103:10.5:e2:-: 25:10.15:e2:1: 39:2.5:-:-: 73:2.45:-:-: 34:2.43:-:-: 8:2.37:-:-: 43:2.36:-:-: 93:2.34:-:-: 114:2.28:-:-: 94:2.25:-:-: 83:1.99:-:-: 92:1.8:-:-: 138:1.8:-:-: 111:1.79:-:-: 41:1.67:-:-: 81:1.62:-:-: 131:1.48:-:-: 79:1.43:-:-: 64:1.37:-:-: 53:1.31:-:-: 61:1.3:-:-: 95:1.23:-:-: 58:1.2:-:-: 48:1.12:-:-:",
+   "top": [
+    {
+     "heroId": 50,
+     "score": 60.53,
+     "reasons": [
+      "Meta: 56.8% win in Divine+ (12.2% of games), pro 55 picks / 51 bans"
+     ],
+     "evidence": [
+      "250 historical games, 5 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "6 lane observations suggest position 4 (180 days)"
+     ]
+    },
+    {
+     "heroId": 30,
+     "score": 59.62,
+     "reasons": [
+      "Meta: 53.6% win in Divine+ (5.7% of games), pro 59 picks / 31 bans"
+     ],
+     "evidence": [
+      "96 historical games, 4 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "6 lane observations suggest position 5 (180 days)"
+     ]
+    },
+    {
+     "heroId": 31,
+     "score": 53.09,
+     "reasons": [
+      "Meta: 50.8% win in Divine+ (9.1% of games), pro 23 picks / 78 bans"
+     ],
+     "evidence": [
+      "172 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "4 lane observations suggest position 4 (180 days)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "odd ids at 9",
+   "sha256": "c43137e39dd82f4ff64da33be9ccd491f35bdb1441a083260540c0ade6c44f98",
+   "bytes": 141967,
+   "count": 83,
+   "ranking": "17:53.27:e3:2: 129:46.49:e3:4: 33:43.86:e4:2: 77:43.78:e2:4: 47:42.66:e2:3: 40:42.54:e4:4: 96:42.48:e5:5: 60:42.27:e2:3: 69:41.72:e5:3: 52:41.16:e3:-: 109:38.76:e4:2: 37:38.58:e5:4: 13:38.54:e4:-: 155:36.07:e5:4: 45:34.02:e5:5: 120:32.37:e5:2: 119:31.39:e3:4: 67:28.79:e2:4: 76:26.97:e5:4: 54:26.82:e5:2: 108:25.82:e4:4: 29:23.74:e2:3: 136:20.83:e2:3: 50:19.92:e4:4: 27:19.83:e5:4: 55:19.71:e5:2: 1:18.91:e2:2: 75:18.79:e5:2: 65:18.51:e5:3: 112:18.12:e5:2: 16:17.48:e2:4: 98:17.31:e4:4: 57:17.02:e5:2: 90:16.67:e2:2: 49:15.74:e5:2: 85:15.51:e5:4: 46:15.39:e4:2: 113:14.9:e2:3: 100:14.84:e5:5: 87:14.69:e5:4: 38:14.47:e4:4: 32:14.07:e5:3: 99:13.63:e3:3: 71:13.26:e5:3: 63:12.96:e4:2: 105:12.2:e2:3: 103:12.02:e2:-: 72:11.11:e4:3: 88:10.12:e4:4: 22:8.66:e4:-: 25:7.75:e2:2: 93:6.08:-:-: 53:5.13:-:-: 61:4.78:-:-: 39:4.77:-:-: 79:4.71:-:-: 138:4.29:-:-: 8:4.26:-:-: 135:4.22:-:-: 114:3.81:-:-: 34:3.74:-:-: 48:3.72:-:-: 43:3.62:-:-: 68:3.4:-:-: 23:3.11:-:-: 28:2.89:-:-: 18:2.85:-:-: 6:2.76:-:-: 123:2.57:-:-: 14:2.37:-:-: 64:2.17:-:-: 73:2.1:-:-: 81:1.94:-:-: 89:1.92:-:-: 5:1.64:-:-: 92:1.4:-:-: 58:0.86:-:-: 9:0.75:-:-: 110:0.51:-:-: 131:0.35:-:-: 41:0.26:-:-: 111:0.19:-:-: 94:0.08:-:-:",
+   "top": [
+    {
+     "heroId": 17,
+     "score": 53.27,
+     "reasons": [
+      "Counters Primal Beast: wins 60% (1468 games, Divine+)",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "3 lane observations suggest position 2 (180 days)"
+     ]
+    },
+    {
+     "heroId": 129,
+     "score": 46.49,
+     "reasons": [
+      "Counters Primal Beast: wins 43% (1178 games, Divine+)",
+      "Meta: 56.5% win in Divine+ (10.7% of games), pro 51 picks / 54 bans"
+     ],
+     "evidence": [
+      "114 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "4 lane observations suggest position 4 (180 days)"
+     ]
+    },
+    {
+     "heroId": 33,
+     "score": 43.86,
+     "reasons": [],
+     "evidence": [
+      "279 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "3 lane observations suggest position 2 (180 days)"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "odd ids at 16",
+   "sha256": "1aa3cf14db99ac52a89d30375443620a6195d4dfebeebc4c35d686b39f659208",
+   "bytes": 205864,
+   "count": 113,
+   "ranking": "17:58.89:e3:4: 52:47.81:e3:4: 129:47.8:e3:4: 40:47.69:e4:4: 33:46.52:e4:4: 13:43.8:e4:4: 109:38.04:e4:4: 119:34.59:e3:4: 50:26.12:e4:4: 108:23.76:e4:4: 76:21.79:e4:4: 38:18.46:e4:4: 63:15.46:e4:4: 72:15.36:e4:4: 88:14.92:e4:4: 22:14.27:e4:4: 29:14.21:e4:4: 92:13.77:e3:4: 98:13.7:e4:4: 32:13.41:e4:4: 155:12.58:e3:4: 46:10.95:e4:4: 128:10.82:e3:4: 87:10.66:e3:4: 101:10.5:e3:4: 93:10.2:e3:4: 111:9.98:e3:4: 83:9.93:e3:4: 81:9.86:e3:4: 85:9.23:e3:4: 136:8.94:e3:4: 97:8.73:e3:4: 16:8.67:e3:4: 79:8.54:e3:4: 49:8.28:e4:4: 110:8.26:e3:4: 94:7.9:e3:4: 9:7.87:e3:4: 5:7.85:e3:4: 43:7.79:e3:4: 57:7.76:e3:4: 123:7.76:e3:4: 121:7.73:e3:4: 23:7.68:e3:4: 131:7.21:e3:4: 21:7.17:e3:4: 8:7.03:e3:4: 65:6.97:e3:4: 28:6.76:e3:4: 86:6.68:e3:4: 138:6.62:e3:4: 68:6.42:e3:4: 26:6.4:e3:4: 18:6.12:e3:4: 90:6.06:e3:4: 112:6.06:e3:4: 107:5.93:e3:4: 64:5.88:e3:4: 25:5.82:e3:4: 78:5.7:e3:4: 2:5.55:e3:4: 102:5.52:e3:4: 82:5.27:e3:4: 37:5.23:e3:4: 100:5.2:e3:4: 91:5.17:e3:4: 7:5.12:e3:4: 60:5.12:e3:4: 73:5.11:e3:4: 61:4.73:e3:4: 51:4.71:e3:4: 41:4.64:e3:4: 58:4.46:e3:4: 39:4.31:e3:4: 47:4.04:e3:4: 84:3.96:e3:4: 4:3.87:e3:4: 4:3.87:e3:4: 104:3.77:e3:4: 20:3.61:e3:4: 34:3.59:e3:4: 42:3.59:e3:4: 67:3.54:e3:4: 62:3.44:e3:4: 36:3.29:e3:4: 53:3.13:e3:4: 135:3.12:e3:4: 12:2.98:e3:4: 114:2.88:e3:4: 14:2.71:e3:4: 6:2.7:e3:4: 103:2.43:e3:4: 3:2.35:e3:4: 19:2.34:e3:4: 75:2.29:e3:4: 77:2.23:e3:4: 27:2.18:e3:4: 35:2.12:e3:4: 71:1.87:e3:4: 54:1.71:e3:4: 70:1.28:e3:4: 145:1.05:e3:4: 55:0.96:e3:4: 56:0.79:e3:4: 105:0.04:e3:4: <num:NaN>:0:e3:4: 120:-0.05:e3:4: 15:-0.14:e3:4: 45:-0.25:e3:4: 59:-0.26:e3:4: 74:-0.28:e3:4: 106:-1.86:e3:4: 1:-2.34:e3:4:",
+   "top": [
+    {
+     "heroId": 17,
+     "score": 58.89,
+     "reasons": [
+      "Counters Primal Beast: wins 60% (1468 games, Divine+)",
+      "Pairs with Troll Warlord: +5.818 (Divine+)",
+      "Denies Ally 5 a played hero (249 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days)",
+      "Position 4 fit",
+      "Meta: 55.7% win in Divine+ (5.1% of games), pro 20 picks / 20 bans"
+     ],
+     "evidence": [
+      "28 historical games, 2 games in 30 days, 2 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "Observed matchup data for 2 opposing picks (138 games)"
+     ]
+    },
+    {
+     "heroId": 52,
+     "score": 47.81,
+     "reasons": [
+      "Weak vs Doom: wins 52% (683 games)",
+      "Pairs with Centaur Warrunner: +2.874 (Divine+)",
+      "Adds Support",
+      "Position 4 fit",
+      "Meta: 49.5% win in Divine+ (2.7% of games), pro 30 picks / 65 bans"
+     ],
+     "evidence": [
+      "276 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours",
+      "Observed matchup data for 1 opposing picks (247 games)"
+     ]
+    },
+    {
+     "heroId": 129,
+     "score": 47.8,
+     "reasons": [
+      "Meta: 56.5% win in Divine+ (10.7% of games), pro 51 picks / 54 bans",
+      "Counters Arc Warden: wins 47% (649 games, Divine+)",
+      "Pairs with Centaur Warrunner: +4.456 (Divine+)",
+      "Position 4 fit"
+     ],
+     "evidence": [
+      "114 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "NaN hero in draft",
+   "sha256": "9ebde4d1d6e892a4064fb5e4662406ff6a042ccf8b542b95e50b26ae9f8b0aed",
+   "bytes": 213047,
+   "count": 115,
+   "ranking": "35:56.1:a2:2:team 123:50.25:a2:2:team+counter+meta 92:49.04:a2:2:team+meta 71:48.78:a2:2:team+counter 101:48.16:a1:1:team 60:47.97:a1:1:team+meta 83:47.9:a5:5:team+meta 17:46.99:a5:5:team+counter 8:46.63:a2:2:team+counter+meta 97:46.37:a4:4:team+counter 110:45.15:a4:4:team+counter 93:44.71:a1:1:team+meta 49:44:a2:2:team 138:43.98:a2:2:team+meta 23:43.95:a4:4:team+counter 29:43.93:a1:1:team+counter 96:43.21:a1:1:team+counter 81:43.02:a4:4:team+counter+meta 77:42.97:a1:1:team 88:42.62:a4:4:team+counter 91:42.45:a2:2:team 61:41.37:a1:1:team+counter 47:41.13:a4:4:team+counter 36:40.79:a1:1:team 40:40.56:a1:1:team+counter 155:40.09:a4:4:team+meta 129:39.48:a2:2:team+meta 107:39.46:a5:5:team 120:39.01:a4:4:team 32:38.72:a2:2:team+counter 90:38.3:a2:2:team 18:38.17:a2:2:team 22:37.95:a2:2:team 94:36.12:a4:4:team+meta 85:36.03:a2:2:team+meta 56:35.95:a4:4:team 38:35.87:a1:1:team+counter 28:35.83:a5:5:team 51:35.45:a2:2:team 100:35.28:a1:1:team 128:34.84:a4:4:team 9:34.76:a4:4:team+meta 52:34.49:a1:1:counter 68:34.13:a5:5:team+counter 114:34.05:a2:2:team+meta 2:33.97:a1:1:team 57:33.95:a4:4:team 104:33.89:a5:5:team 121:33.18:a1:1:team 135:32.93:a5:5:team 50:32.11:a2:2:counter+meta 113:31.75:a1:1:counter+meta 109:31.52:a1:1: 1:31.38:a5:5:team+meta 82:29.63:a1:1: 119:29.49:a1:1:team 111:29.3:a2:2:counter+meta 34:29.24:a1:1:counter+meta 69:29.18:a1:1:counter 45:28.52:a2:2:counter+meta 5:28.3:a1:1:team+counter 27:28.27:a2:2:counter 25:27.85:a1:1:team 46:27.52:a2:2:team+meta 75:26.79:a2:2:team 64:26.77:a2:2:counter 16:26.76:a2:2:meta 3:26.48:a2:2:counter 74:26.41:a1:1:counter 53:26.25:a1:1: 65:26.15:a2:2:counter 63:26.08:a4:4:team 76:25.92:a1:1: 33:25.87:a4:4:counter 78:25.66:a5:5:team 136:25.23:a1:1: 58:25.12:a4:4: 19:25.1:a1:1: 80:24.63:a1:1: 112:24.55:a2:2: 37:24.44:a4:4: 84:24.4:a2:2:counter 12:24.3:a1:1: 4:23.65:a1:1: 39:23.52:a1:1:meta 13:23.33:a2:2: 72:23.32:a1:1: 108:23.08:a2:2: 41:22.6:a5:5:team+meta 79:22.54:a2:2: 42:22.52:a1:1: 43:22.03:a1:1:meta 102:21.95:a1:1: 54:21.82:a1:1: 67:21.8:a1:1:meta 86:21.75:a2:2: 62:21.72:a5:5:team+counter 7:21.7:a2:2:counter 6:21.67:a1:1: 73:21.37:a1:1:meta 15:21.25:a1:1: 21:21.22:a1:1: 70:21.14:a1:1: 26:20.65:a2:2: 105:20.59:a2:2: 14:19.59:a2:2: 59:19.25:a1:1: 98:18.97:a2:2: 106:18.71:a1:1: 131:18.5:a2:2: 20:18.42:a2:2: 87:17.44:a2:2: 55:17.42:a2:2: 145:14.54:a1:1: 103:14.04:a2:2:",
+   "top": [
+    {
+     "heroId": 35,
+     "score": 56.1,
+     "reasons": [
+      "Reported signature hero",
+      "Adds Carry",
+      "Position 2 fit",
+      "Meta: 50.7% win in Divine+ (10.1% of games), pro 50 picks / 8 bans"
+     ],
+     "evidence": [
+      "252 historical games"
+     ]
+    },
+    {
+     "heroId": 123,
+     "score": 50.25,
+     "reasons": [
+      "Counters Troll Warlord: wins 61% (661 games, Divine+)",
+      "Adds Support",
+      "Denies Enemy 1 a played hero (284 historical games, 2 games in 30 days, 1 Battle Cup games in 180 days, 1 Battle Cup games in the last 16 hours)",
+      "Position 2 fit",
+      "Meta: 53.7% win in Divine+ (7.1% of games), pro 10 picks / 25 bans"
+     ],
+     "evidence": [
+      "171 historical games, 1 Battle Cup games in 180 days"
+     ]
+    },
+    {
+     "heroId": 92,
+     "score": 49.04,
+     "reasons": [
+      "Pairs with Primal Beast: +6.61 (Divine+)",
+      "Adds Support, Pusher",
+      "Position 2 fit",
+      "Meta: 55.4% win in Divine+ (6.3% of games), pro 43 picks / 60 bans"
+     ],
+     "evidence": [
+      "270 historical games, 1 games in 30 days, 1 Battle Cup games in 180 days"
+     ]
+    }
+   ]
+  },
+  {
    "name": "duplicate roster ids ourPick",
    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
    "bytes": 2,

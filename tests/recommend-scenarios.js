@@ -156,6 +156,30 @@ export function scenarios() {
   // Enemy picks attributed to enemy players (their history no longer denied).
   const attributed = draftA.map((a, i) => a.mode === 'enemyPick' ? {...a, playerId: enemies[i % 5].id} : a);
   for (const n of [9, 16, 23]) add(`attributed enemy picks at ${n}`, {...full, draft: attributed.slice(0, n)});
+  // Tight role preferences: the reserved positions of the other players change who gets which hero.
+  const r = rng(21), pool = ids(heroes);
+  const picky = allies.map((p, i) => ({...p, selfReport: {...p.selfReport, preferredRoles: [[1, 2], [1, 2, 3], [2, 3], [4, 5], [3, 4, 5]][i],
+    roleComfort: Object.fromEntries([1, 2, 3, 4, 5].map(pos => [pos, int(r, 0, 5)]))}}));
+  for (const n of [7, 8, 13, 15, 16, 17, 22]) for (const firstPick of [true, false])
+    add(`tight roles ${firstPick ? 'first' : 'second'} at ${n}`, {...full, allies: picky, firstPick, draft: (firstPick ? draftA : draftB).slice(0, n)});
+  // Malformed rows: null rows and holes after every usable row, ahead of them (the
+  // engine throws there), and unusual ids (strings, NaN, duplicates) in the pool and draft.
+  const late = id => [...pool.filter(o => o !== id).map(o => ({h: o, m: 500, w: 0.5, s: (o % 7) - 3})), null];
+  const lateStratz = {...stratz}, lateMatchups = {...matchups};
+  for (const a of draftA.slice(0, 16)) {
+    lateStratz[a.heroId] = {vs: late(a.heroId), with: late(a.heroId)};
+    const rows = pool.filter(o => o !== a.heroId).map(o => ({hero_id: o, games_played: 100, wins: 40 + (o % 20)}));
+    rows[rows.length + 2] = {hero_id: 1, games_played: 100, wins: 90}; // a hole before it
+    lateMatchups[a.heroId] = rows;
+  }
+  for (const n of [9, 13, 16]) add(`null rows after usable rows at ${n}`, {...full, stratz: lateStratz, matchups: lateMatchups, draft: draftA.slice(0, n)});
+  const early = {...stratz, [draftA[8].heroId]: {vs: [null, ...late(draftA[8].heroId)], with: []}};
+  add('null STRATZ row first', {...full, stratz: early, draft: draftA.slice(0, 13)});
+  add('null matchup row first', {...full, stratz: {}, matchups: {...matchups, [draftA[8].heroId]: [undefined, ...matchups[draftA[8].heroId]]}, draft: draftA.slice(0, 13)});
+  const oddHeroes = {...heroes, x: {id: 'x', localized_name: 'Odd', roles: ['Carry']}, dup: {...heroes[pool[3]], id: String(pool[3])}};
+  const stringDraft = draftA.map((a, i) => i % 3 ? a : {...a, heroId: String(a.heroId)});
+  for (const n of [0, 9, 16]) add(`odd ids at ${n}`, {...full, heroes: oddHeroes, draft: stringDraft.slice(0, n)});
+  add('NaN hero in draft', {...full, draft: [...draftA.slice(0, 8), {mode: draftA[8].mode, heroId: 'nope'}, ...draftA.slice(9, 13)]});
   // Inputs the engine rejects (and the same inputs on the enemy's turn, where allies are not used).
   for (const mode of ['ourPick', undefined]) {
     add(`duplicate roster ids ${mode}`, {...full, mode, allies: [allies[0], {...allies[1], id: allies[0].id}], draft: draftA.slice(0, 8)});
