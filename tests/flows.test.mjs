@@ -8,6 +8,8 @@ import {JSDOM} from 'jsdom';
 const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
  const path=id.replaceAll('\\','/');
  if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
+ // Count recommend() calls so render-cost tests can see repeated ranking work.
+ if(path.endsWith('/web/draft-engine.js'))return `import {recommend as rank} from ${JSON.stringify(path+'?engine')};export * from ${JSON.stringify(path+'?engine')};export function recommend(...args){globalThis.__recommendCalls=(globalThis.__recommendCalls||0)+1;return rank(...args);}`;
  if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async(id,progress)=>{const p={id:String(id),name:'Public '+id,sources:{profile:{status:'private'},recent:{status:'error',message:'Unavailable'},heroes:{status:'ok'}},heroes:[{hero_id:1,games:12}]};progress(p);return p;};`;
 }}],build:{write:false,minify:false}});
 const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
@@ -437,6 +439,66 @@ test('leaving Battle Cup during a shared draft restores the draft link',async()=
   await h.click(h.q('draft-button'));
   assert.equal(new URLSearchParams(h.w.location.search).get('draft'),draftId);
   assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+ }finally{h.w.close();}
+});
+
+test('hero search keystrokes reuse the existing hero tiles',async()=>{
+ const h=await harness();
+ try{
+  const search=h.q('hero-search'),tile=()=>h.q('hero-groups').querySelector('[data-hero-id="1"]');
+  const before=tile(),count=h.q('hero-groups').querySelectorAll('.hero-tile').length;
+  for(const text of ['a','an','anti','axe']){search.value=text;search.dispatchEvent(new h.w.Event('input'));}
+  assert.equal(tile(),before,'same Anti-Mage tile node after typing');
+  assert.equal(tile().classList.contains('is-search-miss'),true);
+  assert.equal(h.q('hero-groups').querySelectorAll('.hero-tile').length,count);
+  search.value='anti';search.dispatchEvent(new h.w.Event('input'));
+  assert.equal(tile(),before);assert.equal(tile().classList.contains('is-search-miss'),false);
+  assert.equal(h.q('hero-groups').querySelector('.is-highlighted'),before,'first visible hero is highlighted');
+  search.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await flush();
+  assert.match(h.q('suggestions').querySelector('.decision-dock h3').textContent,/Anti-Mage/);
+  search.value='zzzz';search.dispatchEvent(new h.w.Event('input'));assert.match(h.q('hero-groups').textContent,/No heroes match/);
+  search.value='anti';search.dispatchEvent(new h.w.Event('input'));assert.equal(h.q('hero-groups').querySelector('[data-hero-id="1"]').classList.contains('is-search-miss'),false);
+ }finally{h.w.close();}
+});
+
+test('recommendations are ranked once per draft change, not on every render or keystroke',async()=>{
+ const h=await harness();
+ try{
+  const calls=()=>h.w.__recommendCalls||0,search=h.q('hero-search');
+  let start=calls();
+  for(const text of ['a','ax','axe','']){search.value=text;search.dispatchEvent(new h.w.Event('input'));}
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="2"]'));
+  await h.click(h.q('suggestions').querySelector('.clear-staged'));
+  assert.equal(calls()-start,0,'no draft change: no new ranking');
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="2"]'));
+  start=calls();
+  await h.click(h.q('suggestions').querySelector('button.primary'));
+  assert.match(h.q('turn-progress').textContent,/1 \/ 24/);
+  const afterChange=calls()-start;
+  assert.ok(afterChange>=1&&afterChange<=3,'one ranking per mode in use after a draft change, saw '+afterChange);
+  start=calls();
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="3"]'));
+  for(const text of ['b','ba','']){search.value=text;search.dispatchEvent(new h.w.Event('input'));}
+  assert.equal(calls()-start,0,'renders without a draft change reuse the ranking');
+ }finally{h.w.close();}
+});
+
+test('shared draft polling pauses while the tab is hidden and resumes once when it shows',async()=>{
+ let reads=0,hidden=false;const ticks=[];
+ const row={id:draftId,team_id:'team',revision:1,drafter_user_id:null,state:{actions:[],firstPick:true,roster:[]}};
+ const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>{reads++;return structuredClone(row);}}),beforeRun:w=>{
+  w.setInterval=fn=>{ticks.push(fn);return ticks.length;};
+  Object.defineProperty(w.document,'hidden',{configurable:true,get:()=>hidden});
+  Object.defineProperty(w.document,'visibilityState',{configurable:true,get:()=>hidden?'hidden':'visible'});
+ }});
+ try{
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+  const tick=ticks.find(fn=>/poll\(/.test(String(fn)));assert.ok(tick,'poll interval registered');
+  let start=reads;tick();await flush();assert.equal(reads-start,1,'visible tick polls');
+  hidden=true;h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await flush();
+  start=reads;tick();tick();await flush();assert.equal(reads-start,0,'hidden ticks skip polling');
+  hidden=false;h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await flush();
+  assert.equal(reads-start,1,'polls once when the tab shows again');
  }finally{h.w.close();}
 });
 
