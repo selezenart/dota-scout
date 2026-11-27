@@ -17,6 +17,7 @@ import * as matchData from './data.js';
 import {initialState,demoState,reduceDraft} from './demo.js';
 
 import {createBackend} from './backend.js';
+import {createTeamScopedStore} from './team-store.js';
 
 import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
 
@@ -628,48 +629,28 @@ function enemyDetails(card,p){
 // Earlier Battle Cup matches pasted to scout the enemy team. Shared through the team
 // database inside a team draft; stored on this device otherwise or until the owner
 // applies migration 010.
-const enemyMatchKey='captain-enemy-matches-v1';
-let enemyMatches=[],enemyMatchScope=null,enemyMatchRemote=false,enemyMatchState='ready',enemyMatchLoad=0;
-function enemyMatchTeam(){return typeof backend?.listEnemyMatches==='function'&&shared?.team_id&&user?shared.team_id:null;}
-// Device storage is per account so another local user does not see this scouting.
-const localMatchKey=()=>enemyMatchKey+':'+(user?.id||'practice');
-function readLocalMatches(){try{const rows=JSON.parse(localStorage.getItem(localMatchKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
-function writeLocalMatches(){try{localStorage.setItem(localMatchKey(),JSON.stringify(enemyMatches.slice(0,LOCAL_MATCH_CAP)));}catch{}}
-const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
-function syncEnemyMatches(){
- const teamId=enemyMatchTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===enemyMatchScope)return;
- // Every scope change invalidates in-flight team loads, including team → device.
- enemyMatchScope=scope;enemyMatchRemote=false;const load=++enemyMatchLoad;
- if(!teamId){enemyMatchState='ready';enemyMatches=readLocalMatches();return;}
- // Team scope never mixes in device rows; adding waits until the team list settles.
- enemyMatchState='loading';enemyMatches=[];
- void Promise.resolve().then(()=>backend.listEnemyMatches(teamId)).then(rows=>{
-  if(load!==enemyMatchLoad)return;enemyMatchRemote=true;enemyMatchState='ready';
-  enemyMatches=(Array.isArray(rows)?rows:[]).map(r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}));render();
- }).catch(error=>{
-  if(load!==enemyMatchLoad)return;
-  if(missingRpc(error)){enemyMatchState='ready';enemyMatches=readLocalMatches();notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.');render();}
-  else{enemyMatchState='failed';notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'));}
- });
-}
+const matchStore=createTeamScopedStore({key:'captain-enemy-matches-v1',cap:LOCAL_MATCH_CAP,newestFirst:true,method:'listEnemyMatches',context:()=>({backend,shared,user}),
+ mapRow:r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}),onChange:()=>render(),
+ onMissing:()=>notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.'),
+ onLoadError:error=>notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'))});
 async function addEnemyMatches(text){
  const ids=matchData.parseMatchIds(text);if(!ids.length)throw Error('Enter match IDs or match links.');if(ids.length>10)throw Error('Load at most 10 matches at a time.');
- syncEnemyMatches();
- if(enemyMatchState==='loading')throw Error('Team matches are still loading. Try again in a moment.');
+ matchStore.sync();
+ if(matchStore.state==='loading')throw Error('Team matches are still loading. Try again in a moment.');
  // A failed team load is retried on the next attempt instead of needing a reload.
- if(enemyMatchState==='failed'){enemyMatchScope=null;syncEnemyMatches();throw Error('Team matches could not be loaded. Retrying now; try again in a moment.');}
- const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope,contextIds=(state.enemyIds||[]).map(String),failed=[],unsaved=[];
+ if(matchStore.state==='failed'){matchStore.scope=null;matchStore.sync();throw Error('Team matches could not be loaded. Retrying now; try again in a moment.');}
+ const teamId=matchStore.remote?matchStore.team():null,scope=matchStore.scope,contextIds=(state.enemyIds||[]).map(String),failed=[],unsaved=[];
  for(const id of ids){
   let summary;
   try{summary=await matchData.loadMatch(id);}catch{}
-  if(scope!==enemyMatchScope)return false;
+  if(scope!==matchStore.scope)return false;
   if(!Array.isArray(summary?.players)||!summary.players.length){failed.push(id);continue;}
-  const row={matchId:id,summary,enemySide:enemyMatches.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
+  const row={matchId:id,summary,enemySide:matchStore.rows.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
   if(teamId){try{await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);}catch{unsaved.push(id);continue;}}
-  if(scope!==enemyMatchScope)return false;
-  enemyMatches=[row,...enemyMatches.filter(r=>r.matchId!==id)];
+  if(scope!==matchStore.scope)return false;
+  matchStore.rows=[row,...matchStore.rows.filter(r=>r.matchId!==id)];
  }
- if(!teamId)writeLocalMatches();render();
+ if(!teamId)matchStore.writeLocal();render();
  const problems=[];
  if(failed.length)problems.push('Could not load match '+failed.join(', ')+'. Check the ID, or try again if OpenDota is busy.');
  if(unsaved.length)problems.push('Could not save match '+unsaved.join(', ')+' to the team. Check your team access and try again.');
@@ -677,14 +658,14 @@ async function addEnemyMatches(text){
  return true;
 }
 async function setEnemyMatchSide(matchId,side){
- const teamId=enemyMatchRemote?enemyMatchTeam():null,scope=enemyMatchScope;
+ const teamId=matchStore.remote?matchStore.team():null,scope=matchStore.scope;
  if(teamId)await backend.setEnemyMatchSide(teamId,matchId,side);
- if(scope!==enemyMatchScope)return;
- enemyMatches=enemyMatches.map(r=>r.matchId===matchId?{...r,enemySide:side}:r);if(!teamId)writeLocalMatches();render();
+ if(scope!==matchStore.scope)return;
+ matchStore.rows=matchStore.rows.map(r=>r.matchId===matchId?{...r,enemySide:side}:r);if(!teamId)matchStore.writeLocal();render();
 }
 function renderEnemyMatches(section){
  section.querySelector('.draft-enemy-matches')?.remove();
- const rows=relevantEnemyMatches(enemyMatches,state.enemyIds||[],Date.now());if(!rows.length)return false;
+ const rows=relevantEnemyMatches(matchStore.rows,state.enemyIds||[],Date.now());if(!rows.length)return false;
  const r=enemyMatchReport(rows,state.enemyIds||[]),root=el('div',null,'draft-enemy-matches');
  const resolved=r.matches.filter(m=>m.side),wins=resolved.filter(m=>m.won).length;
  root.append(el('h4','Their Battle Cup matches'),el('p',`${rows.length} match${rows.length===1?'':'es'} · ${wins}W ${resolved.filter(m=>m.won===false).length}L${r.anonymous?` · ${r.anonymous} anonymous picks`:''}`,'draft-enemy-match-summary'));
@@ -712,34 +693,14 @@ function renderEnemyMatches(section){
 }
 // Who played what against us: recorded by the team after its own games, so it also
 // covers closed accounts. Team database in team drafts, this device otherwise.
-const sightingKey='captain-enemy-sightings-v1';
-let sightings=[],sightingScope=null,sightingRemote=false,sightingState='ready',sightingLoad=0,sightingLoadedAt=0,assignment={key:null,map:{},result:''};
-const localSightingKey=()=>sightingKey+':'+(user?.id||'practice');
-function sightingTeam(){return typeof backend?.listEnemySightings==='function'&&shared?.team_id&&user?shared.team_id:null;}
-function readLocalSightings(){try{const rows=JSON.parse(localStorage.getItem(localSightingKey())||'[]');return Array.isArray(rows)?rows:[];}catch{return [];}}
-function writeLocalSightings(){try{localStorage.setItem(localSightingKey(),JSON.stringify(sightings.slice(-LOCAL_SIGHTING_CAP)));}catch{}}
-function syncSightings(){
- const teamId=sightingTeam(),scope=(teamId||'device')+':'+(user?.id||'');if(scope===sightingScope)return;
- sightingScope=scope;sightingRemote=false;
- if(!teamId){++sightingLoad;sightingState='ready';sightings=readLocalSightings();return;}
- sightingState='loading';sightings=[];listSightings(teamId);
-}
-// Re-reads the team list; current rows stay visible until the new ones arrive.
-function listSightings(teamId){
- const load=++sightingLoad;
- void Promise.resolve().then(()=>backend.listEnemySightings(teamId)).then(rows=>{
-  if(load!==sightingLoad)return;sightingRemote=true;sightingState='ready';sightingLoadedAt=Date.now();
-  sightings=(Array.isArray(rows)?rows:[]).map(r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}));render();
- }).catch(error=>{
-  if(load!==sightingLoad)return;
-  if(missingRpc(error)){sightingState='ready';sightings=readLocalSightings();render();}
-  else if(sightingState==='loading'){sightingState='failed';notice('Could not load the team scouting list: '+(error.message||'try again later.'));}
- });
-}
+const sightingStore=createTeamScopedStore({key:'captain-enemy-sightings-v1',cap:LOCAL_SIGHTING_CAP,newestFirst:false,method:'listEnemySightings',context:()=>({backend,shared,user}),
+ mapRow:r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}),onChange:()=>render(),
+ onLoadError:error=>notice('Could not load the team scouting list: '+(error.message||'try again later.'))});
+let assignment={key:null,map:{},result:''};
 // Called from the draft poll so idle teammates also see a newly saved assignment.
 function refreshSightings(){
- const teamId=sightingTeam();
- if(teamId&&sightingRemote&&sightingState==='ready'&&state.actions.length>=CM_ORDER.length&&Date.now()-sightingLoadedAt>SIGHTING_REFRESH_MS){sightingLoadedAt=Date.now();listSightings(teamId);}
+ const teamId=sightingStore.team();
+ if(teamId&&sightingStore.remote&&sightingStore.state==='ready'&&state.actions.length>=CM_ORDER.length&&Date.now()-sightingStore.loadedAt>SIGHTING_REFRESH_MS){sightingStore.loadedAt=Date.now();sightingStore.reload(teamId);}
 }
 // One key per game. Reset keeps the draft id, so the key also uses the opening bans
 // and the enemy accounts; a later Undo and re-pick stays the same game.
@@ -751,39 +712,39 @@ const lastSightingKey=new Map();
 async function saveSightings(entries){
  if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
  if(shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
- syncSightings();
- if(sightingState==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
- if(sightingState==='failed'){sightingScope=null;syncSightings();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
- const teamId=sightingRemote?sightingTeam():null,scope=sightingScope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
+ sightingStore.sync();
+ if(sightingStore.state==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
+ if(sightingStore.state==='failed'){sightingStore.scope=null;sightingStore.sync();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
+ const teamId=sightingStore.remote?sightingStore.team():null,scope=sightingStore.scope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
  const previous=lastSightingKey.get(slot)!==key?lastSightingKey.get(slot):null;
  if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
- if(scope!==sightingScope)return false;
+ if(scope!==sightingStore.scope)return false;
  let staleKept=false;
  if(teamId&&previous)try{await backend.recordEnemySightings(teamId,previous,[],'manual');}catch{staleKept=true;}
- if(scope!==sightingScope)return false;
+ if(scope!==sightingStore.scope)return false;
  // Remembered only once the earlier version is gone, so saving again retries the cleanup.
  if(!staleKept)lastSightingKey.set(slot,key);
  // A list request started before this save must not drop the new rows.
- if(teamId)++sightingLoad;
- sightings=[...sightings.filter(r=>r.sourceKey!==key&&r.sourceKey!==previous),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
+ if(teamId)++sightingStore.load;
+ sightingStore.rows=[...sightingStore.rows.filter(r=>r.sourceKey!==key&&r.sourceKey!==previous),...entries.map(e=>({...e,sourceKey:key,seenAt:Date.now()}))];
  // Invented demo opponents never reach the real list.
- if(!teamId&&!demo)writeLocalSightings();render();
+ if(!teamId&&!demo)sightingStore.writeLocal();render();
  if(staleKept)notice('Saved. The earlier version of this game could not be removed; save again to retry.');
  return true;
 }
 function seenAgainstUs(p){
- const seen=enemySightings(sightings,String(p.id));
+ const seen=enemySightings(sightingStore.rows,String(p.id));
  return seen.length?'Seen vs us: '+seen.slice(0,4).map(h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`).join(', '):'';
 }
 function renderEnemyAssignment(root){
  const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
  if(!picks.length||!enemies.length)return;
- syncSightings();const key=sightingScope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
+ sightingStore.sync();const key=sightingStore.scope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
  // Teammates outside the drafter seat always see the saved assignment (refreshed by the poll);
  // the drafter's unsaved edits survive a failed poll or a pending action.
  const viewer=!!shared&&shared.drafter_user_id!==user?.id;
  if(assignment.key!==key||viewer){
-  const saved=sightings.filter(r=>r.sourceKey===sightingGameKey());
+  const saved=sightingStore.rows.filter(r=>r.sourceKey===sightingGameKey());
   assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
  }
  const box=el('section',null,'enemy-assignment');
@@ -811,10 +772,10 @@ function renderEnemyAssignment(root){
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
 function renderDraftEnemies(){
  const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
- syncEnemyMatches();syncSightings();
+ matchStore.sync();sightingStore.sync();
  // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
  // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
- if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
+ if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingStore.scope+'|'+sightingDraftBase());
  const enemies=opponents();list.replaceChildren();section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));const hasReport=renderEnemyMatches(section);section.classList.toggle('has-match-report',hasReport);section.hidden=!hasReport&&!enemies.length;
  const now=Math.floor(Date.now()/1000);
  for(const p of enemies){
