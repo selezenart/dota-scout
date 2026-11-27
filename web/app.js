@@ -810,7 +810,9 @@ function renderRoster(){
 }
 
 
-async function mutate(operation,payload={}){if(playerDemo)return;if(pending) return;if(!['claim','release'].includes(operation)&&!canWrite())throw Error('Become the confirmed drafter first.');pending=true;render();const gen=generation;try{if(shared){const id=shared.id;try{const row=await backend.mutateDraft(id,shared.revision,operation,payload);if(gen===generation)adopt(row);}catch(e){if(gen===generation){try{const row=await backend.getDraft(id);if(gen===generation){adopt(row);healthy=true;}}catch{if(gen===generation)healthy=false;}throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}}else{if(operation==='claim')localControl=true;else if(operation==='release')localControl=false;else if(operation==='set_state'){if('firstPick'in payload)state=reduceDraft(state,'set_first_pick',payload,{canWrite:true});state={...state,...payload};}else state=reduceDraft(state,operation,payload,{canWrite:true,heroes});saveLocal();}selected=null;$('hero-search').value='';searchIndex=0;refreshScouting();}finally{if(gen===generation){pending=false;render();}}}
+// After a rejected change: adopt the draft as the server has it, unless this view moved on.
+async function reloadDraft(id,gen){try{const row=await backend.getDraft(id);if(gen===generation){adopt(row);healthy=true;}}catch{if(gen===generation)healthy=false;}}
+async function mutate(operation,payload={}){if(playerDemo)return;if(pending) return;if(!['claim','release'].includes(operation)&&!canWrite())throw Error('Become the confirmed drafter first.');pending=true;render();const gen=generation;try{if(shared){const id=shared.id;try{const row=await backend.mutateDraft(id,shared.revision,operation,payload);if(gen===generation)adopt(row);}catch(e){if(gen===generation){await reloadDraft(id,gen);throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}}else{if(operation==='claim')localControl=true;else if(operation==='release')localControl=false;else if(operation==='set_state'){if('firstPick'in payload)state=reduceDraft(state,'set_first_pick',payload,{canWrite:true});state={...state,...payload};}else state=reduceDraft(state,operation,payload,{canWrite:true,heroes});saveLocal();}selected=null;$('hero-search').value='';searchIndex=0;refreshScouting();}finally{if(gen===generation){pending=false;render();}}}
 
 function adopt(row){if(!row||shared&&row.id!==shared.id)return;if(shared&&row.revision<shared.revision)return;shared=row;state={...initialState(),...row.state};healthy=true;refreshScouting();}
 
@@ -1428,7 +1430,7 @@ async function loadTeam(id,{preserveSelection=false}={}){
 
 }
 
-async function mutateOwner(){if(!shared||pending)return;pending=true;render();const gen=generation,id=shared.id;try{const row=await backend.mutateDraft(id,shared.revision,'assign',{userId:user.id});if(gen===generation)adopt(row);}catch(e){if(gen===generation){try{adopt(await backend.getDraft(id));}catch{healthy=false;}}throw e;}finally{if(gen===generation){pending=false;render();}}}
+async function mutateOwner(){if(!shared||pending)return;pending=true;render();const gen=generation,id=shared.id;try{const row=await backend.mutateDraft(id,shared.revision,'assign',{userId:user.id});if(gen===generation)adopt(row);}catch(e){if(gen===generation)await reloadDraft(id,gen);throw e;}finally{if(gen===generation){pending=false;render();}}}
 
 let cupAccountVersion=0;
 async function authChanged(session,event){
