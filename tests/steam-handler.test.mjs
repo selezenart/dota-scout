@@ -24,20 +24,21 @@ test.beforeEach(() => {
   globalThis.fetch = services.fetch;
 });
 test.afterEach(() => {
-  process.env = savedEnv;
+  for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key];
+  Object.assign(process.env, savedEnv);
   globalThis.fetch = savedFetch;
 });
 
 function fakeServices() {
   const calls = [], used = new Set();
-  const behaviour = {steamValid:true, nickname:'Nick', consume:'once', linkError:false};
+  const behaviour = {steamValid:true, steamStatus:200, nickname:'Nick', consume:'once', linkError:false};
   const json = (body, status = 200) => new Response(JSON.stringify(body), {status, headers:{'content-type':'application/json'}});
   async function fetch(input, init) {
     const request = new Request(input, init);
     const call = {url:request.url, method:request.method, headers:Object.fromEntries(request.headers), body:await request.text()};
     calls.push(call);
     const url = new URL(call.url);
-    if (call.url === provider) return new Response('ns:http://specs.openid.net/auth/2.0\nis_valid:' + behaviour.steamValid + '\n');
+    if (call.url === provider) return new Response('ns:http://specs.openid.net/auth/2.0\nis_valid:' + behaviour.steamValid + '\n', {status:behaviour.steamStatus});
     if (url.origin === 'https://api.opendota.com') return json({profile:{personaname:behaviour.nickname}});
     if (url.origin !== supabase) throw Error('Unexpected request to ' + url.origin);
     if (url.pathname === '/rest/v1/rpc/consume_steam_auth_nonce') {
@@ -162,7 +163,7 @@ test('a valid callback clears the cookie, consumes the nonce, upserts the profil
   assert.deepEqual(JSON.parse(upsert.body), {user_id:'user-1', display_name:'Nick', steam_account_id:'1'});
   assert.equal(rename.method, 'PATCH');
   assert.equal(new URL(rename.url).searchParams.get('user_id'), 'eq.user-1');
-  assert.match(new URL(rename.url).searchParams.get('display_name'), /^in\.\(.*Steam player.*\)$/, 'only default names are replaced');
+  assert.equal(new URL(rename.url).searchParams.get('display_name'), 'in.(Steam 1,Steam player)', 'only default names are replaced');
   assert.deepEqual(JSON.parse(rename.body), {display_name:'Nick'});
 
   for (const value of [serviceKey, secret]) assert.equal(leaks(res, value), false, 'response never carries server secrets');
@@ -223,6 +224,13 @@ test('Steam rejecting the assertion stops before the nonce is consumed', async (
   const {state, cookie} = await start();
   assertRejected(await call(assertion(state).url, cookie));
   assert.equal(services.to('https://steamcommunity.com').length, 1);
+  assert.equal(services.path('/rest/v1/rpc/consume_steam_auth_nonce').length, 0);
+});
+
+test('a Steam error response is rejected even if its body claims validity', async () => {
+  services.behaviour.steamStatus = 500;
+  const {state, cookie} = await start();
+  assertRejected(await call(assertion(state).url, cookie));
   assert.equal(services.path('/rest/v1/rpc/consume_steam_auth_nonce').length, 0);
 });
 
