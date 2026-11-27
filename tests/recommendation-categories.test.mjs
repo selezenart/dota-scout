@@ -65,8 +65,12 @@ const boot=async(actions,firstPick=true)=>{
 const rowOf=(w,name)=>[...w.document.querySelectorAll('#suggestions .rec-row')].find(r=>r.querySelector('strong').textContent===name);
 const badges=r=>[...r.querySelectorAll('.rec-badge')].map(b=>b.textContent);
 
-test('UI: precondition - counter hero 30 is outside the plain top 8',()=>{
-  assert.ok(!rec().slice(0,8).some(r=>r.heroId===30));
+test('diverseTop brings counter hero 30 into the top 8 that plain ranking leaves it out of',()=>{
+  const ranked=rec();
+  assert.ok(!ranked.slice(0,8).some(r=>r.heroId===30),'fixture: 30 ranks below the plain top 8');
+  const top=engine.diverseTop(ranked,8,2);
+  assert.equal(top.length,8);
+  assert.ok(top.some(r=>r.heroId===30),'the best counter hero is guaranteed a slot');
 });
 test('UI: rows carry tag badges and classes; low-ranked counter hero still shows',async()=>{
   const w=await boot(midDraft);

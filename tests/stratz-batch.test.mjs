@@ -113,7 +113,19 @@ test('refresh handler returns stored/failed no-store, and a bare 500 on failure'
   ({res} = await hit({refresh:async()=>{throw new Error('sekret-token leaked');}}));
   assert.equal(res.statusCode,500); assert.deepEqual(res.body,{error:'STRATZ refresh failed'});
 });
-test('refresh module has a default handler export', () => { assert.equal(typeof mod.default,'function'); });
+test('default refresh handler reads the live environment and fails closed without a cron secret', async () => {
+  const saved = {...process.env}, savedFetch = globalThis.fetch; let fetched = 0;
+  globalThis.fetch = async () => { fetched++; throw new Error('no network in tests'); };
+  try {
+    delete process.env.CRON_SECRET;
+    const missing = fakeRes(); await mod.default({url:'/api/stratz-refresh?slot=prod',query:{slot:'prod'},headers:{},method:'GET'},missing);
+    assert.equal(missing.statusCode,503); assert.equal(missing.headers['cache-control'],'no-store');
+    process.env.CRON_SECRET = 'z'.repeat(20);
+    const wrong = fakeRes(); await mod.default({url:'/api/stratz-refresh?slot=prod',query:{slot:'prod'},headers:{authorization:'Bearer nope'},method:'GET'},wrong);
+    assert.equal(wrong.statusCode,401);
+    assert.equal(fetched,0);
+  } finally { process.env = saved; globalThis.fetch = savedFetch; }
+});
 
 test('vercel.json schedules the two refresh slots and allows 300 s', async () => {
   const v = JSON.parse(await readFile('vercel.json','utf8'));

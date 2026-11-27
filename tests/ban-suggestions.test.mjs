@@ -14,7 +14,7 @@ const ids = list => list.map(r=>r.heroId);
 const ban = (mode,extra={}) => recommend({heroes:pool,mode,now,...extra});
 const row = (h,m,w,s) => ({h,m,w,s});
 
-test('fixture sanity: meta scores',()=>{
+test('heroMeta scores each hero against the pool average win rate',()=>{
   const t = metaTotals(pool), s = id => heroMeta(pool.find(h=>h.id===id),t)?.score;
   assert.deepEqual([1,2,3,4,5,6].map(s),[1.66,1.16,0.16,-1.34,undefined,-0.75]);
 });

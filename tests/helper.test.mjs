@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import {readFile} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {liveLineup} from '../web/live-roster.js';
 import {
   anonServerSteamId64, serverSteamIdFromLog, localAccountFromLoginUsers, libraryPathsFromVdf,
@@ -393,8 +393,11 @@ test('server: GET / serves an HTML status page', async () => {
 
 // --- repo safety ---
 
-test('repo: helper key file is git-ignored', () => {
-  execFileSync('git', ['check-ignore', '-q', 'helper/steam-key.txt'], {cwd: root});
+test('repo: helper key file is git-ignored', t => {
+  const result = spawnSync('git', ['check-ignore', '-q', 'helper/steam-key.txt'], {cwd: root});
+  if (result.error?.code === 'ENOENT') return t.skip('git is not installed');
+  if (result.status === 128) return t.skip('not a git checkout');
+  assert.equal(result.status, 0, 'helper/steam-key.txt must match a .gitignore rule');
 });
 
 test('repo: .vercelignore excludes everything and never re-includes helper', async () => {
