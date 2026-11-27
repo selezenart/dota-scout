@@ -212,23 +212,38 @@ function refreshScouting(){
 let searchIndex=0,rankedIds=new Set();
 
 let steamEnabled=false,googleEnabled=false,profileSaved=false,profileSetupRequired=false;
-const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:()=>{if(!shared&&!profileSetupRequired)navigateTeam();},onPractice:()=>{
+const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>shared?welcome.board():enterGated(resumeRoute)),onPractice:()=>{
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
 },onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:safe(async()=>{
- // Same gates as sign-in. While sign-in is still finishing, authChanged resumes the
- // draft, Battle Cup or team itself, so a click must not race it.
- if(openingTeam||resumingAccount===generation||welcome.recovery||showTeamInvitation())return;
- const gen=generation,account=user?.id,ready=accountReady;if(!account)return;
+ if(openingTeam)return;
  openingTeam=true;
- try{
-  await ready;
-  if(gen!==generation||user?.id!==account||welcome.recovery||showTeamInvitation())return;
-  if(profileSetupRequired)startProfileSetup(()=>navigateTeam());else navigateTeam();
- }finally{openingTeam=false;}
+ try{await enterGated(()=>navigateTeam());}finally{openingTeam=false;}
 })});
 let openingTeam=false,resumingAccount=null;
+
+// Every shortcut into the board passes the same gates as sign-in (authChanged), in order:
+// pending team invitation, password recovery, account load, then required profile setup.
+// While sign-in is still resuming, authChanged routes from the current URL itself, so
+// a shortcut must not race it.
+async function enterGated(go){
+ if(resumingAccount===generation||welcome.recovery||showTeamInvitation())return;
+ const gen=generation,account=user?.id,ready=accountReady;if(!account)return;
+ await ready;
+ if(gen!==generation||user?.id!==account||welcome.recovery||showTeamInvitation())return;
+ if(profileSetupRequired)startProfileSetup(go);else await go();
+}
+// Opens what the address asks for: a shared draft, Battle Cup, the practice board, or Team.
+async function resumeRoute(){
+ const params=new URLSearchParams(location.search);
+ const draft=params.get('draft')||pendingDraft();
+ if(validDraftId(draft)){
+  try{await openDraft(draft);}catch(error){navigateTeam();notice(error.message);}finally{forgetDraft();}
+ }else if(params.has('cup'))openCup();
+ else if(params.has('practice'))welcome.board();
+ else navigateTeam();
+}
 
 function showTeamInvitation(force=false){
  const invitation=teamInvitation;if(!invitation||welcome.recovery)return false;
@@ -250,7 +265,7 @@ function showTeamInvitation(force=false){
     if(error.code==='22023'){
      forgetInvitation(invitation.code);
      teamInvitation=null;
-     welcome.invitation({invalid:true,expired:true,onDismiss:()=>navigateCup()});
+     welcome.invitation({invalid:true,expired:true,onDismiss:()=>user?enterGated(()=>navigateCup()):navigateCup()});
      return;
     }
     throw error;
@@ -268,7 +283,7 @@ function showTeamInvitation(force=false){
    void roster.catch(()=>{}); // Setup can retry loading the selected roster independently.
   },
   onSwitch:async()=>{await backend.signOut();if(user?.id===account)await authChanged(null);},
-  onDismiss:()=>{if(teamInvitation!==invitation)return;forgetInvitation(invitation.code);teamInvitation=null;if(user)welcome.board();else welcome.home();},
+  onDismiss:()=>{if(teamInvitation!==invitation)return;forgetInvitation(invitation.code);teamInvitation=null;if(user)return enterGated(resumeRoute);welcome.home();},
  });
  if(invitation.code&&backend?.previewTeamInvitation&&!invitation.previewRequested){
   invitation.previewRequested=true;
@@ -1413,7 +1428,9 @@ async function authChanged(session,event){
 
  const recovery=event==='PASSWORD_RECOVERY';if(recovery)welcome.recover();
 
- const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation)welcome.signedIn();return;}
+ // Only a sign-in may open the board here: USER_UPDATED (password saved) and TOKEN_REFRESHED
+ // must not replace "Continue to board" or skip its gates.
+ const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
 
  stopLiveWatch();resetAllyEntry();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
  const gen=++generation,acct=++accountGen;user=session?.user||null;welcome.setAccount(!!user,recovery);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
@@ -1449,7 +1466,9 @@ async function authChanged(session,event){
  }
  render();
  if(user){
-  resumingAccount=gen;
+  // Recovery and a pending invitation never resume here: "Continue to board" and
+  // declining the invitation do, through enterGated.
+  if(!recovery&&!inviteOnEntry)resumingAccount=gen;
   try{
   await accountReady;
   // Clear the loading marker even if Home/Practice changed the workspace meanwhile;
@@ -1457,16 +1476,8 @@ async function authChanged(session,event){
   if(acct===accountGen&&$('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
   if(gen!==generation)return;
   if(!inviteOnEntry&&!teamInvitation&&!recovery&&!welcome.recovery){
-   const resume=async()=>{
-    const params=new URLSearchParams(location.search);
-    const draft=params.get('draft')||pendingDraft();
-    if(validDraftId(draft)){
-     try{await openDraft(draft);}catch(error){navigateTeam();notice(error.message);}finally{forgetDraft();}
-    }else if(params.has('cup'))openCup();
-    else if(!params.has('practice'))navigateTeam();
-   };
-   if(profileSetupRequired)startProfileSetup(resume);
-   else await resume();
+   if(profileSetupRequired)startProfileSetup(resumeRoute);
+   else await resumeRoute();
   }
   }finally{if(resumingAccount===gen)resumingAccount=null;}
  }
@@ -1509,7 +1520,7 @@ if(playerDemo){
 
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.dataset.close).close();
 
-for(const id of ['setup-button','connection-status'])$(id).onclick=safe(lobby);$('profile-button').onclick=safe(profileDialog);
+for(const id of ['setup-button','connection-status'])$(id).onclick=safe(lobby);$('profile-button').onclick=safe(()=>profileDialog());
 let signingOut=false;
 async function signOut(){
  if(signingOut||!user||!backend)return;
@@ -1707,7 +1718,15 @@ function openLinkInvitation(){
  teamInvitation=invite;return showTeamInvitation();
 }
 window.addEventListener('hashchange',openLinkInvitation);
-window.addEventListener('popstate',()=>void safe(async()=>{if(openLinkInvitation())return;const params=new URLSearchParams(location.search);if(params.has('cup')){openCup();return;}if(params.has('team')&&(user||demo)){navigateTeam();return;}showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await openDraft(draft,{navigate:false});else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
+window.addEventListener('popstate',()=>void safe(async()=>{
+ if(openLinkInvitation())return;
+ // Back/Forward is another shortcut into the board: the recovery form and a pending
+ // invitation stay in front, and signed-in routes pass the sign-in gates.
+ if(welcome.recovery||showTeamInvitation())return;
+ const params=new URLSearchParams(location.search);
+ if(params.has('cup')){if(user)await enterGated(openCup);else openCup();return;}
+ if(params.has('team')&&(user||demo)){if(user)await enterGated(()=>navigateTeam());else navigateTeam();return;}
+ showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
 setInterval(()=>{void poll();refreshSightings();},3000);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
 
 if(imageId!==null){

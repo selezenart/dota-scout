@@ -1006,6 +1006,138 @@ test('Open my team cannot replace the password recovery form or open the board',
  }finally{h.w.close();}
 });
 
+function recoveryBackend(extra={}){
+ const hooks={};
+ const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{hooks.callback=fn;},updatePassword:async()=>({}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[],...extra});
+ return {backend,hooks};
+}
+async function finishRecovery(h,afterSave){
+ const form=h.q('welcome-auth').querySelector('form');
+ form.querySelector('[type=password]').value='new-password';form.requestSubmit();await flush();
+ await afterSave?.();
+ await h.click(h.button('Continue to board',h.q('welcome-auth')));
+}
+function goBackTo(h,query){h.w.history.pushState(null,'',query);h.w.dispatchEvent(new h.w.PopStateEvent('popstate'));return flush();}
+
+test('continuing after password recovery waits for the account and then requires profile setup',async()=>{
+ let finishProfile;
+ const {backend,hooks}=recoveryBackend({loadProfile:()=>new Promise(r=>{finishProfile=r;})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h);
+  assert.equal(h.q('team-view').hidden,true,'Team waits for the account');
+  finishProfile(null);await flush();
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+  assert.equal(h.q('team-view').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('continuing after password recovery with a finished profile opens Team',async()=>{
+ const {backend,hooks}=recoveryBackend({loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h);
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('team-view').hidden,false);
+ }finally{h.w.close();}
+});
+
+test('the password-saved auth event keeps Continue to board and its gates',async()=>{
+ let finishProfile;
+ const {backend,hooks}=recoveryBackend({loadProfile:()=>new Promise(r=>{finishProfile=r;})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h,async()=>{
+   // Supabase announces the saved password; it must not open the board on its own.
+   hooks.callback(guestSession,'USER_UPDATED');await flush();
+   assert.equal(h.w.document.body.dataset.view,'welcome');
+  });
+  finishProfile(null);await flush();
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('declining a team invitation still requires profile setup',async()=>{
+ const h=await harness({query:'#invite='+inviteCode,backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  await h.click(h.button('Decline invitation',h.q('welcome-auth')));
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('declining a team invitation opened during practice returns to the practice board',async()=>{
+ const h=await harness({query:'?practice',backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  h.w.location.hash='invite='+inviteCode;h.w.dispatchEvent(new h.w.HashChangeEvent('hashchange'));await flush();
+  assert.ok(h.q('team-invite-heading'),'invitation shown');
+  await h.click(h.button('Decline invitation',h.q('welcome-auth')));
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('draft-view').hidden,false);
+ }finally{h.w.close();}
+});
+
+test('email sign-in from Battle Cup returns to Battle Cup instead of Team',async()=>{
+ const h=await harness({query:'?cup',backend:accountBackend({getSession:async()=>null,signIn:async()=>({session:guestSession}),loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[]})});
+ try{
+  await h.click(h.q('welcome-signin'));
+  const form=h.q('welcome-auth').querySelector('form');
+  form.querySelector('[type=email]').value='captain@example.com';form.querySelector('[type=password]').value='example-password';
+  form.requestSubmit();await flush();
+  assert.equal(h.q('cup-view').hidden,false,'Battle Cup is shown');
+  assert.equal(h.q('team-view').hidden,true);
+  assert.ok(new URLSearchParams(h.w.location.search).has('cup'));
+ }finally{h.w.close();}
+});
+
+for(const query of ['?team','?cup','?draft='+draftId])test('Back or Forward to '+query.split('=')[0]+' keeps the password recovery form',async()=>{
+ const {backend,hooks}=recoveryBackend({loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),getDraft:async id=>({id,team_id:'team',revision:0,state:{actions:[],roster:[]}})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await goBackTo(h,query);
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('welcome-auth').querySelector('h2')?.textContent,'Choose a new password');
+ }finally{h.w.close();}
+});
+
+for(const query of ['?team','?cup'])test('Back or Forward to '+query+' keeps a pending team invitation in front',async()=>{
+ const h=await harness({query:'#invite='+inviteCode,backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  assert.ok(h.q('team-invite-heading'),'invitation shown');
+  await goBackTo(h,query);
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.ok(h.q('team-invite-heading'),'invitation still shown');
+ }finally{h.w.close();}
+});
+
+test('Back or Forward to Team resumes required profile setup',async()=>{
+ const h=await harness({query:'',backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,loadRoster:async()=>[]})});
+ try{
+  h.q('profile-dialog').close();
+  await h.click(h.q('home-button'));
+  await goBackTo(h,'?team');
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('signed-out profile button asks to sign in instead of opening a local profile',async()=>{
+ const h=await harness({query:'?practice',backend:accountBackend({getSession:async()=>null})});
+ try{
+  await h.click(h.q('profile-button'));
+  assert.equal(h.q('profile-dialog').open,false);
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('welcome-auth').querySelector('h2')?.textContent,'Sign in');
+ }finally{h.w.close();}
+});
+
+
 test('Home during sign-in still loads the account so Open my team requires profile setup',async()=>{
  let callback,finishProfile;
  const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{callback=fn;},loadProfile:()=>new Promise(r=>{finishProfile=r;}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[]});
