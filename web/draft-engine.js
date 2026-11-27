@@ -163,14 +163,18 @@ function bestSlot(player,hero,open,penalties = {}) {
   }).sort((a,b) => b.score-a.score)[0];
 }
 // Score the best position assignment still possible for the remaining players.
-function futureRoleFit(players, open, index = 0) {
+// `memo` caches each (player index, open positions) subproblem of one top-level call.
+function futureRoleFit(players, open, index = 0, memo = new Map()) {
   if (index >= players.length) return 0;
+  const key = index + ':' + open.join(',');
+  if (memo.has(key)) return memo.get(key);
   let best = -Infinity;
   for (const pos of open) {
     const fit = bestSlot(players[index], null, [pos])?.score;
     if (fit == null) continue;
-    best = Math.max(best, fit + futureRoleFit(players,open.filter(p => p !== pos),index+1));
+    best = Math.max(best, fit + futureRoleFit(players,open.filter(p => p !== pos),index+1,memo));
   }
+  memo.set(key, best);
   return best;
 }
 function reservationPenalties(player, roster, open) {
@@ -185,9 +189,33 @@ function experience(h = {}) {
 function experienceText(h) {
   return h ? [h.games && h.games+' historical games',h.recent && h.recent+' games in 30 days',h.cup && h.cup+' Battle Cup games in 180 days',h.currentCup && h.currentCup+' Battle Cup games in the last 16 hours'].filter(Boolean).join(', ') : '';
 }
-function observed(hero, enemy, matchups) {
+// Lookup of the first row whose key(row) === id and that is usable, as
+// `rows.find` would return it. Built once per list; a list holding null or
+// undefined rows keeps the linear find, so it fails exactly where the find would.
+// With `only`, rows for other ids are left out: the lookup must then be asked for those ids only.
+function firstRowIndex(rows, key, usable = () => true, only = null) {
+  if (rows.some(r => r == null)) return id => rows.find(r => key(r) === id && usable(r));
+  const index = new Map();
+  for (const r of rows) {
+    const id = key(r);
+    // NaN never equals an id, so it must not match (a Map would match NaN to NaN).
+    if (id === id && !index.has(id) && (!only || only.has(id)) && usable(r)) index.set(id, r);
+  }
+  return id => index.get(id);
+}
+// OpenDota matchup rows per base hero, indexed on first use. observed() asks a
+// candidate's list only for opposing picks, and an opposing pick's list for any
+// candidate, so a candidate's list keeps just the opposing picks' rows.
+function matchupIndex(matchups, opposingIds) {
+  const lists = new Map();
+  return base => {
+    if (!lists.has(base)) lists.set(base, firstRowIndex(array(matchups?.[base]), m => +m.hero_id, undefined, opposingIds.has(base) ? null : opposingIds));
+    return lists.get(base);
+  };
+}
+function observed(hero, enemy, rowsOf) {
   for (const [base,other,sign] of [[hero,enemy,1],[enemy,hero,-1]]) {
-    const row = array(matchups?.[base]).find(m => +m.hero_id === other);
+    const row = rowsOf(base)(other);
     if (!row || !(row.games_played > 0 && Number.isFinite(+row.wins) && row.wins != null && +row.wins >= 0 && +row.wins <= +row.games_played)) continue;
     return {score:sign * 20*(row.wins-row.games_played/2)/(Number(row.games_played)+50),games:+row.games_played};
   }
@@ -241,9 +269,13 @@ export function diverseTop(ranked = [], limit = 8, perTag = 2) {
   }
   return ranked.filter(r => chosen.has(r));
 }
-// STRATZ rows for `heroId` from the matchup lists of already-picked heroes.
-function stratzRows(stratz, picks, heroId, list) {
-  return picks.map(a => ({pick: +a.heroId, row: array(stratz?.[+a.heroId]?.[list]).find(r => +r.h === heroId && +r.m >= 50)})).filter(x => x.row);
+// The matchup lists of already-picked heroes, indexed once per recommend() call.
+function stratzLists(stratz, picks, list) {
+  return picks.map(a => ({pick: +a.heroId, find: firstRowIndex(array(stratz?.[+a.heroId]?.[list]), r => +r.h, r => +r.m >= 50)}));
+}
+// STRATZ rows for `heroId` from those lists.
+function stratzRows(lists, heroId) {
+  return lists.map(({pick, find}) => ({pick, row: find(heroId)})).filter(x => x.row);
 }
 // One STRATZ row from H's point of view: H's own list first, else the other
 // hero's list (for matchups the advantage and win rate are flipped).
@@ -313,34 +345,49 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   if (new Set(locks).size !== locks.length || new Set(roleLocks).size !== roleLocks.length) return [];
   // Resolve previous picks jointly, including manual locks and the feasibility of still-open positions.
   let bestAssignment;
+  // Remaining seats and open positions are bitmasks over `seats` and `positions`
+  // (at most 5 each), visited in array order. The search revisits the same leaves
+  // and (pick, seat, position) terms many times; all are pure, so each is computed once.
+  const ofMask = (list, mask) => list.filter((_, i) => mask & 1 << i);
+  const knownSeats = seats.reduce((mask, p, i) => p.unknown ? mask : mask | 1 << i, 0);
+  const leafFits = new Map(), seatTerms = picked.map(() => new Map());
   function assign(index,remaining,open,score) {
     if (index === picked.length) {
-      const future = futureRoleFit(remaining.filter(p=>!p.unknown),open);
+      const key = (remaining & knownSeats) * 32 + open;
+      if (!leafFits.has(key)) leafFits.set(key, futureRoleFit(ofMask(seats, remaining & knownSeats),ofMask(positions, open)));
+      const future = leafFits.get(key);
       if (Number.isFinite(future) && (!bestAssignment || score+future > bestAssignment.score))
-        bestAssignment = {remaining,open,score:score+future};
+        bestAssignment = {remaining:ofMask(seats, remaining),open:ofMask(positions, open),score:score+future};
       return;
     }
     const action = picked[index], heroId = +action.heroId, hero = byId.get(heroId);
-    for (const seat of remaining) {
+    for (let s = 0; s < seats.length; s++) {
+      if (!(remaining & 1 << s)) continue;
+      const seat = seats[s];
       if (action.playerId != null && String(action.playerId) !== seat.id) continue;
       if (action.playerId == null && locks.includes(seat.id)) continue;
       const player = seat.unknown ? null : seat;
-      for (const pos of open) {
+      if (!seatTerms[index].has(seat)) seatTerms[index].set(seat, {slots: new Map(), personal: undefined});
+      const terms = seatTerms[index].get(seat);
+      for (let p = 0; p < positions.length; p++) {
+        if (!(open & 1 << p)) continue;
+        const pos = positions[p];
         if (action.position != null ? pos !== +action.position : roleLocks.includes(pos)) continue;
-        const slot = bestSlot(player,hero,[pos]);
+        if (!terms.slots.has(pos)) terms.slots.set(pos, bestSlot(player,hero,[pos]));
+        const slot = terms.slots.get(pos);
         if (!slot) continue;
-        const personal = (player?.selfReport.signatureHeroes.includes(heroId) ? 20 : 0) +
+        const personal = terms.personal ??= (player?.selfReport.signatureHeroes.includes(heroId) ? 20 : 0) +
           experience(histories.get(player?.id)?.get(heroId));
         // On a tie, an unattributed pick goes to an unknown seat, so a known teammate
         // stays available for their own heroes.
         const keepKnownFree = player && !personal && action.playerId == null ? 0.01 : 0;
-        assign(index+1,remaining.filter(p=>p!==seat),open.filter(i=>i!==pos),score+slot.score+personal-keepKnownFree);
+        assign(index+1,remaining & ~(1 << s),open & ~(1 << p),score+slot.score+personal-keepKnownFree);
       }
       // Unknown seats have interchangeable evidence and constraints.
       if (seat.unknown) break;
     }
   }
-  assign(0,seats,positions,0);
+  assign(0,(1 << seats.length) - 1,(1 << positions.length) - 1,0);
   if (!bestAssignment) return [];
   const {open,remaining} = bestAssignment;
   const available = remaining.filter(p=>!p.unknown);
@@ -352,15 +399,19 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
   const covered = new Set(picked.flatMap(a => array(byId.get(+a.heroId)?.roles)));
   const totals = metaTotals(pool);
   const ranked = [];
+  // Hero-independent lookups, built once per call instead of once per hero.
+  const opposingPicks = draft.filter(a => a.mode === opposing);
+  const vsLists = stratzLists(stratz, opposingPicks, 'vs'), withLists = stratzLists(stratz, picked, 'with');
+  const matchupRows = matchupIndex(matchups, new Set(opposingPicks.map(a => +a.heroId)));
+  const nameOf = id => byId.get(id)?.localized_name || String(id);
   for (const hero of pool) {
     const heroId = +hero.id;
     if (taken.has(heroId)) continue;
     // Meta shapes picks, and gives every ban turn suggestions: heroes strong in Divine+ and pro games.
     const meta = heroMeta(hero, totals), metaReason = meta ? metaText(meta) : '';
     // Divine+ counters (vs the opposing picks) and synergy (with this side's picks).
-    const nameOf = id => byId.get(id)?.localized_name || String(id);
-    const vsRows = stratzRows(stratz, draft.filter(a => a.mode === opposing), heroId, 'vs');
-    const withRows = stratzRows(stratz, draft.filter(a => a.mode === team), heroId, 'with');
+    const vsRows = stratzRows(vsLists, heroId);
+    const withRows = stratzRows(withLists, heroId);
     const edge = vsRows.length ? vsRows.reduce((sum, x) => sum - x.row.s, 0) / vsRows.length : 0;
     const syn = withRows.length ? withRows.reduce((sum, x) => sum + x.row.s, 0) / withRows.length : 0;
     const stratzCounter = +clamp(edge * 0.5, -5, 5).toFixed(2), synergy = +clamp(syn * 0.35, -3.5, 3.5).toFixed(2);
@@ -372,17 +423,32 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
     if (worst && -worst.row.s <= -2) stratzReasons.push(`Weak vs ${nameOf(worst.pick)}: wins ${winsVs(worst)}% (${worst.row.m} games)`);
     const partner = [...withRows].sort((a, b) => b.row.s - a.row.s)[0];
     if (partner && partner.row.s >= 2) stratzReasons.push(`Pairs with ${nameOf(partner.pick)}: +${partner.row.s} (Divine+)`);
-    let best;
+    // Terms that depend on the hero only, not on the player slot.
+    const metaBan = !picking && (meta?.score ?? 0) >= 1;
+    const missing = picking ? ['Initiator','Disabler','Support','Carry','Pusher'].filter(r=>array(hero.roles).includes(r)&&!covered.has(r)) : [];
+    const denyTarget = picking ? otherHistories.map(p => ({p,h:p.rows.get(heroId)})).filter(x=>x.h)
+      .sort((a,b)=>experience(b.h)-experience(a.h))[0] : undefined;
+    const deny = denyTarget ? Math.min(5,experience(denyTarget.h)/8) : 0;
+    const denyReason = deny ? 'Denies '+denyTarget.p.name+' a played hero ('+experienceText(denyTarget.h)+')' : '';
+    // Observed OpenDota matchups, worked out by the first slot that gets that far.
+    let heroMatchups;
+    const matchupsOf = () => heroMatchups ??= (() => {
+      // STRATZ Divine+ data replaces the small OpenDota pro sample where it exists.
+      const stratzCovered = new Set(vsRows.map(x => x.pick));
+      const matches = opposingPicks.filter(a=>!stratzCovered.has(+a.heroId)).map(a=>observed(heroId,+a.heroId,matchupRows)).filter(Boolean);
+      if (!matches.length) return {count: 0, games: 0, score: 0};
+      return {count: matches.length, games: matches.reduce((sum,m)=>sum+m.games,0), score: matches.reduce((sum,m)=>sum+m.score,0)/matches.length};
+    })();
+    let best, bestDetails;
     for (const player of slots) {
       const s = player?.selfReport, h = histories.get(player?.id)?.get(heroId);
       if (s?.avoidHeroes.includes(heroId)) continue;
       const components = {history:experience(h),signature:s?.signatureHeroes.includes(heroId)?20:0,
         desired:s?.desiredHeroes.includes(heroId) && !s.signatureHeroes.includes(heroId)?5:0,role:0,composition:0,matchup:0,deny:0,meta:meta?.score ?? 0,stratzCounter,synergy};
-      const evidence = [], reasons = [];
-      if (experienceText(h)) evidence.push(experienceText(h));
+      const evidence = [], reasons = [], historyText = experienceText(h);
+      if (historyText) evidence.push(historyText);
       if (components.signature) reasons.push('Reported signature hero');
       if (s?.desiredHeroes.includes(heroId)) reasons.push(components.desired ? 'Wants to play' : 'Also wants to play (signature already counted)');
-      const metaBan = !picking && (meta?.score ?? 0) >= 1;
       if (!picking && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2 && !metaBan) continue;
       reasons.push(...stratzReasons);
       if (metaBan) reasons.push(metaReason);
@@ -399,31 +465,22 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
       if (picking) {
         if (!slot || !Number.isFinite(slot.score)) continue;
         components.role = slot.score;
-        const missing = ['Initiator','Disabler','Support','Carry','Pusher'].filter(r=>array(hero.roles).includes(r)&&!covered.has(r));
         components.composition = missing.length*2;
         if (missing.length) reasons.push('Adds '+missing.join(', '));
-        const target = otherHistories.map(p => ({p,h:p.rows.get(heroId)})).filter(x=>x.h)
-          .sort((a,b)=>experience(b.h)-experience(a.h))[0];
-        if (target) {
-          components.deny = Math.min(5,experience(target.h)/8);
-          if (components.deny) reasons.push('Denies '+target.p.name+' a played hero ('+experienceText(target.h)+')');
+        if (denyTarget) {
+          components.deny = deny;
+          if (components.deny) reasons.push(denyReason);
         }
         if (slot.score > 0) reasons.push('Position '+slot.position+' fit');
         if (metaReason) meta.score >= 2 ? reasons.unshift(metaReason) : reasons.push(metaReason);
         if (!totals.high && !totals.pro) evidence.push('Meta data unavailable');
       }
-      let matchupGames = 0;
-      {
-        // STRATZ Divine+ data replaces the small OpenDota pro sample where it exists.
-        const covered = new Set(vsRows.map(x => x.pick));
-        const matches = draft.filter(a=>a.mode===opposing&&!covered.has(+a.heroId)).map(a=>observed(heroId,+a.heroId,matchups)).filter(Boolean);
-        if (matches.length) {
-          matchupGames = matches.reduce((sum,m)=>sum+m.games,0);
-          components.matchup = matches.reduce((sum,m)=>sum+m.score,0)/matches.length;
-          evidence.push('Observed matchup data for '+matches.length+' opposing picks ('+matchupGames+' games)');
-        }
+      const {count: matchupCount, games: matchupGames, score: matchupScore} = matchupsOf();
+      if (matchupCount) {
+        components.matchup = matchupScore;
+        evidence.push('Observed matchup data for '+matchupCount+' opposing picks ('+matchupGames+' games)');
       }
-      if (!matchupGames && !vsRows.length && draft.some(a=>a.mode===opposing)) evidence.push('Observed matchup data unavailable');
+      if (!matchupGames && !vsRows.length && opposingPicks.length) evidence.push('Observed matchup data unavailable');
       if (picking && !array(hero.roles).length) evidence.push('Composition tags unavailable');
       const score = +Object.values(components).reduce((sum,x)=>sum+x,0).toFixed(2);
       // Category tags for our picks: the team's own heroes, counters to their picks, current meta.
@@ -431,25 +488,25 @@ export function recommend({heroes = [],draft = [],allies = [],opponents = [],mat
         (components.signature > 0 || components.desired > 0 || components.history > 0) && 'team',
         // Counter needs a clear edge on enough games: small pro samples are noisy.
         (components.matchup >= 1 && matchupGames >= 30 || components.stratzCounter >= 1.5) && 'counter', components.meta >= 1.5 && 'meta'].filter(Boolean);
-      const rec = {heroId,score,reasons,tags,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:player?.name ?? null,evidence,components,
-        details:Object.entries(components).map(([category,contribution]) => ({
-          category,contribution,heroId,playerId:player?.id ?? null,position:picking?slot.position:likelyPosition,
-          source:({history:experienceText(h),signature:'Teammate profile',desired:'Teammate profile',
-            role:picking?'Declared role and OpenDota hero roles':'Inferred from observed lane',
-            composition:'OpenDota hero roles',matchup:matchupGames?'OpenDota hero matchups':null,
-            deny:reasons.find(r=>r.startsWith('Denies ')),meta:meta?'OpenDota hero stats (Divine+ and pro)':null,stratzCounter:stratzCounter?'STRATZ Divine+ matchups':null,synergy:synergy?'STRATZ Divine+ matchups':null})[category] || null,
-          sample:category==='history' && h ? {games:h.games,recent30d:h.recent,cup180d:h.cup,cup16h:h.currentCup} :
-            category==='matchup'?matchupGames:category==='role' && !picking?roleSample:null
-        }))};
       // A ban resting only on STRATZ matchups belongs to no particular enemy player.
-      if (!picking && !components.history && !components.signature && !components.desired) {
-        rec.playerId = null; rec.playerName = null; for (const d of rec.details) d.playerId = null;
-      }
+      const anonymous = !picking && !components.history && !components.signature && !components.desired;
+      const rec = {heroId,score,reasons,tags,playerId:anonymous ? null : player?.id ?? null,position:picking?slot.position:likelyPosition,playerName:anonymous ? null : player?.name ?? null,evidence,components,details:null};
       // A ban kept only by the meta must still come out positive (e.g. not when it is weak vs our picks).
       if (metaBan && !components.history && !components.signature && !components.desired && stratzCounter + synergy < 2 && score <= 0) continue;
-      if (!best || score>best.score) best = rec;
+      if (best && !(score>best.score)) continue;
+      best = rec;
+      // Only the hero's best slot is kept, so its detail rows are built once, after the slot loop.
+      bestDetails = () => Object.entries(components).map(([category,contribution]) => ({
+        category,contribution,heroId,playerId:rec.playerId,position:rec.position,
+        source:({history:historyText,signature:'Teammate profile',desired:'Teammate profile',
+          role:picking?'Declared role and OpenDota hero roles':'Inferred from observed lane',
+          composition:'OpenDota hero roles',matchup:matchupGames?'OpenDota hero matchups':null,
+          deny:reasons.find(r=>r.startsWith('Denies ')),meta:meta?'OpenDota hero stats (Divine+ and pro)':null,stratzCounter:stratzCounter?'STRATZ Divine+ matchups':null,synergy:synergy?'STRATZ Divine+ matchups':null})[category] || null,
+        sample:category==='history' && h ? {games:h.games,recent30d:h.recent,cup180d:h.cup,cup16h:h.currentCup} :
+          category==='matchup'?matchupGames:category==='role' && !picking?roleSample:null
+      }));
     }
-    if (best) ranked.push(best);
+    if (best) { best.details = bestDetails(); ranked.push(best); }
   }
   return ranked.sort((a,b)=>b.score-a.score || a.heroId-b.heroId);
 }
