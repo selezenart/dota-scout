@@ -344,7 +344,6 @@
   border-color: var(--ally);
   color: var(--text);
   min-height: 32px;
-  padding: 5px 11px;
   font-size: var(--text-sm);
 }
 
