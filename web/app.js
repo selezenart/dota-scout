@@ -1325,6 +1325,21 @@ async function lobby(){
      },section);
     }
    }
+   if(team.owner_user_id===user.id){
+    // Renewing issues a new code server-side, so the old link stops working.
+    const renewing=team,account=user.id,current=Date.parse(renewing.invite_expires_at)>Date.now()&&teamInviteCode.test(renewing.invite_code);
+    const renew=button('Renew link',async()=>{
+     if(renew.disabled||team?.id!==renewing.id||user?.id!==account)return;
+     if(current&&!confirm('Renew the invite link for '+renewing.name+'? The current link stops working.'))return;
+     renew.disabled=true;let fresh;try{fresh=await backend.renewTeamInvite(renewing.id,account);}finally{renew.disabled=false;}
+     if(user?.id!==account)return;
+     if(!teamInviteCode.test(fresh?.invite_code))throw Error('Could not renew the team invite link. Reload the page and try again.');
+     const renewed=t=>t.id===renewing.id?{...t,invite_code:fresh.invite_code,invite_expires_at:fresh.invite_expires_at}:t;
+     teams=teams.map(renewed);if(team?.id===renewing.id)team=renewed(team);
+     if(section.isConnected&&team?.id===renewing.id)await lobby();
+     if(user?.id===account)notice('New invite link ready. The old link no longer works.');
+    },section);
+   }
    if(shared&&team.id===shared.team_id)button('Refresh draft roster snapshot',async()=>{
     if(!await loadTeam(shared.team_id,{preserveSelection:true}))return;
     const roster=draftRoster(),removed=(state.roster||[]).filter(p=>p&&!roster.some(current=>current.id===(p.id||p.userId)));

@@ -130,6 +130,7 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     removeTeamMember(teamId, memberId, userId) {
       return accountRpc('remove_scout_team_member',{target_team:teamId,target_user:memberId},userId);
     },
+    renewTeamInvite(teamId, userId) { return accountRpc('renew_scout_team_invite', {target_team: teamId}, userId); },
     deleteTeam(teamId, userId) { return accountRpc('delete_scout_team', {target_team: teamId}, userId); },
     leaveTeam(teamId, userId) { return accountRpc('leave_scout_team', {target_team: teamId}, userId); },
     async loadRoster(teamId) { return (await rpc('load_team_roster', { target_team: teamId }) || []).map(normalizeProfile); },
