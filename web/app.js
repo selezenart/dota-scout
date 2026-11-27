@@ -8,7 +8,7 @@ import snapshot from './heroes.json';
 
 import {CM_ORDER,CM_PHASE_STARTS,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
 import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES,WARN_RATE} from './draft-stats.js';
-import {renderPlayerRail,resetAllyEntry} from './war-room.js';
+import {renderPlayerRail,resetAllyEntry,SEAT_STATUS} from './war-room.js';
 
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
@@ -208,9 +208,10 @@ function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){co
 }).catch(e=>{if(gen===generation)notice(e.message);});}}
 
 // Credit for STRATZ counter and synergy data, shown once whenever it is in use.
+function stratzCredit(){const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';return credit;}
 function appendStratzCredit(){
  const root=$('suggestions');if(!root||root.querySelector('.stratz-credit')||!state.actions.some(a=>stratz[a.heroId]))return;
- const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';root.append(credit);
+ root.append(stratzCredit());
 }
 const stratzFailures=new Map();
 function requestStratz(id){
@@ -394,12 +395,13 @@ function renderView(){
 
  renderRecommendations(turn,write);appendStratzCredit();renderHeroes();renderRoster();renderDraftEnemies();
 
- $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));const review=reviewLineup({draft:state.actions,stratz,heroes});for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick'),info=review[side];n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);const notes=el('ul',null,'review-notes');for(const note of info.heroes.find(h=>h.heroId===+a.heroId)?.notes||[])notes.append(el('li',note.text,'review-note-'+note.tone));n.append(notes);}n.append(el('p','Matchup edge (Divine+): '+(info.edge===null?'no data':`${info.edge>=0?'+':''}${info.edge.toFixed(1)} per matchup across ${info.pairs} matchups`)));}if([...review.our.heroes,...review.enemy.heroes].some(h=>h.notes.some(x=>x.tone!=='info'))){const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';n.append(credit);}n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
+ $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));const review=reviewLineup({draft:state.actions,stratz,heroes});for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick'),info=review[side];n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);const notes=el('ul',null,'review-notes');for(const note of info.heroes.find(h=>h.heroId===+a.heroId)?.notes||[])notes.append(el('li',note.text,'review-note-'+note.tone));n.append(notes);}n.append(el('p','Matchup edge (Divine+): '+(info.edge===null?'no data':`${info.edge>=0?'+':''}${info.edge.toFixed(1)} per matchup across ${info.pairs} matchups`)));}if([...review.our.heroes,...review.enemy.heroes].some(h=>h.notes.some(x=>x.tone!=='info')))n.append(stratzCredit());n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
 }
 
-const SEAT_STATUS={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
+// The two likeliest positions of a scouted player, e.g. 'Pos 1 · Pos 3'.
+function likelyPositions(s){return s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · ');}
 function seatData(player,side,taken,now){
  const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
  const summary=playerSummary(player,now),state=hasAccount?summary.state:'ready';
@@ -605,7 +607,7 @@ function enemyDetails(card,p){
  const s=playerSummary(p,Math.floor(Date.now()/1000));
  const seen=seenAgainstUs(p);if(seen)card.append(el('p',seen,'enemy-seen'));
  if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',waiting:'Waiting for OpenDota…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
- card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
+ card.append(el('p',s.positions.length?'Likely '+likelyPositions(s):'Position unknown','player-role-summary'));
  const strip=(title,cls,rows,label,empty)=>{
   card.append(el('h4',title));const root=el('div',null,'roster-hero-strip '+cls);
   for(const h of rows){const item=el('div');item.append(portrait(h.heroId),el('small',heroName(h.heroId)),el('small',label(h)));root.append(item);}
@@ -770,8 +772,7 @@ function renderDraftEnemies(){
  const now=Math.floor(Date.now()/1000);
  for(const p of enemies){
   const s=playerSummary(p,now),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
-  const meta={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'}[s.state]
-   ||(s.positions.length?s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown');
+  const meta=SEAT_STATUS[s.state]||(s.positions.length?likelyPositions(s):'Position unknown');
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
   if(s.state==='ready'){
    const heroesRow=el('div',null,'draft-enemy-heroes');

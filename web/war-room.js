@@ -1,6 +1,7 @@
 import {HISTORY_WINDOW_DAYS} from './constants.js';
 const make=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!=null)node.textContent=text;return node;};
-const STATE_TEXT={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
+// Short seat status per player state; shared with the draft panel's enemy list.
+export const SEAT_STATUS={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
 
 function comfortRow(row,{portrait,heroName,side}){
  const item=make('span','seat-hero tier-'+row.tier),image=portrait(row.heroId),text=make('span','seat-hero-text'),stat=make('span','seat-stat');
@@ -15,7 +16,7 @@ function seatCard(seat,options){
  const {focusId,portrait,heroName,onToggle}=options;
  const card=make('button','seat-card is-'+seat.side);card.type='button';card.dataset.seatId=seat.id;card.setAttribute('aria-pressed',String(focusId===seat.id));card.classList.toggle('is-focused',focusId===seat.id);card.onclick=()=>onToggle(seat.id);
  const head=make('span','seat-head');head.append(make('strong',null,seat.name),make('small',null,seat.position?'Pos '+seat.position:'Pos ?'));card.append(head);
- const status=STATE_TEXT[seat.state];
+ const status=SEAT_STATUS[seat.state];
  if(status)card.append(make('span','seat-state',status));
  if(seat.comfort.length){const list=make('span','seat-comfort');for(const row of seat.comfort)list.append(comfortRow(row,{portrait,heroName,side:seat.side}));card.append(list);}
  card.append(make('span','seat-caption',seat.banLabel),make('span','seat-ban',seat.bans));
