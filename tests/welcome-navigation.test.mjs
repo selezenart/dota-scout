@@ -28,7 +28,7 @@ test('Google button refreshes availability, preserves disabled state after email
  }finally{dom.window.close();for(const key of ['document','location','history','sessionStorage'])delete globalThis[key];}
 });
 
-test('confirmation signup returns to the signed-in destination and late Steam availability preserves form input',async()=>{
+test('confirmation signup hands the confirmed sign-in to onSession once and late Steam availability preserves form input',async()=>{
  const dom=new JSDOM('<div id="welcome-auth"></div>',{url:'https://board.example/'});
  for(const key of ['document','location','history'])globalThis[key]=dom.window[key];
  let enabled=false,sessions=0,registered=0;

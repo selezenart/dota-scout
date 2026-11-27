@@ -212,7 +212,7 @@ function refreshScouting(){
 let searchIndex=0,rankedIds=new Set();
 
 let steamEnabled=false,googleEnabled=false,profileSaved=false,profileSetupRequired=false;
-const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>shared?undefined:enterGated(resumeRoute)),onPractice:()=>{
+const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>shared?welcome.board():enterGated(resumeRoute)),onPractice:()=>{
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
@@ -264,7 +264,7 @@ function showTeamInvitation(force=false){
     if(error.code==='22023'){
      forgetInvitation(invitation.code);
      teamInvitation=null;
-     welcome.invitation({invalid:true,expired:true,onDismiss:()=>navigateCup()});
+     welcome.invitation({invalid:true,expired:true,onDismiss:()=>user?enterGated(()=>navigateCup()):navigateCup()});
      return;
     }
     throw error;
@@ -282,7 +282,7 @@ function showTeamInvitation(force=false){
    void roster.catch(()=>{}); // Setup can retry loading the selected roster independently.
   },
   onSwitch:async()=>{await backend.signOut();if(user?.id===account)await authChanged(null);},
-  onDismiss:()=>{if(teamInvitation!==invitation)return;forgetInvitation(invitation.code);teamInvitation=null;if(user)welcome.board();else welcome.home();},
+  onDismiss:()=>{if(teamInvitation!==invitation)return;forgetInvitation(invitation.code);teamInvitation=null;if(user)return enterGated(resumeRoute);welcome.home();},
  });
  if(invitation.code&&backend?.previewTeamInvitation&&!invitation.previewRequested){
   invitation.previewRequested=true;
@@ -1398,7 +1398,9 @@ async function authChanged(session,event){
 
  const recovery=event==='PASSWORD_RECOVERY';if(recovery)welcome.recover();
 
- const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation)welcome.signedIn();return;}
+ // Only a sign-in may open the board here: USER_UPDATED (password saved) and TOKEN_REFRESHED
+ // must not replace "Continue to board" or skip its gates.
+ const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
 
  stopLiveWatch();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
  const gen=++generation,acct=++accountGen;user=session?.user||null;welcome.setAccount(!!user,recovery);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
@@ -1434,8 +1436,9 @@ async function authChanged(session,event){
  }
  render();
  if(user){
-  // Recovery never resumes here: "Continue to board" does, through enterGated.
-  if(!recovery)resumingAccount=gen;
+  // Recovery and a pending invitation never resume here: "Continue to board" and
+  // declining the invitation do, through enterGated.
+  if(!recovery&&!inviteOnEntry)resumingAccount=gen;
   try{
   await accountReady;
   // Clear the loading marker even if Home/Practice changed the workspace meanwhile;

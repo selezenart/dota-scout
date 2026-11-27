@@ -903,9 +903,10 @@ function recoveryBackend(extra={}){
  const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{hooks.callback=fn;},updatePassword:async()=>({}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[],...extra});
  return {backend,hooks};
 }
-async function finishRecovery(h){
+async function finishRecovery(h,afterSave){
  const form=h.q('welcome-auth').querySelector('form');
  form.querySelector('[type=password]').value='new-password';form.requestSubmit();await flush();
+ await afterSave?.();
  await h.click(h.button('Continue to board',h.q('welcome-auth')));
 }
 function goBackTo(h,query){h.w.history.pushState(null,'',query);h.w.dispatchEvent(new h.w.PopStateEvent('popstate'));return flush();}
@@ -933,6 +934,32 @@ test('continuing after password recovery with a finished profile opens Team',asy
   await finishRecovery(h);
   assert.equal(h.w.document.body.dataset.view,'board');
   assert.equal(h.q('team-view').hidden,false);
+ }finally{h.w.close();}
+});
+
+test('the password-saved auth event keeps Continue to board and its gates',async()=>{
+ let finishProfile;
+ const {backend,hooks}=recoveryBackend({loadProfile:()=>new Promise(r=>{finishProfile=r;})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h,async()=>{
+   // Supabase announces the saved password; it must not open the board on its own.
+   hooks.callback(guestSession,'USER_UPDATED');await flush();
+   assert.equal(h.w.document.body.dataset.view,'welcome');
+  });
+  finishProfile(null);await flush();
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('declining a team invitation still requires profile setup',async()=>{
+ const h=await harness({query:'#invite='+inviteCode,backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  await h.click(h.button('Decline invitation',h.q('welcome-auth')));
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
  }finally{h.w.close();}
 });
 
