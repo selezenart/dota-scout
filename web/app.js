@@ -18,7 +18,7 @@ import {initialState,demoState,reduceDraft} from './demo.js';
 
 import {createBackend} from './backend.js';
 
-import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
+import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
 
 // Timings (ms) and local storage caps of the board.
 const SCOUT_RETRY_RATE_LIMITED_MS=20000,SCOUT_RETRY_MS=8000; // re-fetch a failed enemy profile
@@ -620,7 +620,7 @@ function enemyDetails(card,p){
   for(const h of rows){const item=el('div');item.append(portrait(h.heroId),el('small',heroName(h.heroId)),el('small',label(h)));root.append(item);}
   if(!rows.length)root.append(el('span',empty,'secondary'));card.append(root);
  };
- strip('Most played · 180 days','enemy-top-heroes',s.topHeroes,h=>h.winRate==null?`${h.games} games`:`${h.games} games · ${h.winRate}%`,'No hero data');
+ strip('Most played · '+HISTORY_WINDOW_DAYS+' days','enemy-top-heroes',s.topHeroes,h=>h.winRate==null?`${h.games} games`:`${h.games} games · ${h.winRate}%`,'No hero data');
  const total=s.recent.wins+s.recent.losses;
  card.append(el('h4','Recent'),el('p',total?`${s.recent.wins}W ${s.recent.losses}L (last ${total})`:'No recent matches','enemy-recent'));
  strip('Battle Cup','enemy-cup',s.cup,h=>`${h.games} games · ${h.wins}W`,'No Battle Cup games found');
