@@ -15,7 +15,7 @@ import {
 import {lastLobbyFromLog} from './gc/lobby-log.mjs';
 
 const HOST = '127.0.0.1';
-const PORT = 8765;
+const PORT = 8765; // the board links here as LOCAL_HELPER_ORIGIN in web/constants.js
 const LOG_TAIL_BYTES = 4 * 1024 * 1024;
 const STATUS_PAGE = `<!doctype html><meta charset="utf-8"><title>Captain's Draft Board helper</title>
 <body style="font:16px system-ui;max-width:40rem;margin:2rem auto;padding:0 1rem">

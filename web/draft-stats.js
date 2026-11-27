@@ -1,5 +1,5 @@
 export const MIN_GAMES=10,WARN_RATE=55,HOT_RATE=60,MIN_MATCHUP_GAMES=20;
-const CUP_LOBBY=9,DAY=86400,WINDOW_DAYS=180;
+import {BATTLE_CUP_LOBBY as CUP_LOBBY,DAY_SECONDS as DAY,HISTORY_WINDOW_DAYS as WINDOW_DAYS} from './constants.js';
 
 export function winTier(winRate,games){
  if(!(Number(games)>=MIN_GAMES))return 'low';

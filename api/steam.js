@@ -32,6 +32,7 @@ export async function verifySteamAssertion(query, returnTo, fetcher = fetch, now
       query.get('openid.op_endpoint') !== provider || !identity || query.get('openid.identity') !== claimed ||
       query.get('openid.return_to') !== returnTo || !fields.every(field => signed.has(field)) ||
       !Number.isFinite(time) || time < now-lifetime*1000 || time > now+60000) throw Error('Invalid Steam assertion');
+  // SteamID64 base; web/constants.js (STEAM_ID64_BASE) and helper/lib.mjs keep the same value.
   const accountId = BigInt(identity[1])-76561197960265728n;
   if (accountId<=0n || accountId>=4294967295n) throw Error('Invalid Steam account');
   const body = new URLSearchParams(params);
@@ -49,6 +50,7 @@ export async function openDotaNickname(accountId, fetcher = fetch) {
     });
     if (!response.ok) return null;
     const name = (await response.json()).profile?.personaname;
+    // 80: the board's display name limit (DISPLAY_NAME_MAX in web/constants.js).
     return typeof name === 'string' ? Array.from(name.trim()).slice(0,80).join('') || null : null;
   } catch {
     return null;

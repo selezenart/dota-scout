@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { DISPLAY_NAME_MAX, GOOGLE_ATTEMPT_KEY } from './constants.js';
 
 const own = (o, key) => Object.prototype.hasOwnProperty.call(o, key);
 const normalizeProfile = row => row ? ({
@@ -16,7 +17,7 @@ async function sha256Hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
-export const googleAttemptKey = 'captain-google-oauth';
+export const googleAttemptKey = GOOGLE_ATTEMPT_KEY;
 
 export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '' } = {}) {
   if (!supabaseUrl || !supabaseAnonKey) throw new Error('Team workspace is not configured. Set the public Supabase URL and publishable key.');
@@ -67,7 +68,7 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     signUp(email, password, name = '', redirect = '/') {
       return checked(client.auth.signUp({ email: email.trim(), password, options: {
         emailRedirectTo: new URL(redirect, location.origin).href,
-        data: { display_name: name.trim().slice(0, 80) },
+        data: { display_name: name.trim().slice(0, DISPLAY_NAME_MAX) },
       } }));
     },
     async signOut() { await checked(client.auth.signOut()); },

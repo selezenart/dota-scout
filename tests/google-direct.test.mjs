@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createBackend,googleAttemptKey} from '../web/backend.js';
 import {readFileSync} from 'node:fs';
+import {GOOGLE_ATTEMPT_KEY} from '../web/constants.js';
 
 const clientId='123-abc.apps.googleusercontent.com';
 
@@ -41,7 +42,11 @@ test('without a Google client ID the existing Supabase redirect is kept',()=>{
 });
 
 test('app.js reads the Google attempt from the same storage key backend.js writes',()=>{
- assert.ok(readFileSync(new URL('../web/app.js',import.meta.url),'utf8').includes("const googleAttemptKey='"+googleAttemptKey+"'"));
+ const app=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+ assert.equal(googleAttemptKey,'captain-google-oauth');
+ assert.equal(googleAttemptKey,GOOGLE_ATTEMPT_KEY);
+ assert.match(app,/import \{[^}]*\bGOOGLE_ATTEMPT_KEY\b[^}]*\} from '\.\/constants\.js';/);
+ assert.ok(!app.includes("'captain-google-oauth'"),'app.js must not repeat the key');
 });
 
 test('only a well-formed Google client ID is published',async()=>{

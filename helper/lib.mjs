@@ -1,6 +1,7 @@
 // Pure helpers for the Captain's Draft Board local helper.
 // Nothing here touches the network, the game process or game memory.
 
+// Same value as web/constants.js STEAM_ID64_BASE and api/steam.js (separate runtimes).
 const STEAM_ID64_BASE = 76561197960265728n;
 
 // The board's own sites: production (captains-board), develop (captains-draft-three) and local dev.
