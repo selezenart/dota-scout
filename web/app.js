@@ -220,37 +220,27 @@ function requestStratz(id){
   // Back off 1, 2, 4… minutes (at most 15), then retry on its own while the hero is still picked.
   .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>{stratzRequested.delete(String(id));if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);},Math.min(STRATZ_RETRY_MAX_MS,STRATZ_RETRY_BASE_MS*2**(n-1)));});
 }
-function requestMatchup(id){
- if(demo||requestedMatchups.has(id)||matchupErrors.has(id))return;
- requestedMatchups.add(id);
+// One loader for both matchup caches. `matchups` feeds recommend() (a load bumps
+// the ranking caches; a failure shows the draft-wide retry); `allyCounterMatchups`
+// is optional seat data, kept apart so the ranking never reads it.
+function loadMatchups(id,cache,requested,failed,{ranking}){
+ if(demo||requested.has(id)||failed.has(id))return;
+ requested.add(id);
  const gen=generation;
  void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:DAY_MS}).then(rows=>{
   if(gen!==generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
-  matchups[id]=rows;touch();
+  cache()[id]=rows;if(ranking)touch();
   scheduleRender();
  }).catch(()=>{
   if(gen!==generation)return;
-  requestedMatchups.delete(id);
-  matchupErrors.add(id);
-  scheduleRender();
+  requested.delete(id);
+  failed.add(id);
+  if(ranking)scheduleRender();
  });
 }
-function requestAllyCounters(id){
- if(demo||allyCounterRequests.has(id)||allyCounterFailures.has(id))return;
- allyCounterRequests.add(id);
- const gen=generation;
- void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:DAY_MS}).then(rows=>{
-  if(gen!==generation)return;
-  if(!Array.isArray(rows))throw Error('Invalid matchup response');
-  allyCounterMatchups[id]=rows;
-  scheduleRender();
- }).catch(()=>{
-  if(gen!==generation)return;
-  allyCounterRequests.delete(id);
-  allyCounterFailures.add(id);
- });
-}
+function requestMatchup(id){loadMatchups(id,()=>matchups,requestedMatchups,matchupErrors,{ranking:true});}
+function requestAllyCounters(id){loadMatchups(id,()=>allyCounterMatchups,allyCounterRequests,allyCounterFailures,{ranking:false});}
 function refreshScouting(){
  if(demo)return;
  const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
