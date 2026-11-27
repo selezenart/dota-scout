@@ -58,6 +58,7 @@ test('PublicQueue storage evicts the oldest entries by saved time, never the one
  assert.equal(storage.getItem('other-key'),'kept');
 });
 test('PublicQueue storage keeps the entry just written even when its clock is behind other tabs',async()=>{
+ // Guards the `keep` exclusion: sorting by age alone would evict the new entry here.
  const storage=webStorage();
  for(let i=1;i<=80;i++)storage.setItem('od-public-v1:/players/'+i,JSON.stringify({at:9000+i,value:i}));
  const queue=new data.PublicQueue({storage,now:()=>100,sleep:async()=>{},fetcher:fakeFetch({x:1})});
