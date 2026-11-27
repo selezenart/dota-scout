@@ -37,11 +37,13 @@ const LOCAL_MATCH_CAP=200,LOCAL_SIGHTING_CAP=2000;
 
 
 const $=id=>document.getElementById(id);
+// The current page's query; read fresh on every call because history navigation changes it.
+function urlParams(){return new URLSearchParams(location.search);}
 
-const demo=new URLSearchParams(location.search).has('demo')||new URLSearchParams(location.search).has('mock');
+const demo=urlParams().has('demo')||urlParams().has('mock');
 
-const captainDemo=demo&&new URLSearchParams(location.search).has('captain');
-const playerDemo=demo&&new URLSearchParams(location.search).has('player');
+const captainDemo=demo&&urlParams().has('captain');
+const playerDemo=demo&&urlParams().has('player');
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
 const draftIntentKey='captain-pending-draft';
 // Any 8-4-4-4-12 hex UUID (drafts use gen_random_uuid; the version digit is not checked).
@@ -57,7 +59,7 @@ const memberId=p=>p.id||p.userId;
 const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
 function pendingDraft(){try{const value=sessionStorage.getItem(draftIntentKey);return validDraftId(value)?value:null;}catch{return null;}}
 function forgetDraft(){try{sessionStorage.removeItem(draftIntentKey);}catch{}}
-const entryDraft=new URLSearchParams(location.search).get('draft');
+const entryDraft=urlParams().get('draft');
 if(validDraftId(entryDraft)&&!demo){try{sessionStorage.setItem(draftIntentKey,entryDraft);}catch{}}
 
 const teamInviteKey='captain-team-invite-v1',teamInviteCode=/^[a-f0-9]{64}$/;
@@ -286,7 +288,7 @@ async function enterGated(go){
 }
 // Opens what the address asks for: a shared draft, Battle Cup, the practice board, or Team.
 async function resumeRoute(){
- const params=new URLSearchParams(location.search);
+ const params=urlParams();
  const draft=params.get('draft')||pendingDraft();
  if(validDraftId(draft)){
   try{await openDraft(draft);}catch(error){navigateTeam();notice(error.message);}finally{forgetDraft();}
@@ -1551,7 +1553,7 @@ async function signOut(){
 $('signout-button').onclick=safe(signOut);
 
 const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user,teams,teamId:homeTeamId||team?.id,backend},(id,name,imageId)=>{if(demo)Object.assign(sampleTeam,{name,identity_image_id:imageId});teams=teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);if(homeTeamId===id)renderTeamHome();});
-const imageId=new URLSearchParams(location.search).get('team-image');
+const imageId=urlParams().get('team-image');
 const cup=mountBattleCup({
  root:$('cup-view'),
  getContext:()=>({user,teams,teamId:team?.id,backend,demo,profileReady:demo||profileSaved,profileHasDraftDetails:demo||!!(profile.preferredRoles?.length&&(profile.signatureHeroes?.length||profile.desiredHeroes?.length)),version:cupAccountVersion}),
@@ -1715,8 +1717,8 @@ $('session-dialog').addEventListener('close',()=>{if(!$('cup-view').hidden)void 
 for(const event of ['focus','online'])window.addEventListener(event,()=>{
  if(!$('cup-view').hidden&&document.body.dataset.view==='board')void cup.refresh();
 });
-if(!teamInvitation&&new URLSearchParams(location.search).has('cup'))openCup();
-if(demo&&new URLSearchParams(location.search).has('team'))navigateTeam();
+if(!teamInvitation&&urlParams().has('cup'))openCup();
+if(demo&&urlParams().has('team'))navigateTeam();
 
 
 $('hero-search').oninput=searchHeroes;$('claim-drafter').onclick=safe(()=>mutate('claim'));$('release-drafter').onclick=safe(()=>mutate('release'));$('undo').onclick=safe(()=>mutate('undo'));$('first-pick').onchange=safe(()=>mutate('set_state',{firstPick:$('first-pick').checked}));$('reset-draft').onclick=safe(async()=>{if(confirm('Reset all draft actions?'))await mutate('reset');});
@@ -1742,7 +1744,7 @@ window.addEventListener('popstate',()=>void safe(async()=>{
  // Back/Forward is another shortcut into the board: the recovery form and a pending
  // invitation stay in front, and signed-in routes pass the sign-in gates.
  if(welcome.recovery||showTeamInvitation())return;
- const params=new URLSearchParams(location.search);
+ const params=urlParams();
  if(params.has('cup')){if(user)await enterGated(openCup);else openCup();return;}
  if(params.has('team')&&(user||demo)){if(user)await enterGated(()=>navigateTeam());else navigateTeam();return;}
  showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
@@ -1755,7 +1757,7 @@ if(imageId!==null){
  $('welcome-view').hidden=true;
  $('app-shell').hidden=true;
  $('identity-download').hidden=false;
-} else {showTeamInvitation();render();refreshScouting();if(demo&&new URLSearchParams(location.search).has('profile'))profileDialog();}
+} else {showTeamInvitation();render();refreshScouting();if(demo&&urlParams().has('profile'))profileDialog();}
 
 if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));touch();render();}).catch(()=>{});
 
@@ -1785,7 +1787,7 @@ else if(!demo)void (async()=>{try{
   else if(googleToken)googleRejected=true;
  }
  // Show progress instead of a signed-out home while a callback or a stored session resolves.
- const callback=!googleRejected&&!!(steamToken||googleAttempt||oauthProvider||authFragment.has('access_token')||new URLSearchParams(location.search).has('code'));
+ const callback=!googleRejected&&!!(steamToken||googleAttempt||oauthProvider||authFragment.has('access_token')||urlParams().has('code'));
  let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
  if(callback||storedSession||'authPending' in document.documentElement.dataset){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),LOADING_FALLBACK_MS);}
  // A rejected Google return shows its error after the loading state is set, so nothing covers it.
@@ -1808,7 +1810,7 @@ else if(!demo)void (async()=>{try{
  const inlined=inlinedConfig();let config=inlined;
  if(!config){const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
  if(teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
- if(new URLSearchParams(location.search).has('steam-error')){
+ if(urlParams().has('steam-error')){
   welcome.home('signin');
   const message=$('welcome-auth').querySelector('.auth-message[role=status]');
   if(message){message.dataset.state='error';message.textContent='Steam sign-in did not finish. Try again.';}
@@ -1822,7 +1824,7 @@ else if(!demo)void (async()=>{try{
   observedAuthUser=session?.user?.id||null;++authEvent;
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });const initialSession=await backend.getSession();
- if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!new URLSearchParams(location.search).has('steam-error'))welcome.home('signin');
+ if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!urlParams().has('steam-error'))welcome.home('signin');
  await authChanged(initialSession);welcome.loading();welcome.setConnection('available');render();
  // Sign-in provider flags can change without a rebuild; refresh them in the background.
  if(inlined)void fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(fresh=>{if(!fresh?.url)return;steamEnabled=fresh.steamAuth===true;googleEnabled=fresh.googleAuth===true;welcome.setConnection('available');}).catch(()=>{});}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
