@@ -179,6 +179,8 @@ export function scenarios() {
   const oddHeroes = {...heroes, x: {id: 'x', localized_name: 'Odd', roles: ['Carry']}, dup: {...heroes[pool[3]], id: String(pool[3])}};
   const stringDraft = draftA.map((a, i) => i % 3 ? a : {...a, heroId: String(a.heroId)});
   for (const n of [0, 9, 16]) add(`odd ids at ${n}`, {...full, heroes: oddHeroes, draft: stringDraft.slice(0, n)});
+  // A NaN hero id meeting rows with non-numeric ids must still match nothing.
+  for (const n of [9, 16]) add(`odd ids with dirty data at ${n}`, {...full, heroes: oddHeroes, matchups: dirtyMatchups, stratz: dirtyStratz, draft: stringDraft.slice(0, n)});
   add('NaN hero in draft', {...full, draft: [...draftA.slice(0, 8), {mode: draftA[8].mode, heroId: 'nope'}, ...draftA.slice(9, 13)]});
   // Inputs the engine rejects (and the same inputs on the enemy's turn, where allies are not used).
   for (const mode of ['ourPick', undefined]) {
