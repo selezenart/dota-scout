@@ -5,7 +5,7 @@
 // `scope` is team-or-device plus the account; every scope change bumps `load`, so a
 // list request started in an earlier scope (another team, a signed-out account)
 // never lands. Team scope never mixes in device rows.
-export const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
+const missingRpc=error=>error?.code==='PGRST202'||/Could not find the function/i.test(error?.message||'');
 
 export function createTeamScopedStore({key,cap,newestFirst,method,context,mapRow,onChange,onMissing,onLoadError}){
  const store={

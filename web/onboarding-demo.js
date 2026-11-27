@@ -12,7 +12,7 @@ const heroName = id => heroes[id]?.localized_name || 'Unknown hero';
 const art = id => HERO_PORTRAIT_BASE + heroes[id].name.replace('npc_dota_hero_', '') + '.png';
 const node = (tag, text, cls) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; };
 
-export function mountOnboardingDemo() {
+function mountOnboardingDemo() {
   let state = defaults();
   try {
     const saved = JSON.parse(sessionStorage.getItem(storageKey));
@@ -164,4 +164,5 @@ export function mountOnboardingDemo() {
   return {root};
 }
 
-if (new URLSearchParams(location.search).has('onboarding-demo')) mountOnboardingDemo();
+// main.js loads this module only for ?onboarding-demo.
+mountOnboardingDemo();
