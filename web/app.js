@@ -51,11 +51,11 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const validDraftId=value=>UUID.test(value||'');
 // Public Supabase config baked in at build time (vite.config.js), or null when the build had none.
 function inlinedConfig(){return typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;}
-// Name an auth provider gave the account (email sign-up, Google, Steam), if any.
 // A player's public account ID, under either field name a roster entry may use.
 const accountOf=p=>p.steamAccountId||p.accountId;
 // A roster player's user ID, under either field name a roster entry may use.
 const memberId=p=>p.id||p.userId;
+// Name an auth provider gave the account (email sign-up, Google, Steam), if any.
 const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
 function pendingDraft(){try{const value=sessionStorage.getItem(draftIntentKey);return validDraftId(value)?value:null;}catch{return null;}}
 function forgetDraft(){try{sessionStorage.removeItem(draftIntentKey);}catch{}}
@@ -257,7 +257,7 @@ function requestAllyCounters(id){loadMatchups(id,()=>allyCounterMatchups,allyCou
 function refreshScouting(){
  if(demo)return;
  const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
- scout([...(state.enemyIds||[]),...members.map(p=>accountOf(p))]);
+ scout([...(state.enemyIds||[]),...members.map(accountOf)]);
  for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){requestMatchup(action.heroId);requestStratz(action.heroId);}
 }
 
