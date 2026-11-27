@@ -1,3 +1,4 @@
+import {HISTORY_WINDOW_DAYS} from './constants.js';
 const make=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!=null)node.textContent=text;return node;};
 const STATE_TEXT={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
 
@@ -6,7 +7,7 @@ function comfortRow(row,{portrait,heroName,side}){
  image.alt='';
  const none=!row.games,rate=row.winRate==null?'—':(side==='enemy'&&row.tier==='hot'?'▲ ':'')+row.winRate+'%',games=row.games+' games'+(row.tier==='low'?' · low':'');
  if(none)stat.append(make('b',null,row.unavailable?'Stats unavailable':'No public games'));else stat.append(make('b',null,rate),make('small',null,games));text.append(make('span','seat-hero-name',heroName(row.heroId)),stat);item.append(image,text);
- item.title=none?`${heroName(row.heroId)}: ${row.unavailable?'stats unavailable':'no public games in the last 180 days'}`:`${heroName(row.heroId)}: ${rate} over ${row.games} games in the last 180 days`;
+ item.title=none?`${heroName(row.heroId)}: ${row.unavailable?'stats unavailable':`no public games in the last ${HISTORY_WINDOW_DAYS} days`}`:`${heroName(row.heroId)}: ${rate} over ${row.games} games in the last ${HISTORY_WINDOW_DAYS} days`;
  return item;
 }
 

@@ -1,4 +1,5 @@
 import {signupProgress} from './signup-progress.js';
+import {DISPLAY_NAME_MAX,OAUTH_PROVIDER_KEY} from './constants.js';
 export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,onRegistered,onPractice,onHome,onInvitation,hasInvitation,hasDraftInvitation,onOpenTeam}) {
  const $=id=>document.getElementById(id);
  function googleButton(){
@@ -12,8 +13,8 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
   button.onclick=async()=>{
    if(busy||button.disabled)return;const backend=getBackend();if(!backend)return;
    busy=true;button.disabled=true;button.setAttribute('aria-busy','true');label.textContent='Opening Google…';error.hidden=true;
-   try{try{sessionStorage.setItem('captain-oauth-provider','google');}catch{}await backend.signInGoogle();}
-   catch{try{sessionStorage.removeItem('captain-oauth-provider');}catch{}error.textContent='Google sign-in could not start. Try again, or use Steam or email.';error.hidden=false;}
+   try{try{sessionStorage.setItem(OAUTH_PROVIDER_KEY,'google');}catch{}await backend.signInGoogle();}
+   catch{try{sessionStorage.removeItem(OAUTH_PROVIDER_KEY);}catch{}error.textContent='Google sign-in could not start. Try again, or use Steam or email.';error.hidden=false;}
    finally{busy=false;button.disabled=!googleEnabled?.();button.removeAttribute('aria-busy');label.textContent='Continue with Google';}
   };
   wrap.append(button,hint,error);return wrap;
@@ -64,7 +65,7 @@ export function createWelcome({getBackend,steamEnabled,googleEnabled,onSession,o
    const context=document.createElement('p');context.className='auth-context';context.textContent='You were invited to a shared draft. Sign in with the account you use for this team.';heading.after(context);
   }
   function field(label,type,autocomplete){const l=document.createElement('label');l.className='auth-field';l.textContent=label;const i=document.createElement('input');i.type=type;i.required=true;i.autocomplete=autocomplete;l.append(i);f.append(l);return i;}
-  const name=mode==='register'?field('Display name','text','name'):null;if(name)name.maxLength=80;
+  const name=mode==='register'?field('Display name','text','name'):null;if(name)name.maxLength=DISPLAY_NAME_MAX;
   const email=mode!=='update'?field('Email','email','email'):null;
   const password=mode!=='recover'?field('Password','password',mode==='signin'?'current-password':'new-password'):null;
   const actions=document.createElement('div');actions.className='auth-actions';
