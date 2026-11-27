@@ -573,6 +573,69 @@ test('team member leaves a team from Setup and cannot delete it',async()=>{
  }finally{h.w.close();}
 });
 
+test('captain renews an expired team invite link and copies the new one',async()=>{
+ const oldCode='a'.repeat(64),newCode='d'.repeat(64),past=new Date(Date.now()-864e5).toISOString(),future=new Date(Date.now()+30*864e5).toISOString();
+ let renewed,copied;
+ const h=await harness({clipboard:async text=>{copied=text;},backend:accountBackend({
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:oldCode,invite_expires_at:past}],
+  loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],
+  renewTeamInvite:async(...args)=>{renewed=args;return {invite_code:newCode,invite_expires_at:future};},
+ })});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  assert.match(section().textContent,/invite link has expired/);
+  assert.equal(h.button('Copy team invite link',section()),undefined);
+  await h.click(h.button('Renew link',section()));
+  assert.deepEqual(renewed,['team','owner']);
+  assert.match(h.w.document.querySelector('dialog[open] [data-dialog-notice]')?.textContent||'',/New invite link ready\. The old link no longer works\./);
+  assert.doesNotMatch(section().textContent,/invite link has expired/);
+  assert.match(section().textContent,/Team invite link expires/);
+  await h.click(h.button('Copy team invite link',section()));
+  assert.ok(copied?.includes(newCode),'copied link uses the renewed code: '+copied);
+ }finally{h.w.close();}
+});
+
+test('only the captain sees Renew link and a renewal finishing after an account switch is ignored',async()=>{
+ const code='a'.repeat(64),future=new Date(Date.now()+864e5).toISOString();
+ let callback,finish,renewCalls=0,confirms=0;
+ const member=await harness({backend:accountBackend({
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'captain'}],
+  loadRoster:async()=>[{userId:'captain',displayName:'Captain'},{userId:'owner',displayName:'Me'}],
+ })});
+ try{
+  await member.click(member.q('setup-button'));
+  const select=member.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new member.w.Event('change'));await flush();}
+  assert.equal(member.button('Renew link',member.w.document.querySelector('[data-manual-entry] .team-management')),undefined);
+ }finally{member.w.close();}
+ const h=await harness({backend:accountBackend({
+  onAuthChange:fn=>{callback=fn;},
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:code,invite_expires_at:future}],
+  loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],
+  renewTeamInvite:()=>{renewCalls++;return new Promise(resolve=>{finish=resolve;});},
+ })});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  h.w.confirm=()=>{confirms++;return false;};
+  await h.click(h.button('Renew link',section()));
+  assert.equal(confirms,1,'a still-valid link asks before renewing');
+  assert.equal(renewCalls,0,'cancel keeps the current link');
+  h.w.confirm=()=>true;
+  await h.click(h.button('Renew link',section()));
+  assert.equal(renewCalls,1);
+  callback(guestSession,'SIGNED_IN');await flush();
+  finish({invite_code:'e'.repeat(64),invite_expires_at:future});await flush();
+  assert.doesNotMatch(h.w.document.body.textContent,/New invite link ready/);
+  assert.equal(h.w.document.body.innerHTML.includes('e'.repeat(64)),false,'late code never reaches the next account');
+ }finally{h.w.close();}
+});
+
 test('removing a teammate refreshes the team so the captain copies the new invite link',async()=>{
  const oldCode='a'.repeat(64),newCode='b'.repeat(64),expires=new Date(Date.now()+864e5).toISOString();
  let code=oldCode,copied;
