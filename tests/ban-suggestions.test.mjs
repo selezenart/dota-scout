@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {JSDOM} from 'jsdom';
 import {heroMeta,metaTotals,recommend} from '../web/draft-engine.js';
-import {buildBoard} from './build-board.js';
+import {boardCode as compile} from './build-board.js';
+import {BACKEND_STUB,dataStub,ticks,boardWindow,prepareWindow} from './board-harness.js';
 
 const now = 1700000000;
 const mk = (id,p,w) => ({id,roles:['Carry'],'8_pick':p,'8_win':w});
@@ -78,17 +78,11 @@ test('pick ranking is unchanged by the ban-meta change',()=>{
 });
 
 // ---- board ----
-const boardBuilt = await buildBoard({logLevel:'silent',plugins:[{name:'ban-boundaries',enforce:'pre',load(id){
-  const p = id.replaceAll('\\','/');
-  if (p.endsWith('/web/backend.js')) return 'export const createBackend=()=>globalThis.__backend;';
-  if (p.endsWith('/web/data.js')) return 'export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async id=>({id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]});export const loadStratz=async id=>({heroId:+id,vs:[],with:[]});';
-}}],build:{write:false,minify:false}});
-const boardCode = boardBuilt.output.find(o=>o.type==='chunk'&&o.isEntry).code, boardMarkup = await readFile('web/index.html','utf8');
-const settle = async()=>{for(let i=0;i<12;i++){await new Promise(r=>setTimeout(r,0));await new Promise(r=>setImmediate(r));}};
+const boardCode=await compile({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({loadPlayer:'async id=>({id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]})',extra:'export const loadStratz=async id=>({heroId:+id,vs:[],with:[]});'})});
+const settle=()=>ticks(12);
 test('board: the first ban of a fresh practice draft shows meta suggestions',async()=>{
-  const w = new JSDOM(boardMarkup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
-  w.fetch = async()=>({ok:true,json:async()=>({})});w.setInterval = ()=>0;w.confirm = ()=>true;
-  w.HTMLDialogElement.prototype.showModal = function(){this.open=true;};w.HTMLDialogElement.prototype.close = function(){this.open=false;};
+  const w = boardWindow().window;
+  prepareWindow(w);
   const real = JSON.parse(await readFile('web/heroes.json','utf8'));
   w.__heroes = Object.fromEntries(Object.entries(real).map(([k,h],i)=>[k,i<3?{...h,'8_pick':1000,'8_win':540}:{...h,'8_pick':1000,'8_win':495}]));
   try {

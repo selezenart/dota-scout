@@ -1,21 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,dataStub,flush as flushRounds,observed,openBoard} from './board-harness.js';
 import {CM_ORDER} from '../web/draft-engine.js';
-const built=await build({logLevel:'silent',plugins:[{name:'audit-boundaries',enforce:'pre',load(id){const p=id.replaceAll('\\','/');if(p.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';if(p.endsWith('/web/data.js'))return 'export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=()=>new Promise(()=>{});';}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code,html=await readFile('web/index.html','utf8');
+const code=await boardCode({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({loadHeroes:'()=>new Promise(()=>{})',loadPlayer:'()=>new Promise(()=>{})'})});
 const id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));await new Promise(resolve=>setImmediate(resolve));};
-function observed(w,predicate,label){if(predicate())return Promise.resolve();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{observer.disconnect();reject(Error('Timed out: '+label));},2000);const observer=new w.MutationObserver(()=>{if(predicate()){clearTimeout(timer);observer.disconnect();resolve();}});observer.observe(w.document,{childList:true,subtree:true,attributes:true,characterData:true});});}
+const flush=()=>flushRounds(1);
 async function harness({query='?draft='+id,row,profile,config}={}){
- const dom=new JSDOM(html,{url:'https://board.example/'+query,runScripts:'outside-only'}),w=dom.window,calls=[];
+ const calls=[];
  let auth;let current=row||{id,team_id:'team',revision:0,drafter_user_id:'owner',state:{actions:[],firstPick:true,enemyIds:[42],roster:[{id:'owner',userId:'owner',displayName:'Captain',availability:'available'}]}};
  const backend={getSession:async()=>({user:{id:'owner'}}),onAuthChange:fn=>auth=fn,loadProfile:async()=>profile||{},listTeams:async()=>[{id:'team',name:'Audit team',owner_user_id:'owner'}],loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'},{userId:'sub',displayName:'Sub',availability:'available'}],getDraft:async()=>structuredClone(current),mutateDraft:async(_id,rev,op,payload)=>{calls.push({op,payload:structuredClone(payload)});let state=structuredClone(current.state);if(op==='append')state.actions.push(payload);if(op==='undo')state.actions.pop();if(op==='set_state')state={...state,...payload};current={...current,revision:rev+1,state};return structuredClone(current);},saveProfile:async p=>p};
- w.__backend=backend;w.fetch=config||(async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})}));w.setInterval=()=>0;w.confirm=()=>true;w.HTMLElement.prototype.scrollIntoView=function(){};
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};w.eval(code);await flush();
- const q=id=>w.document.getElementById(id),button=(label,root=w.document)=>[...root.querySelectorAll('button')].find(b=>b.textContent===label),click=async n=>{assert.ok(n,'control exists');assert.equal(n.closest('[hidden]'),null,'control is visible');n.click();await flush();};
+ const {dom,w,q,button}=await openBoard(code,{query,settle:flush,fetch:config||(async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})})),
+  beforeRun:w=>{w.__backend=backend;w.HTMLElement.prototype.scrollIntoView=function(){};}});
+ const click=async n=>{assert.ok(n,'control exists');assert.equal(n.closest('[hidden]'),null,'control is visible');n.click();await flush();};
  const label=(prefix,root=w.document)=>[...root.querySelectorAll('label')].find(l=>l.textContent.startsWith(prefix))?.querySelector('input,textarea');
  return {dom,w,q,calls,button,click,label,backend,auth:()=>auth,poll:async()=>{w.dispatchEvent(new w.Event('focus'));await flush();},row:()=>current};
 }

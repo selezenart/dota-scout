@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,dataStub,flush,boardWindow,prepareWindow} from './board-harness.js';
 import * as engine from '../web/draft-engine.js';
 
 const now=1_700_000_000;
@@ -55,18 +54,10 @@ test('diverseTop returns everything when ranked is shorter than the limit, and h
   assert.deepEqual(engine.diverseTop([],8,2),[]);
 });
 
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async path=>{const m=/^\\/heroes\\/(\\d+)\\/matchups/.exec(path);return m?(globalThis.__matchups[m[1]]||[]):[];}};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async(id,progress)=>{const p={id,name:id,heroes:[],recent:[],matches:[],sources:{}};progress(p);return p;};`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
+const code=await boardCode({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({publicData:'{request:async path=>{const m=/^\\/heroes\\/(\\d+)\\/matchups/.exec(path);return m?(globalThis.__matchups[m[1]]||[]):[];}}',loadPlayer:'async(id,progress)=>{const p={id,name:id,heroes:[],recent:[],matches:[],sources:{}};progress(p);return p;}'})});
 const boot=async(actions,firstPick=true)=>{
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow(),w=dom.window;
+ prepareWindow(w);
  w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{actions,firstPick,enemyIds:[],roster:[ally]},profile:{}}));
  w.__heroes=heroMap;w.__matchups=matchups;
  w.eval(code);await flush();await flush();return w;

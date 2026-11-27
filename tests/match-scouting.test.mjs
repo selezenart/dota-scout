@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,dataStub,flush,boardWindow,prepareWindow} from './board-harness.js';
 import * as engine from '../web/draft-engine.js';
 import * as data from '../web/data.js';
 
@@ -129,22 +128,14 @@ test('relevantEnemyMatches keeps overlapping or last-24h rows',()=>{
 
 // UI
 const heroes=[{id:1,localized_name:'Anti-Mage',roles:['Carry']},{id:2,localized_name:'Axe',roles:['Initiator']},{id:3,localized_name:'Crystal Maiden',roles:['Support']},{id:53,localized_name:"Nature's Prophet",roles:['Carry']}];
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async(id,progress)=>{const p=globalThis.__players[id];progress(p);return p;};export const loadMatch=async id=>globalThis.__matches[id];export const parseMatchIds=t=>[...new Set(String(t).split(/[\\s,]+/).filter(Boolean))];export const summarizeMatch=x=>x;`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
+const code=await boardCode({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({matches:true})});
 const now=1_700_000_000;
 const sources={profile:{status:'updated'},recent:{status:'updated'},heroes:{status:'updated'},matches:{status:'updated'}};
 const A={matchId:'8001',startTime:now-3600,lobbyType:9,radiantWin:true,players:[P(null,1,true),P(null,2,true),P('111',3,false,'Foe'),P(null,53,false)],picksBans:[{heroId:1,isPick:false,team:1,order:0}]};
 const B={matchId:'8002',startTime:now-3600,lobbyType:9,radiantWin:false,players:[P(null,1,true),P(null,53,true),P(null,2,false),P(null,3,false)],picksBans:[]};
 const boot=async(saved,setup)=>{
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow(),w=dom.window;
+ prepareWindow(w);
  for(const [k,v] of Object.entries(saved||{}))w.localStorage.setItem(k,v);
  w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__matches={8001:A,8002:B};
  w.__players={111:{id:'111',name:'Foe',sources,heroes:[{hero_id:1,games:3,win:1,last_played:now}],recent:[],matches:[]}};
@@ -228,9 +219,8 @@ test('a team match list arriving after sign-out never reaches the device scope',
  const backend={getSession:async()=>({user:{id:'owner'}}),onAuthChange(fn){auth=fn;},loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],
   getDraft:async()=>({id:draft,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,enemyIds:[],roster:[]}}),
   listEnemyMatches:()=>{asked++;return new Promise(r=>{finish=r;});},signOut:async()=>{}};
- const dom=new JSDOM(markup,{url:'https://board.example/?draft='+draft,runScripts:'outside-only'}),w=dom.window;
- w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow('?draft='+draft),w=dom.window;
+ w.__backend=backend;prepareWindow(w,{fetch:async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})})});
  w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__matches={};w.__players={};
  try{
   w.eval(code);for(let i=0;i<6;i++)await flush();

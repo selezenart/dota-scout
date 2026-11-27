@@ -148,8 +148,8 @@ test('recommend is deterministic and leaves other heroes unaffected', () => {
 });
 
 // ---- Review follow-ups ----
-import {buildBoard} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode as compile} from './build-board.js';
+import {BACKEND_STUB,dataStub,ticks,boardWindow,prepareWindow} from './board-harness.js';
 import * as engine2 from '../web/draft-engine.js';
 import * as data2 from '../web/data.js';
 import * as api2 from '../api/stratz.js';
@@ -280,19 +280,13 @@ test('review: loadStratz stores only valid bodies and keeps at most 40 heroes ca
  for(let i=1;i<=45;i++)await data2.loadStratz(i,{storage,now:()=>i,fetcher:async()=>({ok:true,json:async()=>({heroId:i,vs:[],with:[]})})});
  assert.equal([...store.keys()].filter(k=>k.startsWith('stratz-v1:')).length,40);assert.equal(store.has('stratz-v1:1'),false);assert.ok(store.has('stratz-v1:45'));
 });
-const boardBuilt=await buildBoard({logLevel:'silent',plugins:[{name:'stratz-boundaries',enforce:'pre',load(id){
- const p=id.replaceAll('\\','/');
- if(p.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(p.endsWith('/web/data.js'))return 'export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async id=>({id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]});export const loadStratz=async id=>globalThis.__stratzLoad?globalThis.__stratzLoad(id):globalThis.__stratz[id];';
-}}],build:{write:false,minify:false}});
-const boardCode=boardBuilt.output.find(o=>o.type==='chunk'&&o.isEntry).code,boardMarkup=await readFile('web/index.html','utf8');
-const settle=async()=>{for(let i=0;i<12;i++){await new Promise(r=>setTimeout(r,0));await new Promise(r=>setImmediate(r));}};
+const boardCode=await compile({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({loadPlayer:'async id=>({id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[]})',extra:'export const loadStratz=async id=>globalThis.__stratzLoad?globalThis.__stratzLoad(id):globalThis.__stratz[id];'})});
+const settle=()=>ticks(12);
 test('review: the visible suggestion list uses STRATZ and credits it once',async()=>{
  const ids={ourPick:[1,4],enemyPick:[2,3],ban:20};const n=engine2.CM_ORDER.findIndex((t,i)=>i>8&&t.team==='A'&&t.action==='Pick');
  let our=0,en=0,ban=20;const actions=engine2.CM_ORDER.slice(0,n).map(({team,action})=>{const side=team==='A'?'our':'enemy';return {mode:side+action,heroId:action==='Pick'?(side==='our'?[1,4][our++]:[2,3][en++]):ban++};});
- const w=new JSDOM(boardMarkup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const w=boardWindow().window;
+ prepareWindow(w);
  w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{actions,firstPick:true,enemyIds:[]},profile:{}}));
  w.__heroes=JSON.parse(await readFile('web/heroes.json','utf8')); /* the real loadHeroes returns the full hero list */
  const strong={h:5,m:400,w:0.35,s:-9};w.__stratz={2:{heroId:2,vs:[strong],with:[]},3:{heroId:3,vs:[{...strong}],with:[]},1:{heroId:1,vs:[],with:[]},4:{heroId:4,vs:[],with:[]}};
@@ -306,9 +300,8 @@ test('review: the visible suggestion list uses STRATZ and credits it once',async
 test('board: the draft review shows STRATZ notes and matchup edge instead of Traits',async()=>{
  const our=[1,4,5,6,7],enemy=[2,3,8,9,10];let o=0,e=0,ban=20;
  const actions=engine2.CM_ORDER.map(({team,action})=>{const side=team==='A'?'our':'enemy';return {mode:side+action,heroId:action==='Pick'?(side==='our'?our[o++]:enemy[e++]):ban++};});
- const w=new JSDOM(boardMarkup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const w=boardWindow().window;
+ prepareWindow(w);
  w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{actions,firstPick:true,enemyIds:[]},profile:{}}));
  w.__heroes=JSON.parse(await readFile('web/heroes.json','utf8'));
  w.__stratz={1:{heroId:1,vs:[row(2,200,0.4,-6),row(3,200,0.55,3)],with:[row(4,100,0.5,-4),row(5,100,0.5,4)]},4:{heroId:4,vs:[],with:[]},2:{heroId:2,vs:[],with:[]}};
@@ -332,10 +325,9 @@ test('board: the draft review shows STRATZ notes and matchup edge instead of Tra
 test('board: a failed STRATZ load is retried after the backoff without another draft action',async()=>{
  const n=engine2.CM_ORDER.findIndex((t,i)=>i>8&&t.team==='A'&&t.action==='Pick');
  let our=0,en=0,ban=20;const actions=engine2.CM_ORDER.slice(0,n).map(({team,action})=>{const side=team==='A'?'our':'enemy';return {mode:side+action,heroId:action==='Pick'?(side==='our'?[1,4][our++]:[2,3][en++]):ban++};});
- const w=new JSDOM(boardMarkup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
+ const w=boardWindow().window;
  const timers=[];w.setTimeout=(fn,ms)=>{timers.push({fn,ms});return timers.length;};
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ prepareWindow(w);
  w.localStorage.setItem('captain-practice-v1',JSON.stringify({state:{actions,firstPick:true,enemyIds:[]},profile:{}}));
  w.__heroes=JSON.parse(await readFile('web/heroes.json','utf8'));
  const strong={h:5,m:400,w:0.35,s:-9};const good={2:{heroId:2,vs:[strong],with:[]},3:{heroId:3,vs:[{...strong}],with:[]},1:{heroId:1,vs:[],with:[]},4:{heroId:4,vs:[],with:[]}};

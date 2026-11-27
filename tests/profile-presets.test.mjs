@@ -1,24 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {dataStub,openBoard} from './board-harness.js';
 
 // Test profile interactions through the actual compiled application. Public
 // network data stays pending so defaults are stable and no external data leaks.
-const built=await build({logLevel:'silent',plugins:[{name:'profile-public-data',enforce:'pre',load(id){
- if(id.replaceAll('\\','/').endsWith('/web/data.js'))return 'export const publicData={request:()=>new Promise(()=>{})};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=()=>globalThis.__profileImport||new Promise(()=>{});';
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const html=await readFile('web/index.html','utf8');
+const code=await boardCode({'/web/data.js':dataStub({publicData:'{request:()=>new Promise(()=>{})}',loadHeroes:'()=>new Promise(()=>{})',loadPlayer:'()=>globalThis.__profileImport||new Promise(()=>{})'})});
 async function harness(profile,importResult){
- const dom=new JSDOM(html,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.__profileImport=importResult;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- if(profile)w.localStorage.setItem('captain-practice-v1',JSON.stringify({profile,state:{actions:[],firstPick:true,roster:[]}}));
- w.eval(code);await settle();
- const q=id=>w.document.getElementById(id);
+ const {dom,w,q}=await openBoard(code,{confirm:false,settle,beforeRun:w=>{w.__profileImport=importResult;},
+  local:profile?{'captain-practice-v1':JSON.stringify({profile,state:{actions:[],firstPick:true,roster:[]}})}:{}});
  const click=async node=>{assert.ok(node,'expected profile control exists');assert.equal(node.closest('[hidden]'),null,'clicked control must be in visible panel');node.click();await settle();};
  const button=(text,root=q('profile-dialog'))=>[...root.querySelectorAll('button')].find(b=>b.textContent===text);
  const saved=()=>JSON.parse(w.localStorage.getItem('captain-practice-v1')).profile;
