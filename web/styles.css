@@ -596,9 +596,7 @@ main {
   z-index: 1;
 }
 
-.hero-tile:hover:not(:disabled),
-.hero-tile[aria-selected="true"] {
-  border-color: var(--brass) !important;
+.hero-tile:hover:not(:disabled) {
   outline: 1px solid var(--brass);
   outline-offset: 1px;
 }
@@ -1322,10 +1320,6 @@ dialog::backdrop {
     display: none;
   }
 
-  body:has(#draft-view:not([hidden]) #surface-players:checked) #team-view {
-    display: block !important;
-  }
-
   .team-view {
     padding: 16px 0;
   }
@@ -1660,7 +1654,7 @@ button.rec-row:hover {
 }
 
 html[data-auth-pending] body[data-view="welcome"] #welcome-view {
-  display: none !important;
+  display: none;
 }
 
 html[data-auth-pending] body[data-view="welcome"] #auth-loading {
@@ -1708,12 +1702,6 @@ html[data-auth-pending] body[data-view="welcome"] #welcome-loading[hidden] {
 @keyframes welcome-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .welcome-loading::before {
-    animation: none;
   }
 }
 
@@ -2033,12 +2021,6 @@ label.auth-field {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .auth-actions button[data-loading="true"]::before {
-    animation: none;
-  }
-}
-
 .auth-message[data-state="success"],
 .auth-message[data-state="error"] {
   padding: 0.8rem 1rem;
@@ -2169,8 +2151,7 @@ label.auth-field {
   border-radius: 0 0 3px 3px;
 }
 
-.hero-grid > button.hero-tile[aria-pressed="true"] img + span,
-.hero-grid > button.hero-tile[aria-selected="true"] img + span {
+.hero-grid > button.hero-tile[aria-pressed="true"] img + span {
   background: var(--line);
   color: var(--brass);
 }
@@ -2471,9 +2452,10 @@ label.auth-field {
 }
 
 .attribute-heading h3 {
-  margin: 0 !important;
+  margin: 0;
+  color: var(--attribute-color);
+  font-size: var(--text-xs);
   letter-spacing: .05em;
-  font-size: var(--text-xs) !important;
   text-transform: uppercase;
 }
 
@@ -2506,10 +2488,6 @@ label.auth-field {
 
 .hero-group[data-attribute=int] {
   --attribute-color: var(--pick);
-}
-
-.attribute-heading h3 {
-  color: var(--attribute-color) !important;
 }
 
 .hero-grid {
@@ -2777,11 +2755,6 @@ label.auth-field {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-grid > button.hero-tile,
-  .hero-grid > button.hero-tile img {
-    transition: none;
-  }
-
   .hero-grid > button.hero-tile:hover {
     transform: none;
   }
@@ -3565,16 +3538,6 @@ label.auth-field {
   .match-strip {
     padding: 10px;
   }
-
-  .hero-tile:hover {
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-tile {
-    transition: none;
-  }
 }
 
 .roster-group-heading {
@@ -4014,7 +3977,6 @@ label.auth-field {
 }
 
 #draft-view .attribute-heading h3 {
-  font-size: var(--text-md);
   font-weight: 600;
 }
 
@@ -4049,7 +4011,7 @@ label.auth-field {
 #draft-view .hero-grid > .hero-tile img + span {
   position: static;
   min-height: calc(2lh + 10px);
-  font-size: var(--text-sm) !important;
+  font-size: var(--text-sm);
   line-height: 1.25;
   padding: 5px 6px;
   background: var(--surface);
@@ -4904,10 +4866,6 @@ input:not([type=checkbox], [type=radio]) {
   border-radius: 14px;
 }
 
-#draft-view .attribute-heading h3 {
-  color: var(--brass) !important;
-}
-
 .cup-slots .cup-slot {
   background: var(--surface);
   border-color: var(--accent);
@@ -4947,28 +4905,6 @@ input:not([type=checkbox], [type=radio]) {
 
 .cup-error {
   color: var(--enemy);
-}
-
-.onboarding-demo,
-.onboarding-demo :is(.od-brand, .od-nav a, .od-content input, .od-content select, .od-role-card, .od-player, .od-mail > p) {
-  color: var(--ivory);
-}
-
-.onboarding-demo :is(.od-invite, .od-mail, .od-player, .od-role-card, .od-banner, .od-content input, .od-content select, .od-hero-grid button, .od-chosen button) {
-  background: var(--surface);
-  border-color: var(--line);
-  border-radius: 16px;
-}
-
-.onboarding-demo :is(.od-kicker, .od-current, .od-mail-icon, .od-team-emblem) {
-  color: var(--brass);
-}
-
-.onboarding-demo .od-primary {
-  background: var(--brass) !important;
-  border-color: var(--brass) !important;
-  color: var(--surface) !important;
-  border-radius: 14px;
 }
 
 #app-shell :is(button, input, select, textarea, summary):focus-visible {
@@ -6093,23 +6029,35 @@ body:has(#identity-download:not([hidden])) {
   background: var(--surface);
   box-shadow: 0 18px 38px color-mix(in srgb, var(--bg) 53%, transparent);
   text-align: left;
-  transform: translateY(-18px);
-}
-
-.team-home-stage[data-count="5"] .team-home-card:is(:first-child, :last-child) {
-  transform: translateY(-34px);
 }
 
 .team-home-card[data-captain="true"] {
-  transform: scale(1.06);
   z-index: 1;
   border-color: var(--brass);
   box-shadow: 0 26px 62px color-mix(in srgb, var(--bg) 73%, transparent);
 }
 
 .team-home-stage[data-count="1"] .team-home-card {
-  transform: none;
   flex-basis: 250px;
+}
+
+/* Staggered card heights; phones lay the cards out flat. */
+@media (min-width: 761px) {
+  .team-home-card {
+    transform: translateY(-18px);
+  }
+
+  .team-home-stage[data-count="5"] .team-home-card:is(:first-child, :last-child) {
+    transform: translateY(-34px);
+  }
+
+  .team-home-card[data-captain="true"] {
+    transform: scale(1.06);
+  }
+
+  .team-home-stage[data-count="1"] .team-home-card {
+    transform: none;
+  }
 }
 
 .team-home-card img,
@@ -6208,10 +6156,6 @@ body:has(#identity-download:not([hidden])) {
     display: grid;
     grid-template-columns: repeat(2,minmax(0,1fr));
     align-items: stretch;
-  }
-
-  .team-home-stage .team-home-card {
-    transform: none !important;
   }
 
   .team-home-card[data-captain="true"] {
@@ -6484,17 +6428,17 @@ body:has(#identity-download:not([hidden])) {
   border-left: 2px solid var(--line);
 }
 
-.review-note-warn {
+.review-notes .review-note-warn {
   color: var(--enemy);
-  border-left-color: var(--enemy) !important;
+  border-left-color: var(--enemy);
 }
 
-.review-note-good {
+.review-notes .review-note-good {
   color: var(--ally);
-  border-left-color: var(--ally) !important;
+  border-left-color: var(--ally);
 }
 
-.review-note-info {
+.review-notes .review-note-info {
   color: var(--muted);
 }
 

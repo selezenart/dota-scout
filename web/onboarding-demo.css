@@ -1,3 +1,19 @@
+/* Shared surface treatment; kept ahead of the component rules below so they can refine it. */
+.onboarding-demo,
+.onboarding-demo :is(.od-brand, .od-nav a, .od-content input, .od-content select, .od-role-card, .od-player, .od-mail > p) {
+  color: var(--ivory);
+}
+
+.onboarding-demo :is(.od-invite, .od-mail, .od-player, .od-role-card, .od-banner, .od-content input, .od-content select, .od-hero-grid button, .od-chosen button) {
+  background: var(--surface);
+  border-color: var(--line);
+  border-radius: 16px;
+}
+
+.onboarding-demo :is(.od-kicker, .od-current, .od-mail-icon, .od-team-emblem) {
+  color: var(--brass);
+}
+
 .onboarding-demo {
   --od-border: var(--line);
   max-width: 1440px;
@@ -68,15 +84,18 @@
 }
 
 .od-kicker {
-  font-size: var(--text-xs) !important;
   letter-spacing: 0;
   font-weight: 600;
   color: var(--text);
   line-height: 1.6;
 }
 
+/* Outranks paragraph sizes such as .od-team-note p. */
+.onboarding-demo .od-kicker {
+  font-size: var(--text-xs);
+}
+
 .od-rail > .od-kicker {
-  font-size: var(--text-xs) !important;
   color: var(--muted);
   margin: 0 0 25px;
 }
@@ -194,18 +213,24 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  border: 1px solid var(--accent) !important;
-  background: var(--accent) !important;
-  color: var(--raised) !important;
-  padding: 13px 22px !important;
   font-weight: 700;
   text-decoration: none;
-  border-radius: 4px;
   min-height: 48px;
 }
 
-.od-primary:hover {
-  background: var(--text) !important;
+/* Outranks the generic and per-panel button rules (.od-content button, .od-nav button, ...). */
+.onboarding-demo .od-primary {
+  padding: 13px 22px;
+  color: var(--surface);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+}
+
+/* Outranks button:hover:not(:disabled). */
+.onboarding-demo .od-primary:hover {
+  background: var(--text);
+  border-color: var(--accent);
 }
 
 .od-invite,
@@ -684,10 +709,6 @@
   color: var(--text);
 }
 
-.od-role-card .od-kicker {
-  font-size: var(--text-xs) !important;
-}
-
 .od-picker-tools,
 .od-filters {
   display: flex;
@@ -766,12 +787,6 @@
 
   .od-selection-count {
     margin-left: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .od-role-card {
-    transition: none;
   }
 }
 
