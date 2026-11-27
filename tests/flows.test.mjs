@@ -346,6 +346,18 @@ test('shared claim release reclaim and polling disconnect enforce confirmed auth
  }finally{h.dom.window.close();}
 });
 
+test('a rejected owner reclaim reloads the draft and shows the server error',async()=>{
+ let row={id:draftId,team_id:'team',revision:4,drafter_user_id:'mate',state:{actions:[],firstPick:true,roster:[]}};const asked=[];
+ const backend=accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>{asked.push('get');return structuredClone(row);},
+  mutateDraft:async(id,revision,op,payload)=>{asked.push(op+':'+payload?.userId);row={...row,revision:6,drafter_user_id:'other'};throw Error('Revision conflict');}});
+ const h=await harness({query:'?draft='+draftId,backend});try{
+  await h.click(h.q('setup-button'));asked.length=0;await h.click(h.button('Owner reclaim drafter'));await flush();
+  assert.deepEqual(asked,['assign:owner','get']);
+  assert.match(h.q('notice').textContent+h.q('session-dialog').textContent,/Revision conflict/);
+  assert.doesNotMatch(h.q('notice').textContent+h.q('session-dialog').textContent,/Current state reloaded/);
+  assert.match(h.q('draft-owner').textContent,/controls/);
+ }finally{h.dom.window.close();}
+});
 
 test('a follower whose team was deleted is told why and moved to local practice',async()=>{
  let gone=false,teams=[{id:'team',name:'Night Shift',owner_user_id:'captain'}];
