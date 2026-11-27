@@ -81,9 +81,14 @@ let heroes=snapshot,state=demo?demoState():initialState(),profile=captainDemo?{d
 
 // STRATZ Divine+ counters/synergy per picked hero; hero-level, so kept across drafts.
 let stratz={},stratzRequested=new Set();
-let observations=new Map(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
+// Ranking inputs that change in place bump dataVersion; `state` and `heroes` are
+// replaced or touched on change, so (state, heroes, dataVersion) keys every cache below.
+let dataVersion=0;
+function touch(){dataVersion++;}
+class VersionedMap extends Map{set(k,v){touch();return super.set(k,v);}delete(k){touch();return super.delete(k);}clear(){touch();super.clear();}}
+let observations=new VersionedMap(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
 // Optional seat data: kept apart from `matchups`, which recommend() reads.
-let allyCounterMatchups={},focusedPlayer=null,suggestionCache={key:'',pick:new Set(),ban:new Set()};
+let allyCounterMatchups={},focusedPlayer=null,suggestionCache={};
 const matchupErrors=new Set(),allyCounterRequests=new Set(),allyCounterFailures=new Set();
 
 try {const saved=JSON.parse(localStorage.getItem(storageKey)||'null');if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}}catch{}
@@ -109,9 +114,9 @@ function saveLocal(){if(!shared&&!demo)try{localStorage.setItem(practiceKey(),JS
 function restorePractice(){
  state=initialState();
  try{const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');if(saved){state={...initialState(),...saved.state};if(!user)profile=saved.profile||{};return;}}catch{}
- if(user)state.roster=[{...profile,id:user.id}];
+ if(user){state.roster=[{...profile,id:user.id}];touch();}
 }
-function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();suggestionCache={key:'',pick:new Set(),ban:new Set()};focusedPlayer=null;}
+function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();touch();suggestionCache={};focusedPlayer=null;}
 function detachWorkspace(){
  stopLiveWatch();resetAllyEntry();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
@@ -140,20 +145,48 @@ const heroName=id=>heroes[id]?.localized_name||'Unknown hero';
 
 function portrait(id){const h=heroes[id],img=el('img');img.alt=heroName(id);img.loading='lazy';img.src='https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/'+String(h?.name||'').replace('npc_dota_hero_','')+'.png';return img;}
 
-function roster(){return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(p.steamAccountId||p.accountId||'')),...p,name:p.displayName||p.name||observations.get(String(p.steamAccountId||p.accountId||''))?.name,id:p.id||p.userId,selfReport:p.selfReport||p}));}
+// Derived draft data, rebuilt only when a ranking input changes.
+function derived(){
+ const c=suggestionCache;
+ if(c.state===state&&c.heroes===heroes&&c.version===dataVersion)return c;
+ return suggestionCache={state,heroes,version:dataVersion,ranked:new Map(),summaries:new WeakMap()};
+}
+function roster(){const c=derived();return [...(c.roster||=buildRoster())];}
+function opponents(){const c=derived();return [...(c.opponents||=buildOpponents())];}
+function heroList(){const c=derived();return c.heroList||=Object.values(heroes);}
+function playerSummary(player,now){
+ const c=derived(),hit=c.summaries.get(player);
+ if(hit?.now===now)return hit.value;
+ const value=enemySummary(player,{now,heroes:heroList()});
+ c.summaries.set(player,{now,value});return value;
+}
+function ranking(mode){
+ const c=derived();
+ if(!c.ranked.has(mode))c.ranked.set(mode,recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick,mode}));
+ return c.ranked.get(mode);
+}
+// Renders asked for by background data arrivals run once per frame.
+let renderQueued=false;
+function scheduleRender(){
+ if(renderQueued)return;renderQueued=true;
+ const run=()=>{if(renderQueued)render();};
+ if(typeof requestAnimationFrame==='function'&&!document.hidden)requestAnimationFrame(run);else queueMicrotask(run);
+}
 
-function opponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));}
+function buildRoster(){return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(p.steamAccountId||p.accountId||'')),...p,name:p.displayName||p.name||observations.get(String(p.steamAccountId||p.accountId||''))?.name,id:p.id||p.userId,selfReport:p.selfReport||p}));}
+
+function buildOpponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));}
 
 // Failed loads (often OpenDota's per-IP rate limit, shared by every open board) are
 // retried a few times per draft; meanwhile the card says it is waiting.
 const scoutRetries=new Map();
-function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});render();}).then(p=>{
+function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});scheduleRender();}).then(p=>{
  if(gen!==generation)return;
  const failed=Object.values(p.sources||{}).filter(s=>s?.status==='error');if(!failed.length)return;
  const tries=scoutRetries.get(gen+':'+key)||0;if(tries>=3)return;
  scoutRetries.set(gen+':'+key,tries+1);
  const sources=Object.fromEntries(Object.entries(p.sources).map(([k,s])=>[k,s?.status==='error'?{...s,retrying:true}:s]));
- observations.set(key,{...p,sources});render();
+ observations.set(key,{...p,sources});scheduleRender();
  // Re-scout through refreshScouting so a player removed meanwhile is not fetched again.
  setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?20000:8000);
 }).catch(e=>{if(gen===generation)notice(e.message);});}}
@@ -167,7 +200,7 @@ const stratzFailures=new Map();
 function requestStratz(id){
  if(demo||stratzRequested.has(String(id)))return;
  stratzRequested.add(String(id));
- void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;render();}})
+ void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;touch();scheduleRender();}})
   // Back off 1, 2, 4… minutes (at most 15), then retry on its own while the hero is still picked.
   .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>{stratzRequested.delete(String(id));if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);},Math.min(900000,60000*2**(n-1)));});
 }
@@ -178,13 +211,13 @@ function requestMatchup(id){
  void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:86400000}).then(rows=>{
   if(gen!==generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
-  matchups[id]=rows;
-  render();
+  matchups[id]=rows;touch();
+  scheduleRender();
  }).catch(()=>{
   if(gen!==generation)return;
   requestedMatchups.delete(id);
   matchupErrors.add(id);
-  render();
+  scheduleRender();
  });
 }
 function requestAllyCounters(id){
@@ -195,7 +228,7 @@ function requestAllyCounters(id){
   if(gen!==generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
   allyCounterMatchups[id]=rows;
-  render();
+  scheduleRender();
  }).catch(()=>{
   if(gen!==generation)return;
   allyCounterRequests.delete(id);
@@ -317,6 +350,7 @@ function stage(id,rec){
 }
 
 function render(){
+ renderQueued=false;
  const active=document.activeElement;
  let selector=active?.id?'#'+active.id:active?.dataset.heroId?'[data-hero-id="'+active.dataset.heroId+'"]':active?.name?'[name="'+active.name+'"][value="'+active.value+'"]':active?.classList.contains('primary')&&active.closest('#suggestions')?'#suggestions button.primary':null;
  const value=active?.value;
@@ -362,7 +396,7 @@ function renderView(){
 const SEAT_STATUS={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'};
 function seatData(player,side,taken,now){
  const hasAccount=side==='enemy'||player.steamAccountId||player.accountId;
- const summary=enemySummary(player,{now,heroes:Object.values(heroes)}),state=hasAccount?summary.state:'ready';
+ const summary=playerSummary(player,now),state=hasAccount?summary.state:'ready';
  const usable=state==='ready'||(side==='ally'&&!hasAccount);
  const stats={topHeroes:heroStatRows(player.heroes)};
  // An absence label is only true once the sources behind it have answered.
@@ -450,13 +484,8 @@ function focusedHeroIds(taken){
 }
 
 function suggestionSets(){
- const seats=[...roster(),...opponents()].map(p=>[p.id,p.availability,p.selfReport,p.heroes,p.recent,p.matches]);
- const key=JSON.stringify([state.actions,state.firstPick,seats,matchups,Object.keys(stratz),Object.keys(heroes).length]);
- if(key===suggestionCache.key)return suggestionCache;
- const input={heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick};
- const top=mode=>new Set(recommend({...input,mode}).slice(0,8).map(row=>+row.heroId));
- suggestionCache={key,pick:top('ourPick'),ban:top('ourBan')};
- return suggestionCache;
+ const c=derived(),top=mode=>new Set(ranking(mode).slice(0,8).map(row=>+row.heroId));
+ return c.sets||={pick:top('ourPick'),ban:top('ourBan')};
 }
 function enemyWinChips(){
  const chips=new Map();
@@ -513,6 +542,16 @@ function renderHeroes(){
  highlightSearch();
 }
 
+// Typing only changes which tiles match, so toggle the existing tiles. The Recommended
+// filter and the no-match message change which tiles exist: rebuild for those.
+function searchHeroes(){
+ searchIndex=0;
+ const tiles=[...$('hero-groups').querySelectorAll('.hero-tile')],query=$('hero-search').value.toLowerCase();
+ const misses=tiles.map(tile=>!!query&&!String(heroes[tile.dataset.heroId]?.localized_name||'').toLowerCase().includes(query));
+ if(heroFilter==='recommended'||!tiles.length||misses.every(Boolean)){renderHeroes();return;}
+ tiles.forEach((tile,i)=>tile.classList.toggle('is-search-miss',misses[i]));
+ highlightSearch();
+}
 function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:not(:disabled):not(.is-search-miss)')];}
 function highlightSearch(){const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});tiles[searchIndex]?.classList.add('is-highlighted');const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
 
@@ -530,7 +569,7 @@ function heroEvidence(heroId,sources,playerId){
  return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
 }
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick});rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p','All 24 actions recorded.'));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=ranking(turn.mode);rankedIds=new Set(ranked.slice(0,8).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));
@@ -557,7 +596,7 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 
 // Public OpenDota history for one enemy: what to ban against them.
 function enemyDetails(card,p){
- const s=enemySummary(p,{now:Math.floor(Date.now()/1000),heroes:Object.values(heroes)});
+ const s=playerSummary(p,Math.floor(Date.now()/1000));
  const seen=seenAgainstUs(p);if(seen)card.append(el('p',seen,'enemy-seen'));
  if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',waiting:'Waiting for OpenDota…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
  card.append(el('p',s.positions.length?'Likely '+s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown','player-role-summary'));
@@ -762,9 +801,9 @@ function renderDraftEnemies(){
  // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
  if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingScope+'|'+sightingDraftBase());
  const enemies=opponents();list.replaceChildren();section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));const hasReport=renderEnemyMatches(section);section.classList.toggle('has-match-report',hasReport);section.hidden=!hasReport&&!enemies.length;
- const heroList=Object.values(heroes),now=Math.floor(Date.now()/1000);
+ const now=Math.floor(Date.now()/1000);
  for(const p of enemies){
-  const s=enemySummary(p,{now,heroes:heroList}),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
+  const s=playerSummary(p,now),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
   const meta={loading:'Loading…',waiting:'Waiting for OpenDota…',closed:'Closed account',error:'Stats unavailable'}[s.state]
    ||(s.positions.length?s.positions.slice(0,2).map(r=>'Pos '+r.position).join(' · '):'Position unknown');
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
@@ -825,7 +864,8 @@ async function poll(){
  polling=true;const gen=generation,id=shared.id;let changed=false,leaving=false;
  try{
   const row=await backend.getDraft(id);if(gen!==generation)return;
-  changed=!healthy||JSON.stringify(row)!==JSON.stringify(shared);
+  // Every server-side draft update bumps revision; drafter is compared too as a cheap guard.
+  changed=!healthy||row.revision!==shared.revision||row.drafter_user_id!==shared.drafter_user_id;
   if(changed)adopt(row);
   if(Date.now()-lastRoster>30000){const fresh=await backend.loadRoster(row.team_id);if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}}
  }catch(e){
@@ -1144,7 +1184,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
    profile=saved;profileSaved=true;
 
    if(!$('team-view').hidden){homeRoster=homeRoster.map(item=>item.userId===user?.id?{...item,...profile}:item);renderTeamHome();}
-   if(!shared)state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,5);
+   if(!shared){state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,5);touch();}
 
    observations.clear();refreshScouting();saveLocal();render();
 
@@ -1700,7 +1740,7 @@ if(!teamInvitation&&new URLSearchParams(location.search).has('cup'))openCup();
 if(demo&&new URLSearchParams(location.search).has('team'))navigateTeam();
 
 
-$('hero-search').oninput=()=>{searchIndex=0;renderHeroes();};$('claim-drafter').onclick=safe(()=>mutate('claim'));$('release-drafter').onclick=safe(()=>mutate('release'));$('undo').onclick=safe(()=>mutate('undo'));$('first-pick').onchange=safe(()=>mutate('set_state',{firstPick:$('first-pick').checked}));$('reset-draft').onclick=safe(async()=>{if(confirm('Reset all draft actions?'))await mutate('reset');});
+$('hero-search').oninput=searchHeroes;$('claim-drafter').onclick=safe(()=>mutate('claim'));$('release-drafter').onclick=safe(()=>mutate('release'));$('undo').onclick=safe(()=>mutate('undo'));$('first-pick').onchange=safe(()=>mutate('set_state',{firstPick:$('first-pick').checked}));$('reset-draft').onclick=safe(async()=>{if(confirm('Reset all draft actions?'))await mutate('reset');});
 
 $('create-session').onclick=safe(async()=>{if(!user||!team||demo)throw Error('Select a team first.');const teamId=team.id;if(!await loadTeam(teamId,{preserveSelection:true}))return;const row=await backend.createDraft(teamId,{actions:[],firstPick:true,enemyIds:[],roster:draftRoster(),assignments:{},source:'manual'});await openDraft(row.id);});
 
@@ -1709,7 +1749,7 @@ $('join-session').onclick=safe(async()=>{let id=$('session-input').value.trim();
 document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=heroChoices().length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
 
 for(const control of document.querySelectorAll('[data-hero-filter]'))control.onclick=()=>{heroFilter=control.dataset.heroFilter;searchIndex=0;for(const other of document.querySelectorAll('[data-hero-filter]'))other.setAttribute('aria-pressed',String(other===control));renderHeroes();};
-$('clear-hero-search').onclick=()=>{$('hero-search').value='';searchIndex=0;renderHeroes();$('hero-search').focus();};
+$('clear-hero-search').onclick=()=>{$('hero-search').value='';searchHeroes();$('hero-search').focus();};
 $('drafter-seat').onclick=()=>{const action=!$('claim-drafter').disabled?$('claim-drafter'):$('release-drafter');action.scrollIntoView?.({block:'center'});if(!action.hidden)action.focus();};
 const skip=document.querySelector('.skip-link');if(skip)skip.onclick=e=>{e.preventDefault();if(!$('cup-view').hidden)$('cup-view').focus();else if(!$('team-view').hidden)$('team-title')?.focus();else focusDraftView();};
 function openLinkInvitation(){
@@ -1727,7 +1767,10 @@ window.addEventListener('popstate',()=>void safe(async()=>{
  if(params.has('cup')){if(user)await enterGated(openCup);else openCup();return;}
  if(params.has('team')&&(user||demo)){if(user)await enterGated(()=>navigateTeam());else navigateTeam();return;}
  showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
-setInterval(()=>{void poll();refreshSightings();},3000);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
+// A hidden tab skips its sync ticks and catches up once when shown again; poll() ignores
+// overlapping calls, so a focus event arriving with the visibility change cannot double it.
+const syncTick=()=>{if(document.hidden)return;void poll();refreshSightings();};
+setInterval(syncTick,3000);document.addEventListener('visibilitychange',syncTick);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
 
 if(imageId!==null){
  $('welcome-view').hidden=true;
@@ -1735,9 +1778,9 @@ if(imageId!==null){
  $('identity-download').hidden=false;
 } else {showTeamInvitation();render();refreshScouting();if(demo&&new URLSearchParams(location.search).has('profile'))profileDialog();}
 
-if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));suggestionCache.key='';render();}).catch(()=>{});
+if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));touch();render();}).catch(()=>{});
 
-if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};suggestionCache.key='';render();}).catch(()=>{});
+if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:86400000}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};touch();render();}).catch(()=>{});
 
 if(imageId!==null)void (async()=>{
  const root=$('identity-download');
