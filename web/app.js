@@ -5,8 +5,7 @@ import {mountTeamIdentity,showIdentityDownload,demoIdentityBackend} from './team
 import {liveLineup} from './live-roster.js';
 import {mountBattleCup} from './bcup.js';
 import {createWelcome} from './welcome.js';
-import snapshot from './heroes.json';
-import {CM_ORDER,CM_PHASE_STARTS,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
+import {CM_ORDER,CM_PHASE_STARTS,nextTurn,parseAccountIds,normalizeProfile,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
 import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES,WARN_RATE} from './draft-stats.js';
 import {renderPlayerRail,resetAllyEntry,SEAT_STATUS} from './war-room.js';
 import {publicData,loadPlayer,loadHeroes} from './data.js';
@@ -15,11 +14,12 @@ import * as matchData from './data.js';
 import {initialState,demoState,reduceDraft} from './demo.js';
 import {createBackend} from './backend.js';
 import {createTeamScopedStore} from './team-store.js';
-import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
+import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
 import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,storageKey,codeFromInvitation,imageId} from './url-state.js';
 import {store} from './store.js';
 import {$,el,notice,safe,button,field,focusDraftView,show,showIfClosed} from './dom.js';
 import {ui,scheduleRender,render} from './ui.js';
+import {accountOf,memberId,providerName,stratz,stratzRequested,touch,observations,requestedMatchups,matchupErrors,allyCounterRequests,allyCounterFailures,resetDraftData,matchupCoverage,canWrite,roleNames,heroName,portrait,derived,roster,opponents,playerSummary,ranking} from './draft-data.js';
 Object.assign(ui,{renderView});
 
 // Timings (ms) and local storage caps of the board.
@@ -39,86 +39,33 @@ const LOADING_FALLBACK_MS=15000;
 const LOCAL_MATCH_CAP=200;
 const LOCAL_SIGHTING_CAP=2000;
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
-// A player's public account ID, under either field name a roster entry may use.
-const accountOf=p=>p.steamAccountId||p.accountId;
-// A roster player's user ID, under either field name a roster entry may use.
-const memberId=p=>p.id||p.userId;
-// Name an auth provider gave the account (email sign-up, Google, Steam), if any.
-const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
 let invitationView=null;
 let accountReady=Promise.resolve();
 let accountGen=0;
 let observedAuthUser;
 let authEvent=0;
-
-let heroes=snapshot;
-let state=demo?demoState():initialState();
-let profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {};
-let backend;
-let user;
-let shared;
-let teams=[];
-let team;
-let selected=null;
-let pending=false;
-let localControl=true;
-let generation=0;
-let polling=false;
-let healthy=true;
-let lastRoster=0;
-
-// STRATZ Divine+ counters/synergy per picked hero; hero-level, so kept across drafts.
-let stratz={};
-let stratzRequested=new Set();
-// Ranking inputs that change in place bump dataVersion; `state` and `heroes` are
-// replaced or touched on change, so (state, heroes, dataVersion) keys every cache below.
-let dataVersion=0;
-function touch(){dataVersion++;}
-class VersionedMap extends Map{set(k,v){touch();return super.set(k,v);}delete(k){touch();return super.delete(k);}clear(){touch();super.clear();}}
-let observations=new VersionedMap();
-let matchups={};
-let requestedMatchups=new Set();
 let draftOpen=0;
 let reviewVisible=true;
-// Optional seat data: kept apart from `matchups`, which recommend() reads.
-let allyCounterMatchups={};
-let focusedPlayer=null;
-let suggestionCache={};
-const matchupErrors=new Set();
-const allyCounterRequests=new Set();
-const allyCounterFailures=new Set();
 
 try {
  const saved=JSON.parse(localStorage.getItem(storageKey)||'null');
- if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}
+ if(saved&&!demo){store.state={...initialState(),...saved.state};store.profile=saved.profile||{};}
 }catch{}
 
-function practiceKey(){return user?'captain-practice-v1:'+user.id:storageKey;}
-function saveLocal(){if(!shared&&!demo)try{localStorage.setItem(practiceKey(),JSON.stringify({state,profile}));}catch{}}
+function practiceKey(){return store.user?'captain-practice-v1:'+store.user.id:storageKey;}
+function saveLocal(){if(!store.shared&&!demo)try{localStorage.setItem(practiceKey(),JSON.stringify({state:store.state,profile:store.profile}));}catch{}}
 function restorePractice(){
- state=initialState();
+ store.state=initialState();
  try{
   const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');
-  if(saved){state={...initialState(),...saved.state};if(!user)profile=saved.profile||{};return;}
+  if(saved){store.state={...initialState(),...saved.state};if(!store.user)store.profile=saved.profile||{};return;}
  }catch{}
- if(user){state.roster=[{...profile,id:user.id}];touch();}
-}
-function resetDraftData(){
- observations.clear();
- matchups={};
- requestedMatchups.clear();
- matchupErrors.clear();
- allyCounterMatchups={};
- allyCounterRequests.clear();
- allyCounterFailures.clear();
- touch();
- suggestionCache={};
- focusedPlayer=null;
+ if(store.user){store.state.roster=[{...store.profile,id:store.user.id}];touch();}
 }
 function detachWorkspace(){
  stopLiveWatch();resetAllyEntry();
- ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
- state=demo?demoState():initialState();
+ ++store.generation;++draftOpen;++teamLoad;store.shared=null;store.pending=false;store.healthy=true;store.polling=false;store.selected=null;store.localControl=true;
+ store.state=demo?demoState():initialState();
  resetDraftData();reviewVisible=true;
 }
 function enterPractice({navigate=true}={}){
@@ -127,69 +74,18 @@ function enterPractice({navigate=true}={}){
  $('draft-button').click();
  render();refreshScouting();
 }
-function matchupCoverage(){
- const ours=state.actions.filter(a=>a.mode==='ourPick'),enemies=state.actions.filter(a=>a.mode==='enemyPick');
- let observed=0;
- for(const ally of ours)for(const enemy of enemies){
-  if((matchups[ally.heroId]||[]).some(row=>+row.hero_id===+enemy.heroId&&+row.games_played>0)||(matchups[enemy.heroId]||[]).some(row=>+row.hero_id===+ally.heroId&&+row.games_played>0))observed++;
- }
- return {observed,total:ours.length*enemies.length};
-}
-
-const canWrite=()=>!playerDemo&&!pending&&healthy&&(shared?!!user&&shared.drafter_user_id===user.id:localControl);
-
-const roleNames=ROLE_NAMES;
-
-const heroName=id=>heroes[id]?.localized_name||'Unknown hero';
-
-function portrait(id){
- const h=heroes[id],img=el('img');
- img.alt=heroName(id);
- img.loading='lazy';
- img.src=HERO_PORTRAIT_BASE+String(h?.name||'').replace('npc_dota_hero_','')+'.png';
- return img;
-}
-
-// Derived draft data, rebuilt only when a ranking input changes.
-function derived(){
- const c=suggestionCache;
- if(c.state===state&&c.heroes===heroes&&c.version===dataVersion)return c;
- return suggestionCache={state,heroes,version:dataVersion,ranked:new Map(),summaries:new WeakMap()};
-}
-function roster(){const c=derived();return [...(c.roster||=buildRoster())];}
-function opponents(){const c=derived();return [...(c.opponents||=buildOpponents())];}
-function heroList(){const c=derived();return c.heroList||=Object.values(heroes);}
-function playerSummary(player,now){
- const c=derived(),hit=c.summaries.get(player);
- if(hit?.now===now)return hit.value;
- const value=enemySummary(player,{now,heroes:heroList()});
- c.summaries.set(player,{now,value});return value;
-}
-function ranking(mode){
- const c=derived();
- if(!c.ranked.has(mode))c.ranked.set(mode,recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick,mode}));
- return c.ranked.get(mode);
-}
-
-function buildRoster(){
- return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(accountOf(p)||'')),...p,name:p.displayName||p.name||observations.get(String(accountOf(p)||''))?.name,id:memberId(p),selfReport:p.selfReport||p}));
-}
-
-function buildOpponents(){
- return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));
-}
 
 // Failed loads (often OpenDota's per-IP rate limit, shared by every open board) are
 // retried a few times per draft; meanwhile the card says it is waiting.
 const scoutRetries=new Map();
 function scout(ids){
- const gen=generation;
+ const gen=store.generation;
  for(const id of ids.filter(Boolean)){
   const key=String(id);
   if(observations.has(key))continue;
   observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});
-  void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});scheduleRender();}).then(p=>{
- if(gen!==generation)return;
+  void loadPlayer(id,p=>{if(gen!==store.generation)return;observations.set(key,{...p,sources:{...p.sources}});scheduleRender();}).then(p=>{
+ if(gen!==store.generation)return;
  const failed=Object.values(p.sources||{}).filter(s=>s?.status==='error');if(!failed.length)return;
  const tries=scoutRetries.get(gen+':'+key)||0;if(tries>=3)return;
  scoutRetries.set(gen+':'+key,tries+1);
@@ -197,11 +93,11 @@ function scout(ids){
  observations.set(key,{...p,sources});scheduleRender();
  // Re-scout through refreshScouting so a player removed meanwhile is not fetched again.
  setTimeout(()=>{
-  if(gen!==generation||observations.get(key)?.sources!==sources)return;
+  if(gen!==store.generation||observations.get(key)?.sources!==sources)return;
   observations.delete(key);
   refreshScouting();
  },failed.some(s=>s.rateLimited)?SCOUT_RETRY_RATE_LIMITED_MS:SCOUT_RETRY_MS);
-}).catch(e=>{if(gen===generation)notice(e.message);});
+}).catch(e=>{if(gen===store.generation)notice(e.message);});
  }
 }
 
@@ -214,7 +110,7 @@ function stratzCredit(){
  return credit;
 }
 function appendStratzCredit(){
- const root=$('suggestions');if(!root||root.querySelector('.stratz-credit')||!state.actions.some(a=>stratz[a.heroId]))return;
+ const root=$('suggestions');if(!root||root.querySelector('.stratz-credit')||!store.state.actions.some(a=>stratz[a.heroId]))return;
  root.append(stratzCredit());
 }
 const stratzFailures=new Map();
@@ -230,7 +126,7 @@ function requestStratz(id){
    stratzFailures.set(String(id),n);
    setTimeout(()=>{
     stratzRequested.delete(String(id));
-    if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);
+    if(store.state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);
    },Math.min(STRATZ_RETRY_MAX_MS,STRATZ_RETRY_BASE_MS*2**(n-1)));
   });
 }
@@ -240,26 +136,26 @@ function requestStratz(id){
 function loadMatchups(id,cache,requested,failed,{ranking}){
  if(demo||requested.has(id)||failed.has(id))return;
  requested.add(id);
- const gen=generation;
+ const gen=store.generation;
  void publicData.request('/heroes/'+id+'/matchups',{priority:5,ttl:DAY_MS}).then(rows=>{
-  if(gen!==generation)return;
+  if(gen!==store.generation)return;
   if(!Array.isArray(rows))throw Error('Invalid matchup response');
   cache()[id]=rows;if(ranking)touch();
   scheduleRender();
  }).catch(()=>{
-  if(gen!==generation)return;
+  if(gen!==store.generation)return;
   requested.delete(id);
   failed.add(id);
   if(ranking)scheduleRender();
  });
 }
-function requestMatchup(id){loadMatchups(id,()=>matchups,requestedMatchups,matchupErrors,{ranking:true});}
-function requestAllyCounters(id){loadMatchups(id,()=>allyCounterMatchups,allyCounterRequests,allyCounterFailures,{ranking:false});}
+function requestMatchup(id){loadMatchups(id,()=>store.matchups,requestedMatchups,matchupErrors,{ranking:true});}
+function requestAllyCounters(id){loadMatchups(id,()=>store.allyCounterMatchups,allyCounterRequests,allyCounterFailures,{ranking:false});}
 function refreshScouting(){
  if(demo)return;
- const members=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
- scout([...(state.enemyIds||[]),...members.map(accountOf)]);
- for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){requestMatchup(action.heroId);requestStratz(action.heroId);}
+ const members=(Array.isArray(store.state.roster)?store.state.roster:[]).filter(p=>p&&typeof p==='object');
+ scout([...(store.state.enemyIds||[]),...members.map(accountOf)]);
+ for(const action of store.state.actions.filter(a=>a.mode.endsWith('Pick'))){requestMatchup(action.heroId);requestStratz(action.heroId);}
 }
 
 let searchIndex=0;
@@ -269,7 +165,7 @@ let steamEnabled=false;
 let googleEnabled=false;
 let profileSaved=false;
 let profileSetupRequired=false;
-const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>shared?welcome.board():enterGated(resumeRoute)),onPractice:()=>{
+const welcome=createWelcome({getBackend:()=>store.backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>store.shared?welcome.board():enterGated(resumeRoute)),onPractice:()=>{
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
@@ -289,10 +185,10 @@ let resumingAccount=null;
 // While sign-in is still resuming, authChanged routes from the current URL itself, so
 // a shortcut must not race it.
 async function enterGated(go){
- if(resumingAccount===generation||welcome.recovery||showTeamInvitation())return;
- const gen=generation,account=user?.id,ready=accountReady;if(!account)return;
+ if(resumingAccount===store.generation||welcome.recovery||showTeamInvitation())return;
+ const gen=store.generation,account=store.user?.id,ready=accountReady;if(!account)return;
  await ready;
- if(gen!==generation||user?.id!==account||welcome.recovery||showTeamInvitation())return;
+ if(gen!==store.generation||store.user?.id!==account||welcome.recovery||showTeamInvitation())return;
  if(profileSetupRequired)startProfileSetup(go);else await go();
 }
 // Opens what the address asks for: a shared draft, Battle Cup, the practice board, or Team.
@@ -308,25 +204,25 @@ async function resumeRoute(){
 
 function showTeamInvitation(force=false){
  const invitation=store.teamInvitation;if(!invitation||welcome.recovery)return false;
- const account=user?.id||null;
+ const account=store.user?.id||null;
  if(force!==true&&invitationView?.invitation===invitation&&invitationView.account===account&&$('team-invite-heading'))return true;
  invitationView={invitation,account};
  for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  welcome.invitation({
   teamName:invitation.teamName,
-  account:user&&(profile?.displayName||providerName(user)||(user.email&&!user.email.endsWith('.invalid')?user.email:'Steam player')),invalid:!invitation.code,
+  account:store.user&&(store.profile?.displayName||providerName(store.user)||(store.user.email&&!store.user.email.endsWith('.invalid')?store.user.email:'Steam player')),invalid:!invitation.code,
   onAccept:async()=>{
-   const gen=generation,ready=accountReady,eventAtClick=authEvent;
-   const isCurrent=()=>gen===generation&&user?.id===account&&invitation===store.teamInvitation
+   const gen=store.generation,ready=accountReady,eventAtClick=authEvent;
+   const isCurrent=()=>gen===store.generation&&store.user?.id===account&&invitation===store.teamInvitation
     &&(authEvent===eventAtClick||observedAuthUser===account);
    if(!account||!isCurrent())throw Error('The active account changed. Open the invitation again.');
    let joined;
-   try{joined=await backend.joinTeam(invitation.code,account);}catch(error){
+   try{joined=await store.backend.joinTeam(invitation.code,account);}catch(error){
     if(!isCurrent())return;
     if(error.code==='22023'){
      forgetInvitation(invitation.code);
      store.teamInvitation=null;
-     welcome.invitation({invalid:true,expired:true,onDismiss:()=>user?enterGated(()=>navigateCup()):navigateCup()});
+     welcome.invitation({invalid:true,expired:true,onDismiss:()=>store.user?enterGated(()=>navigateCup()):navigateCup()});
      return;
     }
     throw error;
@@ -334,27 +230,27 @@ function showTeamInvitation(force=false){
    if(!joined?.id)throw Error('The team could not be confirmed. Try joining again.');
    await ready;
    if(!isCurrent())return;
-   if(!teams.some(t=>t.id===joined.id))teams=[...teams,joined];
+   if(!store.teams.some(t=>t.id===joined.id))store.teams=[...store.teams,joined];
    forgetInvitation(invitation.code);store.teamInvitation=null;
-   if(shared){detachWorkspace();restorePractice();}
+   if(store.shared){detachWorkspace();restorePractice();}
    const url=new URL(location.href);url.searchParams.delete('draft');url.searchParams.delete('practice');history.replaceState(history.state,'',url);
    const roster=loadTeam(joined.id);
    if(profileSetupRequired)startProfileSetup(()=>navigateTeam(joined.id),joined);
    else{navigateTeam(joined.id);profileDialog(false,joined);}
    void roster.catch(()=>{}); // Setup can retry loading the selected roster independently.
   },
-  onSwitch:async()=>{await backend.signOut();if(user?.id===account)await authChanged(null);},
+  onSwitch:async()=>{await store.backend.signOut();if(store.user?.id===account)await authChanged(null);},
   onDismiss:()=>{
    if(store.teamInvitation!==invitation)return;
    forgetInvitation(invitation.code);
    store.teamInvitation=null;
-   if(user)return enterGated(resumeRoute);
+   if(store.user)return enterGated(resumeRoute);
    welcome.home();
   },
  });
- if(invitation.code&&backend?.previewTeamInvitation&&!invitation.previewRequested){
+ if(invitation.code&&store.backend?.previewTeamInvitation&&!invitation.previewRequested){
   invitation.previewRequested=true;
-  void backend.previewTeamInvitation(invitation.code).then(name=>{
+  void store.backend.previewTeamInvitation(invitation.code).then(name=>{
    if(store.teamInvitation!==invitation||!name)return;
    invitation.teamName=name;
    const heading=$('team-invite-heading');
@@ -365,7 +261,7 @@ function showTeamInvitation(force=false){
 }
 
 function stage(id,rec){
- selected={id,...rec};
+ store.selected={id,...rec};
  render();
  const confirm=$('suggestions').querySelector('button.primary');
  if(!confirm||confirm.disabled)return;
@@ -374,21 +270,21 @@ function stage(id,rec){
  if(bounds.top<0||bounds.bottom>window.innerHeight)confirm.scrollIntoView?.({block:'center',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
 }
 function renderView(){
- $('signout-button').hidden=!user||demo;
+ $('signout-button').hidden=!store.user||demo;
 
- const turn=nextTurn(state.actions,state.firstPick),write=canWrite();
+ const turn=nextTurn(store.state.actions,store.state.firstPick),write=canWrite();
 
- $('connection-status').textContent=demo?'Demo · sample data':shared?(healthy?'Shared · synced':'Shared · reconnecting'):'Practice · this device';
+ $('connection-status').textContent=demo?'Demo · sample data':store.shared?(store.healthy?'Shared · synced':'Shared · reconnecting'):'Practice · this device';
 
- $('session-code').textContent=shared?shared.id.slice(0,8):'Local';
- $('copy-session').disabled=!shared;
+ $('session-code').textContent=store.shared?store.shared.id.slice(0,8):'Local';
+ $('copy-session').disabled=!store.shared;
 
- $('session-status').textContent=shared&&!write?'Following draft · updates sync automatically. Become drafter to make changes.':demo?'Demo never writes to the backend.':user?'Signed in · select a team and draft.':'Local practice. Sign in for shared drafts.';
+ $('session-status').textContent=store.shared&&!write?'Following draft · updates sync automatically. Become drafter to make changes.':demo?'Demo never writes to the backend.':store.user?'Signed in · select a team and draft.':'Local practice. Sign in for shared drafts.';
 
- $('draft-owner').textContent=playerDemo?'Sam · captain controls the draft':shared?(shared.drafter_user_id?(roster().find(p=>p.id===shared.drafter_user_id)?.name||'Team member')+' controls the draft':'Seat available'):(localControl?'You · local practice':'Local seat available');
+ $('draft-owner').textContent=playerDemo?'Sam · captain controls the draft':store.shared?(store.shared.drafter_user_id?(roster().find(p=>p.id===store.shared.drafter_user_id)?.name||'Team member')+' controls the draft':'Seat available'):(store.localControl?'You · local practice':'Local seat available');
 
- $('claim-drafter').disabled=pending||!healthy||!!(shared?.drafter_user_id)||(!shared&&localControl);
- $('release-drafter').hidden=shared?!user||!(shared.drafter_user_id===user.id||teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id):!localControl;
+ $('claim-drafter').disabled=store.pending||!store.healthy||!!(store.shared?.drafter_user_id)||(!store.shared&&store.localControl);
+ $('release-drafter').hidden=store.shared?!store.user||!(store.shared.drafter_user_id===store.user.id||store.teams.find(t=>t.id===store.shared.team_id)?.owner_user_id===store.user.id):!store.localControl;
 
  if(playerDemo){
   $('claim-drafter').hidden=true;
@@ -397,12 +293,12 @@ function renderView(){
   $('session-status').textContent='Player demo · follow the captain’s picks and bans.';
  }
  $('turn-label').textContent=turn?(turn.side==='our'?'Our ':'Enemy ')+turn.action:'Draft complete';
- $('turn-progress').textContent=`${state.actions.length} / ${CM_ORDER.length} actions · ${demo?'Invented demo':shared?'Shared team draft':'Manual practice'}`;
+ $('turn-progress').textContent=`${store.state.actions.length} / ${CM_ORDER.length} actions · ${demo?'Invented demo':store.shared?'Shared team draft':'Manual practice'}`;
 
- $('undo').disabled=!write||!state.actions.length;
+ $('undo').disabled=!write||!store.state.actions.length;
  $('reset-draft').disabled=!write;
- $('first-pick').checked=state.firstPick;
- $('first-pick').disabled=!write||!!state.actions.length;
+ $('first-pick').checked=store.state.firstPick;
+ $('first-pick').disabled=!write||!!store.state.actions.length;
 
  renderSeats();
  renderDraftTree();
@@ -410,7 +306,7 @@ function renderView(){
  for(const side of ['our','enemy']){
   const list=$(side+'-lineup');
   list.replaceChildren();
-  const picks=state.actions.filter(a=>a.mode===side+'Pick');
+  const picks=store.state.actions.filter(a=>a.mode===side+'Pick');
   for(let i=0;i<ROSTER_SIZE;i++){
    const li=el('li',null,'lineup-slot'),a=picks[i];
    if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));
@@ -430,9 +326,9 @@ function renderView(){
  if(!turn){
   const n=$('analysis');
   n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));
-  const review=reviewLineup({draft:state.actions,stratz,heroes});
+  const review=reviewLineup({draft:store.state.actions,stratz,heroes:store.heroes});
   for(const side of ['our','enemy']){
-   const picks=state.actions.filter(a=>a.mode===side+'Pick'),info=review[side];
+   const picks=store.state.actions.filter(a=>a.mode===side+'Pick'),info=review[side];
    n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));
    for(const a of picks){
     const row=el('div',null,'review-player');
@@ -445,7 +341,7 @@ function renderView(){
    n.append(el('p','Matchup edge (Divine+): '+(info.edge===null?'no data':`${info.edge>=0?'+':''}${info.edge.toFixed(1)} per matchup across ${info.pairs} matchups`)));
   }
   if([...review.our.heroes,...review.enemy.heroes].some(h=>h.notes.some(x=>x.tone!=='info')))n.append(stratzCredit());
-  n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));
+  n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+store.state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));
   button('Show hero board',()=>{reviewVisible=false;render();},n);
  }
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
@@ -476,7 +372,7 @@ function seatData(player,side,taken,now){
   if(target)banIds=[+target.heroId];
  }else if(comfort[0]){
   requestAllyCounters(comfort[0].heroId);
-  const counters=allyCounterBans(comfort[0].heroId,allyCounterMatchups[comfort[0].heroId],taken);
+  const counters=allyCounterBans(comfort[0].heroId,store.allyCounterMatchups[comfort[0].heroId],taken);
   if(counters.length){bans=counters.map(row=>heroName(row.heroId)).join(', ');banIds=counters.map(row=>+row.heroId);}
  }
  const cup=usable?recentCupGames(player,now):[];
@@ -484,35 +380,35 @@ function seatData(player,side,taken,now){
  return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup,cupEmpty:absence(['recent','matches'],'No recent cups'),heroIds:[...new Set([...comfort.map(row=>+row.heroId),...cup.map(game=>+game.heroId),...banIds])]};
 }
 function renderSeats(){
- const taken=new Set(state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
+ const taken=new Set(store.state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
  renderPlayerRail($('player-rail'),{
   allies:roster().slice(0,ROSTER_SIZE).map(player=>seatData(player,'ally',taken,now)),
   enemies:opponents().slice(0,ROSTER_SIZE).map(player=>seatData(player,'enemy',taken,now)),
-  focusId:focusedPlayer,portrait,heroName,
-  onToggle:id=>{focusedPlayer=focusedPlayer===id?null:id;render();},
+  focusId:store.focusedPlayer,portrait,heroName,
+  onToggle:id=>{store.focusedPlayer=store.focusedPlayer===id?null:id;render();},
   onAddEnemy:safe(lobby),
   // Local practice only: add a teammate to an open seat by public ID, no Setup or team needed.
-  onAddAlly:!shared&&!demo&&canWrite()?addAllyById:null
+  onAddAlly:!store.shared&&!demo&&canWrite()?addAllyById:null
  });
 }
 async function addAllyById(text){
  const tokens=String(text||'').trim().split(/[\s,;]+/).filter(Boolean),ids=parseAccountIds(text);
  if(tokens.length!==1||ids.length!==1)throw Error('Enter one valid player ID or profile link.');
- const current=(Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object');
+ const current=(Array.isArray(store.state.roster)?store.state.roster:[]).filter(p=>p&&typeof p==='object');
  if(current.length>=ROSTER_SIZE)throw Error('Our team already has five players.');
  const id=String(ids[0]);
  if(current.some(p=>String(accountOf(p)||'')===id))throw Error('This player is already on our team.');
  await mutate('set_state',{roster:[...current,{id,name:id,steamAccountId:id}]});
  // mutate() returns quietly while another change is still saving; only confirm a real change.
- if(!(state.roster||[]).some(p=>String(p?.steamAccountId||'')===id))throw Error('Another change is still saving. Try again.');
+ if(!(store.state.roster||[]).some(p=>String(p?.steamAccountId||'')===id))throw Error('Another change is still saving. Try again.');
  notice('Player '+id+' added to our team.');
 }
 let freshActionIndex=-1;
 function renderDraftTree(){
  const tree=$('timeline');tree.replaceChildren();$('history-inspect').textContent='Select a recorded hero to inspect the action.';
  CM_ORDER.forEach((step,index)=>{
-  const ours=step.team===(state.firstPick?'A':'B');
-  const recorded=state.actions[index],current=index===state.actions.length;
+  const ours=step.team===(store.state.firstPick?'A':'B');
+  const recorded=store.state.actions[index],current=index===store.state.actions.length;
   const row=el('div',null,'tree-turn');
   row.dataset.side=ours?'our':'enemy';
   row.dataset.action=step.action.toLowerCase();
@@ -529,7 +425,7 @@ function renderDraftTree(){
   slot.setAttribute('aria-label',label);
   slot.title=label;
   if(current)slot.setAttribute('aria-current','step');
-  const preview=current&&selected&&heroes[selected.id]&&!state.actions.some(a=>+a.heroId===+selected.id)?selected.id:null;
+  const preview=current&&store.selected&&store.heroes[store.selected.id]&&!store.state.actions.some(a=>+a.heroId===+store.selected.id)?store.selected.id:null;
   if(preview!=null){
    const text=label+', previewing '+heroName(preview);
    slot.setAttribute('aria-label',text);
@@ -559,9 +455,9 @@ function renderDraftTree(){
 
 let heroFilter='all';
 function focusedHeroIds(taken){
- if(focusedPlayer==null)return null;
+ if(store.focusedPlayer==null)return null;
  const now=Math.floor(Date.now()/1000);
- const seat=[...roster().slice(0,ROSTER_SIZE).map(p=>[p,'ally']),...opponents().slice(0,ROSTER_SIZE).map(p=>[p,'enemy'])].find(([p])=>String(p.id)===focusedPlayer);
+ const seat=[...roster().slice(0,ROSTER_SIZE).map(p=>[p,'ally']),...opponents().slice(0,ROSTER_SIZE).map(p=>[p,'enemy'])].find(([p])=>String(p.id)===store.focusedPlayer);
  return seat?new Set(seatData(seat[0],seat[1],taken,now).heroIds):null;
 }
 
@@ -580,13 +476,13 @@ function enemyWinChips(){
 }
 function renderHeroes(){
  const root=$('hero-groups');root.replaceChildren();
- const ourPick=nextTurn(state.actions,state.firstPick)?.mode==='ourPick';
- const assigned=new Set(state.actions.filter(action=>action.mode==='ourPick').map(action=>action.playerId).filter(Boolean));
+ const ourPick=nextTurn(store.state.actions,store.state.firstPick)?.mode==='ourPick';
+ const assigned=new Set(store.state.actions.filter(action=>action.mode==='ourPick').map(action=>action.playerId).filter(Boolean));
  const available=roster().filter(player=>!assigned.has(player.id)&&player.selfReport.availability!=='unavailable');
  const wanted=new Set(ourPick?available.flatMap(player=>player.selfReport.desiredHeroes):[]);
  root.setAttribute('aria-label','Heroes by attribute, A to Z');
  const query=$('hero-search').value.toLowerCase();
- const takenBy=new Map(state.actions.map(action=>[+action.heroId,action.mode])),suggestions=suggestionSets(),chips=enemyWinChips(),playerHeroes=focusedHeroIds(new Set(takenBy.keys()));
+ const takenBy=new Map(store.state.actions.map(action=>[+action.heroId,action.mode])),suggestions=suggestionSets(),chips=enemyWinChips(),playerHeroes=focusedHeroIds(new Set(takenBy.keys()));
  const matches=hero=>hero.localized_name.toLowerCase().includes(query);
  let matched=0;
  const popularity=hero=>Number.isFinite(hero.pub_pick)&&hero.pub_pick>=0?hero.pub_pick:-1;
@@ -594,7 +490,7 @@ function renderHeroes(){
   const attributeFilter=heroFilter==='all-attr'?'all':heroFilter;
   const visibleGroup=heroFilter==='all'||heroFilter==='recommended'||attributeFilter===attribute;
   if(!visibleGroup)continue;
-  const list=Object.values(heroes).filter(hero=>hero.primary_attr===attribute&&(heroFilter!=='recommended'||(!takenBy.has(+hero.id)&&rankedIds.has(+hero.id)&&matches(hero))));
+  const list=Object.values(store.heroes).filter(hero=>hero.primary_attr===attribute&&(heroFilter!=='recommended'||(!takenBy.has(+hero.id)&&rankedIds.has(+hero.id)&&matches(hero))));
   matched+=list.filter(matches).length;
   list.sort((a,b)=>a.localized_name.localeCompare(b.localized_name));
   if(!list.length)continue;
@@ -605,7 +501,7 @@ function renderHeroes(){
   for(const hero of list){
    const tile=button('',()=>stage(+hero.id),grid,'hero-tile');tile.dataset.heroId=hero.id;
    tile.classList.toggle('is-wanted',wanted.has(+hero.id));tile.classList.toggle('is-recommended',rankedIds.has(+hero.id));
-   tile.setAttribute('aria-label',hero.localized_name);tile.setAttribute('aria-pressed',String(selected?.id===+hero.id));
+   tile.setAttribute('aria-label',hero.localized_name);tile.setAttribute('aria-pressed',String(store.selected?.id===+hero.id));
    tile.title=(wanted.has(+hero.id)?'Teammate wants to play · ':'')+(popularity(hero)>=0?'Public picks: '+hero.pub_pick.toLocaleString():'Public picks unavailable');
    const image=portrait(hero.id),takenMode=takenBy.get(+hero.id),mark=tileMark({takenMode,pick:suggestions.pick.has(+hero.id),ban:suggestions.ban.has(+hero.id)}),chip=takenMode?null:chips.get(+hero.id),state_=takenMode?(takenMode.endsWith('Ban')?', banned':', picked'):mark?.kind==='contested'?', contested':mark?.kind==='sug-pick'?', suggested pick':mark?.kind==='sug-ban'?', suggested ban':'';
    image.alt='';image.onerror=()=>tile.classList.add('is-image-missing');
@@ -634,7 +530,7 @@ function renderHeroes(){
 function searchHeroes(){
  searchIndex=0;
  const tiles=[...$('hero-groups').querySelectorAll('.hero-tile')],query=$('hero-search').value.toLowerCase();
- const misses=tiles.map(tile=>!!query&&!String(heroes[tile.dataset.heroId]?.localized_name||'').toLowerCase().includes(query));
+ const misses=tiles.map(tile=>!!query&&!String(store.heroes[tile.dataset.heroId]?.localized_name||'').toLowerCase().includes(query));
  if(heroFilter==='recommended'||!tiles.length||misses.every(Boolean)){renderHeroes();return;}
  tiles.forEach((tile,i)=>tile.classList.toggle('is-search-miss',misses[i]));
  highlightSearch();
@@ -679,12 +575,12 @@ function renderRecommendations(turn,write){
  root.append(best,dock);
  const ranked=ranking(turn.mode);
  rankedIds=new Set(ranked.slice(0,TOP_RECOMMENDATIONS).map(r=>r.heroId));
- const rec=selected?ranked.find(r=>r.heroId===selected.id):null;
- if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+ const rec=store.selected?ranked.find(r=>r.heroId===store.selected.id):null;
+ if(store.selected&&!store.state.actions.some(a=>+a.heroId===store.selected.id)){
 
  const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');
-  feature.append(portrait(selected.id),body);
-  body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));
+  feature.append(portrait(store.selected.id),body);
+  body.append(el('h3',heroName(store.selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));
   const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));
  if(reasons.length>1){
@@ -696,18 +592,18 @@ function renderRecommendations(turn,write){
 
  let player,position;
   if(turn.mode==='ourPick'){
-   const used=state.actions.filter(a=>a.mode==='ourPick'),playerLabel=el('label','Assign allied player','player-assignment');
+   const used=store.state.actions.filter(a=>a.mode==='ourPick'),playerLabel=el('label','Assign allied player','player-assignment');
    player=el('select');
    player.id='assigned-player';
    playerLabel.htmlFor=player.id;
    player.append(new Option('Unassigned',''));
    for(const p of roster().filter(p=>!used.some(a=>a.playerId===p.id)))player.append(new Option(p.name,p.id));
-   player.value=selected.playerId??rec?.playerId??'';
-   player.onchange=()=>{selected.playerId=player.value;};
+   player.value=store.selected.playerId??rec?.playerId??'';
+   player.onchange=()=>{store.selected.playerId=player.value;};
    playerLabel.append(player);
    const picker=el('fieldset',null,'position-picker'),options=el('div',null,'position-options'),status=el('p',null,'position-status');
    status.setAttribute('role','status');
-   position=Object.hasOwn(selected,'position')?selected.position:rec?.position??'';
+   position=Object.hasOwn(store.selected,'position')?store.selected.position:rec?.position??'';
    if(used.some(a=>+a.position===+position))position='';
    const update=()=>{status.textContent=position?'P'+position+' · '+roleNames[+position-1]:'Unassigned';};
    picker.append(el('legend','Assign position'),options);
@@ -718,13 +614,13 @@ function renderRecommendations(turn,write){
     radio.value=String(i);
     radio.checked=+position===i;
     radio.disabled=used.some(a=>+a.position===i);
-    radio.onchange=()=>{if(radio.checked){selected.position=position=radio.value;update();}};
+    radio.onchange=()=>{if(radio.checked){store.selected.position=position=radio.value;update();}};
     copy.append(el('strong','P'+i),el('small',roleNames[i-1]));
     label.append(radio,copy);
     options.append(label);
    }
    button('Unassigned',()=>{
-    selected.position=position='';
+    store.selected.position=position='';
     for(const radio of options.querySelectorAll('input'))radio.checked=false;
     update();
    },picker,'position-auto');
@@ -733,17 +629,17 @@ function renderRecommendations(turn,write){
    body.append(playerLabel,picker);
   }
 
- const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{
-  const a={mode:turn.mode,heroId:selected.id};
+ const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(store.selected.id)}`,async()=>{
+  const a={mode:turn.mode,heroId:store.selected.id};
   if(player?.value)a.playerId=player.value;
-  if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;
-  const before=state.actions.length;
+  if(position&&!store.state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;
+  const before=store.state.actions.length;
   await mutate('append',a);
-  if(state.actions.length===before+1){freshActionIndex=before;render();freshActionIndex=-1;}
+  if(store.state.actions.length===before+1){freshActionIndex=before;render();freshActionIndex=-1;}
  },feature,'primary');
   confirm.disabled=!write;
- button('Clear selection',()=>{selected=null;render();$('hero-search').focus();},feature,'clear-staged');
- if(!write)feature.append(el('p',playerDemo?'Only the captain can confirm picks and bans.':shared?'Become drafter to confirm this action.':'Take the drafter seat to confirm this action.','decision-readonly'));
+ button('Clear selection',()=>{store.selected=null;render();$('hero-search').focus();},feature,'clear-staged');
+ if(!write)feature.append(el('p',playerDemo?'Only the captain can confirm picks and bans.':store.shared?'Become drafter to confirm this action.':'Take the drafter seat to confirm this action.','decision-readonly'));
  dock.append(feature);
 
  }else dock.append(el('p','Choose a suggested hero or browse the pool. Review your selection here before confirming.','decision-empty'));
@@ -754,7 +650,7 @@ function renderRecommendations(turn,write){
  const more=el('details',null,'more-candidates');
  more.append(el('summary','More suggestions'));
  let candidateIndex=0;
- const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
+ const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==store.selected?.id),8,2);
  if(turn.mode==='ourPick'&&visibleCandidates.length){
   const legend=el('div',null,'rec-legend');
   legend.setAttribute('aria-label','Suggestion categories');
@@ -818,7 +714,7 @@ function enemyDetails(card,p){
 // Earlier Battle Cup matches pasted to scout the enemy team. Shared through the team
 // database inside a team draft; stored on this device otherwise or until the owner
 // applies migration 010.
-const matchStore=createTeamScopedStore({key:'captain-enemy-matches-v1',cap:LOCAL_MATCH_CAP,newestFirst:true,method:'listEnemyMatches',context:()=>({backend,shared,user}),
+const matchStore=createTeamScopedStore({key:'captain-enemy-matches-v1',cap:LOCAL_MATCH_CAP,newestFirst:true,method:'listEnemyMatches',context:()=>({backend:store.backend,shared:store.shared,user:store.user}),
  mapRow:r=>({matchId:String(r.match_id),enemySide:r.enemy_side,contextIds:r.context_enemy_ids||[],summary:r.summary,addedAt:Date.parse(r.added_at)}),onChange:()=>render(),
  onMissing:()=>notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.'),
  onLoadError:error=>notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'))});
@@ -830,14 +726,14 @@ async function addEnemyMatches(text){
  if(matchStore.state==='loading')throw Error('Team matches are still loading. Try again in a moment.');
  // A failed team load is retried on the next attempt instead of needing a reload.
  if(matchStore.state==='failed'){matchStore.scope=null;matchStore.sync();throw Error('Team matches could not be loaded. Retrying now; try again in a moment.');}
- const teamId=matchStore.remote?matchStore.team():null,scope=matchStore.scope,contextIds=(state.enemyIds||[]).map(String),failed=[],unsaved=[];
+ const teamId=matchStore.remote?matchStore.team():null,scope=matchStore.scope,contextIds=(store.state.enemyIds||[]).map(String),failed=[],unsaved=[];
  for(const id of ids){
   let summary;
   try{summary=await matchData.loadMatch(id);}catch{}
   if(scope!==matchStore.scope)return false;
   if(!Array.isArray(summary?.players)||!summary.players.length){failed.push(id);continue;}
   const row={matchId:id,summary,enemySide:matchStore.rows.find(r=>r.matchId===id)?.enemySide||null,contextIds,addedAt:Date.now()};
-  if(teamId){try{await backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);}catch{unsaved.push(id);continue;}}
+  if(teamId){try{await store.backend.saveEnemyMatch(teamId,id,summary,row.enemySide,contextIds);}catch{unsaved.push(id);continue;}}
   if(scope!==matchStore.scope)return false;
   matchStore.rows=[row,...matchStore.rows.filter(r=>r.matchId!==id)];
  }
@@ -851,14 +747,14 @@ async function addEnemyMatches(text){
 }
 async function setEnemyMatchSide(matchId,side){
  const teamId=matchStore.remote?matchStore.team():null,scope=matchStore.scope;
- if(teamId)await backend.setEnemyMatchSide(teamId,matchId,side);
+ if(teamId)await store.backend.setEnemyMatchSide(teamId,matchId,side);
  if(scope!==matchStore.scope)return;
  matchStore.rows=matchStore.rows.map(r=>r.matchId===matchId?{...r,enemySide:side}:r);if(!teamId)matchStore.writeLocal();render();
 }
 function renderEnemyMatches(section){
  section.querySelector('.draft-enemy-matches')?.remove();
- const rows=relevantEnemyMatches(matchStore.rows,state.enemyIds||[],Date.now());if(!rows.length)return false;
- const r=enemyMatchReport(rows,state.enemyIds||[]),root=el('div',null,'draft-enemy-matches');
+ const rows=relevantEnemyMatches(matchStore.rows,store.state.enemyIds||[],Date.now());if(!rows.length)return false;
+ const r=enemyMatchReport(rows,store.state.enemyIds||[]),root=el('div',null,'draft-enemy-matches');
  const resolved=r.matches.filter(m=>m.side),wins=resolved.filter(m=>m.won).length;
  root.append(el('h4','Their Battle Cup matches'),el('p',`${rows.length} match${rows.length===1?'':'es'} · ${wins}W ${resolved.filter(m=>m.won===false).length}L${r.anonymous?` · ${r.anonymous} anonymous picks`:''}`,'draft-enemy-match-summary'));
  const list=(cls,items,label)=>{
@@ -891,14 +787,14 @@ function renderEnemyMatches(section){
 }
 // Who played what against us: recorded by the team after its own games, so it also
 // covers closed accounts. Team database in team drafts, this device otherwise.
-const sightingStore=createTeamScopedStore({key:'captain-enemy-sightings-v1',cap:LOCAL_SIGHTING_CAP,newestFirst:false,method:'listEnemySightings',context:()=>({backend,shared,user}),
+const sightingStore=createTeamScopedStore({key:'captain-enemy-sightings-v1',cap:LOCAL_SIGHTING_CAP,newestFirst:false,method:'listEnemySightings',context:()=>({backend:store.backend,shared:store.shared,user:store.user}),
  mapRow:r=>({accountId:String(r.account_id),heroId:+r.hero_id,enemyWon:r.enemy_won??null,sourceKey:r.source_key,seenAt:Date.parse(r.seen_at)}),onChange:()=>render(),
  onLoadError:error=>notice('Could not load the team scouting list: '+(error.message||'try again later.'))});
 let assignment={key:null,map:{},result:''};
 // Called from the draft poll so idle teammates also see a newly saved assignment.
 function refreshSightings(){
  const teamId=sightingStore.team();
- if(teamId&&sightingStore.remote&&sightingStore.state==='ready'&&state.actions.length>=CM_ORDER.length&&Date.now()-sightingStore.loadedAt>SIGHTING_REFRESH_MS){
+ if(teamId&&sightingStore.remote&&sightingStore.state==='ready'&&store.state.actions.length>=CM_ORDER.length&&Date.now()-sightingStore.loadedAt>SIGHTING_REFRESH_MS){
   sightingStore.loadedAt=Date.now();
   sightingStore.reload(teamId);
  }
@@ -907,17 +803,17 @@ function refreshSightings(){
 // and the enemy accounts; a later Undo and re-pick stays the same game.
 function draftFingerprint(){
  let h=0x811c9dc5;
- const text=state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(state.enemyIds||[])].map(String).sort().join(',');
+ const text=store.state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(store.state.enemyIds||[])].map(String).sort().join(',');
  for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}
  return h.toString(16).padStart(8,'0');
 }
-const sightingDraftBase=()=>shared?.id?'draft:'+shared.id:'draft:practice';
+const sightingDraftBase=()=>store.shared?.id?'draft:'+store.shared.id:'draft:practice';
 const sightingGameKey=()=>sightingDraftBase()+':'+draftFingerprint();
 // Key last saved per draft in this session, so a corrected enemy list or opening replaces it.
 const lastSightingKey=new Map();
 async function saveSightings(entries){
  if(new Set(entries.map(e=>e.accountId)).size!==entries.length)throw Error('Assign each enemy account only once.');
- if(shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
+ if(store.shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
  sightingStore.sync();
  if(sightingStore.state==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
  if(sightingStore.state==='failed'){
@@ -927,10 +823,10 @@ async function saveSightings(entries){
  }
  const teamId=sightingStore.remote?sightingStore.team():null,scope=sightingStore.scope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
  const previous=lastSightingKey.get(slot)!==key?lastSightingKey.get(slot):null;
- if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
+ if(teamId)await store.backend.recordEnemySightings(teamId,key,entries,'manual');
  if(scope!==sightingStore.scope)return false;
  let staleKept=false;
- if(teamId&&previous)try{await backend.recordEnemySightings(teamId,previous,[],'manual');}catch{staleKept=true;}
+ if(teamId&&previous)try{await store.backend.recordEnemySightings(teamId,previous,[],'manual');}catch{staleKept=true;}
  if(scope!==sightingStore.scope)return false;
  // Remembered only once the earlier version is gone, so saving again retries the cleanup.
  if(!staleKept)lastSightingKey.set(slot,key);
@@ -947,13 +843,13 @@ function seenAgainstUs(p){
  return seen.length?'Seen vs us: '+seen.slice(0,4).map(h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`).join(', '):'';
 }
 function renderEnemyAssignment(root){
- const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
+ const picks=store.state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
  if(!picks.length||!enemies.length)return;
  sightingStore.sync();
- const key=sightingStore.scope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
+ const key=sightingStore.scope+'|'+sightingGameKey(),readOnly=!!store.shared&&!canWrite();
  // Teammates outside the drafter seat always see the saved assignment (refreshed by the poll);
  // the drafter's unsaved edits survive a failed poll or a pending action.
- const viewer=!!shared&&shared.drafter_user_id!==user?.id;
+ const viewer=!!store.shared&&store.shared.drafter_user_id!==store.user?.id;
  if(assignment.key!==key||viewer){
   const saved=sightingStore.rows.filter(r=>r.sourceKey===sightingGameKey());
   assignment={key,map:Object.fromEntries(saved.map(r=>[r.heroId,r.accountId])),result:saved.some(r=>r.enemyWon===true)?'lost':saved.some(r=>r.enemyWon===false)?'won':''};
@@ -993,10 +889,10 @@ function renderDraftEnemies(){
  sightingStore.sync();
  // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
  // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
- if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingStore.scope+'|'+sightingDraftBase());
+ if(!store.state.actions.length||store.shared&&store.shared.drafter_user_id!==store.user?.id)lastSightingKey.delete(sightingStore.scope+'|'+sightingDraftBase());
  const enemies=opponents();
  list.replaceChildren();
- section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));
+ section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===store.focusedPlayer));
  const hasReport=renderEnemyMatches(section);
  section.classList.toggle('has-match-report',hasReport);
  section.hidden=!hasReport&&!enemies.length;
@@ -1004,7 +900,7 @@ function renderDraftEnemies(){
  for(const p of enemies){
   const s=playerSummary(p,now),row=el('div',null,'draft-enemy');
   row.dataset.playerId=String(p.id);
-  row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
+  row.classList.toggle('is-focused',String(p.id)===store.focusedPlayer);
   const meta=SEAT_STATUS[s.state]||(s.positions.length?likelyPositions(s):'Position unknown');
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
   if(s.state==='ready'){
@@ -1025,8 +921,8 @@ function renderDraftEnemies(){
 }
 function renderRoster(){
  const root=$('team-roster');root.replaceChildren();
- const homeActive=!$('team-view').hidden&&user;
- const allies=homeActive?(homeTeamId?homeRoster:[{...profile,userId:user.id}]).map(item=>normalizeProfile({...item,id:item.userId,name:item.displayName||'Teammate'},item)):roster();
+ const homeActive=!$('team-view').hidden&&store.user;
+ const allies=homeActive?(homeTeamId?homeRoster:[{...store.profile,userId:store.user.id}]).map(item=>normalizeProfile({...item,id:item.userId,name:item.displayName||'Teammate'},item)):roster();
  for(const [label,players] of [['Our team',allies],['Enemy scouting',opponents()]]){
   if(!players.length)continue;
   const heading=el('h2',label,'roster-group-heading');root.append(heading);
@@ -1060,64 +956,64 @@ function renderRoster(){
 
 // After a rejected change: adopt the draft as the server has it, unless this view moved on.
 async function reloadDraft(id,gen){
- try{const row=await backend.getDraft(id);if(gen===generation){adopt(row);healthy=true;}}catch{if(gen===generation)healthy=false;}
+ try{const row=await store.backend.getDraft(id);if(gen===store.generation){adopt(row);store.healthy=true;}}catch{if(gen===store.generation)store.healthy=false;}
 }
 async function mutate(operation,payload={}){
  if(playerDemo)return;
- if(pending) return;
+ if(store.pending) return;
  if(!['claim','release'].includes(operation)&&!canWrite())throw Error('Become the confirmed drafter first.');
- pending=true;
+ store.pending=true;
  render();
- const gen=generation;
+ const gen=store.generation;
  try{
-  if(shared){
-   const id=shared.id;
+  if(store.shared){
+   const id=store.shared.id;
    try{
-    const row=await backend.mutateDraft(id,shared.revision,operation,payload);
-    if(gen===generation)adopt(row);
-   }catch(e){if(gen===generation){await reloadDraft(id,gen);throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}
+    const row=await store.backend.mutateDraft(id,store.shared.revision,operation,payload);
+    if(gen===store.generation)adopt(row);
+   }catch(e){if(gen===store.generation){await reloadDraft(id,gen);throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}
   }else{
-   if(operation==='claim')localControl=true;else if(operation==='release')localControl=false;else if(operation==='set_state'){
-    if('firstPick'in payload)state=reduceDraft(state,'set_first_pick',payload,{canWrite:true});
-    state={...state,...payload};
-   }else state=reduceDraft(state,operation,payload,{canWrite:true,heroes});
+   if(operation==='claim')store.localControl=true;else if(operation==='release')store.localControl=false;else if(operation==='set_state'){
+    if('firstPick'in payload)store.state=reduceDraft(store.state,'set_first_pick',payload,{canWrite:true});
+    store.state={...store.state,...payload};
+   }else store.state=reduceDraft(store.state,operation,payload,{canWrite:true,heroes:store.heroes});
    saveLocal();
   }
-  selected=null;
+  store.selected=null;
   $('hero-search').value='';
   searchIndex=0;
   refreshScouting();
- }finally{if(gen===generation){pending=false;render();}}
+ }finally{if(gen===store.generation){store.pending=false;render();}}
 }
 
 function adopt(row){
- if(!row||shared&&row.id!==shared.id)return;
- if(shared&&row.revision<shared.revision)return;
- shared=row;
- state={...initialState(),...row.state};
- healthy=true;
+ if(!row||store.shared&&row.id!==store.shared.id)return;
+ if(store.shared&&row.revision<store.shared.revision)return;
+ store.shared=row;
+ store.state={...initialState(),...row.state};
+ store.healthy=true;
  refreshScouting();
 }
 
 async function openDraft(id,{navigate=true}={}){
- if(!user||demo)throw Error('Sign in to open a shared draft.');
- const currentUser=user.id,gen=generation,request=++draftOpen;
+ if(!store.user||demo)throw Error('Sign in to open a shared draft.');
+ const currentUser=store.user.id,gen=store.generation,request=++draftOpen;
  let row;
  try{
-  row=await backend.getDraft(id);
+  row=await store.backend.getDraft(id);
  }catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
- if(user?.id!==currentUser||gen!==generation||request!==draftOpen)return;
- ++generation;
- shared=null;
+ if(store.user?.id!==currentUser||gen!==store.generation||request!==draftOpen)return;
+ ++store.generation;
+ store.shared=null;
  resetDraftData();
- pending=false;
- polling=false;
- shared=row;
- team=teams.find(t=>t.id===row.team_id);
+ store.pending=false;
+ store.polling=false;
+ store.shared=row;
+ store.team=store.teams.find(t=>t.id===row.team_id);
  teamRoster=[];
  selectedTeamIds=(row.state.roster||[]).filter(p=>p&&typeof p==='object').map(p=>p.userId||p.id);
  adopt(row);
- selected=null;
+ store.selected=null;
  reviewVisible=true;
  if(navigate){
   const url=new URL(location.href);
@@ -1132,31 +1028,31 @@ async function openDraft(id,{navigate=true}={}){
  focusDraftView();
 }
 async function poll(){
- if(!shared||polling||pending||!user)return;
- polling=true;const gen=generation,id=shared.id;let changed=false,leaving=false;
+ if(!store.shared||store.polling||store.pending||!store.user)return;
+ store.polling=true;const gen=store.generation,id=store.shared.id;let changed=false,leaving=false;
  try{
-  const row=await backend.getDraft(id);if(gen!==generation)return;
+  const row=await store.backend.getDraft(id);if(gen!==store.generation)return;
   // Every server-side draft update bumps revision; drafter is compared too as a cheap guard.
-  changed=!healthy||row.revision!==shared.revision||row.drafter_user_id!==shared.drafter_user_id;
+  changed=!store.healthy||row.revision!==store.shared.revision||row.drafter_user_id!==store.shared.drafter_user_id;
   if(changed)adopt(row);
-  if(Date.now()-lastRoster>ROSTER_REFRESH_MS){
-   const fresh=await backend.loadRoster(row.team_id);
-   if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}
+  if(Date.now()-store.lastRoster>ROSTER_REFRESH_MS){
+   const fresh=await store.backend.loadRoster(row.team_id);
+   if(gen===store.generation&&store.team?.id===row.team_id){store.lastRoster=Date.now();teamRoster=fresh;}
   }
  }catch(e){
   // The draft is no longer visible: the team was deleted or this account left / was removed.
-  if(gen===generation&&e.code==='PGRST116'){leaving=true;void safe(()=>leaveVanishedDraft(gen))().finally(()=>{if(gen===generation)polling=false;});return;}
-  if(gen===generation){changed=healthy;healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}
+  if(gen===store.generation&&e.code==='PGRST116'){leaving=true;void safe(()=>leaveVanishedDraft(gen))().finally(()=>{if(gen===store.generation)store.polling=false;});return;}
+  if(gen===store.generation){changed=store.healthy;store.healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}
  }
- finally{if(gen===generation){if(!leaving)polling=false;if(changed)render();}}
+ finally{if(gen===store.generation){if(!leaving)store.polling=false;if(changed)render();}}
 }
 async function leaveVanishedDraft(gen){
- const teamId=shared?.team_id,name=teams.find(t=>t.id===teamId)?.name||'This team',account=user?.id;
- let fresh=null;try{fresh=await backend.listTeams();}catch{}
- if(gen!==generation||user?.id!==account)return;
- if(fresh)teams=fresh;
+ const teamId=store.shared?.team_id,name=store.teams.find(t=>t.id===teamId)?.name||'This team',account=store.user?.id;
+ let fresh=null;try{fresh=await store.backend.listTeams();}catch{}
+ if(gen!==store.generation||store.user?.id!==account)return;
+ if(fresh)store.teams=fresh;
  const message=!fresh?'This draft is no longer available to you. Switched to local practice.':fresh.some(t=>t.id===teamId)?'This draft is no longer available. Switched to local practice.':name+' was deleted, or you are no longer a member. Switched to local practice.';
- if(team?.id===teamId){++teamLoad;team=null;teamRoster=[];selectedTeamIds=[];}
+ if(store.team?.id===teamId){++teamLoad;store.team=null;teamRoster=[];selectedTeamIds=[];}
  if(homeTeamId===teamId){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
  enterPractice();notice(message);
 }
@@ -1221,7 +1117,7 @@ function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={})
   }
 
   search.placeholder='Search all heroes';
-  const played=new Map((observations.get(getAccountId?.()||String(profile.steamAccountId||''))?.heroes||[]).filter(h=>h.games>0).map(h=>[+h.hero_id,h.games]));
+  const played=new Map((observations.get(getAccountId?.()||String(store.profile.steamAccountId||''))?.heroes||[]).filter(h=>h.games>0).map(h=>[+h.hero_id,h.games]));
 
   const query=search.value.trim().toLowerCase(),roles=getRoles(),support=roles.length&&roles.every(role=>role>=4);
 
@@ -1231,7 +1127,7 @@ function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={})
 
   if(!query&&played.size)hint.textContent='Selected heroes first, then your public match history. Import can suggest heroes in empty lists; review before saving.';
 
-  let choices=Object.values(heroes).filter(h=>h.localized_name.toLowerCase().includes(query));
+  let choices=Object.values(store.heroes).filter(h=>h.localized_name.toLowerCase().includes(query));
 
   if(!query&&support)choices=choices.filter(h=>selected.has(+h.id)||(h.roles||[]).includes('Support'));
 
@@ -1277,7 +1173,7 @@ function startProfileSetup(continueAfterSave,joinedTeam=null){
 
 function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHeroTab=0,continueAfterSave=null){
 
- if(backend&&!user&&!demo&&!local){welcome.home('signin');return;}
+ if(store.backend&&!store.user&&!demo&&!local){welcome.home('signin');return;}
 
  const root=$('profile-content');
  root.replaceChildren();
@@ -1290,14 +1186,14 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
  if(joinedTeam||continueToCup)root.append(signupProgress(2));
  if(joinedTeam)root.append(el('p',`You joined ${joinedTeam.name}. Add the roles and heroes you want your team to see, then save your profile.`,'profile-help'));
 
- if(!backend||!user||demo)root.append(el('p',demo?'Demo preferences are invented and local.':'Local preference profile · no authentication or sync.','profile-help'));
+ if(!store.backend||!store.user||demo)root.append(el('p',demo?'Demo preferences are invented and local.':'Local preference profile · no authentication or sync.','profile-help'));
 
  root.append(el('p','Build your player card. Choose your roles, then tell your captain what you want to play.','profile-intro'));
 
  const identity=el('div',null,'profile-identity');
  root.append(identity);
 
- const name=field(identity,'Display name',profile.displayName||''),account=field(identity,'Public account ID or player URL · optional',profile.steamAccountId||'');
+ const name=field(identity,'Display name',store.profile.displayName||''),account=field(identity,'Public account ID or player URL · optional',store.profile.steamAccountId||'');
  const workspace=el('div',null,'profile-workspace'),roleSection=el('section',null,'profile-roles-section'),heroSection=el('section',null,'profile-heroes-section');
  workspace.append(roleSection,heroSection);
  root.append(workspace);
@@ -1319,7 +1215,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
   const card=el('div',null,'profile-role-card'),preference=el('label',null,'profile-role-toggle'),c=el('input');
 
-  c.type='checkbox';c.id='profile-role-'+i;c.checked=(profile.preferredRoles||[]).includes(i);
+  c.type='checkbox';c.id='profile-role-'+i;c.checked=(store.profile.preferredRoles||[]).includes(i);
 
   preference.htmlFor=c.id;preference.append(c,el('span','P'+i,'profile-role-number'),el('span',roleNames[i-1],'profile-role-name'));c.onchange=manualRoles;
   const expertise=el('details',null,'profile-role-expertise'),summary=el('summary');expertise.append(summary);
@@ -1336,7 +1232,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
    radio.id='profile-comfort-'+i+'-'+value;
    radio.value=String(value);
 
-   radio.checked=Number(profile.roleComfort?.[i]||0)===value;
+   radio.checked=Number(store.profile.roleComfort?.[i]||0)===value;
    radio.onchange=clearPreset;
    label.htmlFor=radio.id;
 
@@ -1402,9 +1298,9 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
  const heroSections=el('div');
  heroSection.append(heroSections);
 
- const signatures=heroPicker(heroSections,'Signature heroes · your proven picks',profile.signatureHeroes,options('signature'));
+ const signatures=heroPicker(heroSections,'Signature heroes · your proven picks',store.profile.signatureHeroes,options('signature'));
 
- const desired=heroPicker(heroSections,'Today · heroes you want to play',profile.desiredHeroes,options('desired'));
+ const desired=heroPicker(heroSections,'Today · heroes you want to play',store.profile.desiredHeroes,options('desired'));
 
  const todayActions=el('div',null,'profile-today-actions');
 
@@ -1414,7 +1310,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
  heroSections.querySelector('[data-kind=desired]').querySelector('input')?.parentElement.after(todayActions);
 
- const avoid=heroPicker(heroSections,'Avoid · heroes to leave out',profile.avoidHeroes,options('avoid'));
+ const avoid=heroPicker(heroSections,'Avoid · heroes to leave out',store.profile.avoidHeroes,options('avoid'));
 
  pickers.push(signatures,desired,avoid);
  const importPanel=el('div',null,'profile-import'),importStatus=el('p','Start here: import your public match history to fill empty Signatures and Today lists. Review the suggestions before saving.','profile-help');
@@ -1429,16 +1325,16 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
   if(importButton.disabled)return;
   const ids=parseAccountIds(account.value);
   if(ids.length!==1){importStatus.textContent='Enter one Dota account ID, Steam ID or player URL first.';account.focus();return;}
-  const id=String(ids[0]),gen=generation,initialName=name.value;
+  const id=String(ids[0]),gen=store.generation,initialName=name.value;
   importButton.disabled=true;
   save.disabled=true;
   importButton.setAttribute('aria-busy','true');
   importStatus.textContent='Loading public match history…';
   try{
    const player=await loadPlayer(id);
-   if(gen!==generation||!root.contains(importPanel)||parseAccountIds(account.value).map(String).join()!==id)return;
+   if(gen!==store.generation||!root.contains(importPanel)||parseAccountIds(account.value).map(String).join()!==id)return;
    observations.set(id,player);
-   const suggestions=(player.heroes||[]).filter(h=>Number(h.games)>0&&heroes[Number(h.hero_id)]).sort((a,b)=>Number(b.games)-Number(a.games)).slice(0,5).map(h=>Number(h.hero_id));
+   const suggestions=(player.heroes||[]).filter(h=>Number(h.games)>0&&store.heroes[Number(h.hero_id)]).sort((a,b)=>Number(b.games)-Number(a.games)).slice(0,5).map(h=>Number(h.hero_id));
    if(name.value===initialName&&(!initialName||initialName==='Steam player'||/^Steam \d+$/.test(initialName))&&player.profile?.profile?.personaname)name.value=player.profile.profile.personaname;
    if(suggestions.length){
     if(!signatures.values().length)signatures.replace(suggestions);
@@ -1480,13 +1376,13 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
  extras.append(el('summary','Notes and availability · optional'));
  root.append(extras);
 
- const notes=field(extras,'Notes · optional',profile.notes||'','textarea'),availabilityLabel=el('label','Availability · optional'),availability=el('select');
+ const notes=field(extras,'Notes · optional',store.profile.notes||'','textarea'),availabilityLabel=el('label','Availability · optional'),availability=el('select');
 
  availability.id='profile-availability';
  availabilityLabel.htmlFor=availability.id;
 
  for(const value of ['available','maybe','unavailable'])availability.append(new Option(value,value));
- availability.value=profile.availability||'available';
+ availability.value=store.profile.availability||'available';
  availabilityLabel.append(availability);
  extras.append(availabilityLabel);
 
@@ -1496,10 +1392,10 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
  const avatar=el('select');
  avatar.append(new Option('Random signature hero',''));
- for(const hero of Object.values(heroes).sort((a,b)=>a.localized_name.localeCompare(b.localized_name))){
+ for(const hero of Object.values(store.heroes).sort((a,b)=>a.localized_name.localeCompare(b.localized_name))){
   avatar.append(new Option(hero.localized_name,hero.id));
  }
- avatar.value=String(profile.avatarHeroId||'');
+ avatar.value=String(store.profile.avatarHeroId||'');
  const avatarLabel=el('label','Player card portrait');
  avatarLabel.append(avatar);
  extras.append(avatarLabel);
@@ -1514,7 +1410,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
    if(account.value.trim()&&ids.length!==1)throw Error('Enter one valid numeric public account ID or player URL.');
 
-   const p={...(avatar.value||profile.avatarHeroId?{avatarHeroId:Number(avatar.value)||null}:{}),displayName:name.value.trim().slice(0,DISPLAY_NAME_MAX)||'Player',steamAccountId:ids[0]?String(ids[0]):'',preferredRoles:roleInputs.filter(r=>r.c.checked).map(r=>r.i),roleComfort:Object.fromEntries(roleInputs.map(r=>[r.i,+(r.radios.find(radio=>radio.checked)?.value||0)])),signatureHeroes:signatures.values(),desiredHeroes:desired.values(),avoidHeroes:avoid.values(),notes:notes.value.slice(0,500),availability:availability.value};
+   const p={...(avatar.value||store.profile.avatarHeroId?{avatarHeroId:Number(avatar.value)||null}:{}),displayName:name.value.trim().slice(0,DISPLAY_NAME_MAX)||'Player',steamAccountId:ids[0]?String(ids[0]):'',preferredRoles:roleInputs.filter(r=>r.c.checked).map(r=>r.i),roleComfort:Object.fromEntries(roleInputs.map(r=>[r.i,+(r.radios.find(radio=>radio.checked)?.value||0)])),signatureHeroes:signatures.values(),desiredHeroes:desired.values(),avoidHeroes:avoid.values(),notes:notes.value.slice(0,500),availability:availability.value};
 
    if(continueAfterSave&&(!name.value.trim()||!p.preferredRoles.length))throw Error('Enter your display name and choose at least one position.');
    const conflicts=p.avoidHeroes.filter(id=>p.signatureHeroes.includes(id)||p.desiredHeroes.includes(id));
@@ -1526,21 +1422,21 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
    save.disabled=true;importButton.disabled=true;save.textContent='Saving…';save.setAttribute('aria-busy','true');message('Saving your profile…');
 
-   const gen=generation,saved=user&&!demo?await backend.saveProfile(p,user.id):p;
+   const gen=store.generation,saved=store.user&&!demo?await store.backend.saveProfile(p,store.user.id):p;
 
-   if(gen!==generation)return;
+   if(gen!==store.generation)return;
 
-   profile=saved;profileSaved=true;
+   store.profile=saved;profileSaved=true;
 
-   if(!$('team-view').hidden){homeRoster=homeRoster.map(item=>item.userId===user?.id?{...item,...profile}:item);renderTeamHome();}
-   if(!shared){
-    state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,ROSTER_SIZE);
+   if(!$('team-view').hidden){homeRoster=homeRoster.map(item=>item.userId===store.user?.id?{...item,...store.profile}:item);renderTeamHome();}
+   if(!store.shared){
+    store.state.roster=[{...store.profile,id:store.user?.id||'local-own'},...store.state.roster.filter(p=>p.id!=='local-own'&&p.id!==store.user?.id)].slice(0,ROSTER_SIZE);
     touch();
    }
 
    observations.clear();refreshScouting();saveLocal();render();
 
-   if(joinedTeam&&team?.id===joinedTeam.id)void loadTeam(team.id,{preserveSelection:teamRoster.length>0}).catch(()=>{});
+   if(joinedTeam&&store.team?.id===joinedTeam.id)void loadTeam(store.team.id,{preserveSelection:teamRoster.length>0}).catch(()=>{});
    if(continueAfterSave){
     message('Profile saved.');
     profileSetupRequired=false;
@@ -1550,7 +1446,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
     return;
    }
    if((joinedTeam||continueToCup)&&$('profile-dialog').open){$('profile-dialog').close();if(joinedTeam)navigateTeam(joinedTeam.id);else navigateCup();}
-   message(shared?'Saved. Refresh the shared roster snapshot in Setup to use these changes.':joinedTeam?`Profile saved. ${joinedTeam.name} can now see your preferences.`:'Profile saved.');
+   message(store.shared?'Saved. Refresh the shared roster snapshot in Setup to use these changes.':joinedTeam?`Profile saved. ${joinedTeam.name} can now see your preferences.`:'Profile saved.');
 
   }catch(error){message(error.message||'Unable to save your profile. Try again.',true);}
 
@@ -1562,10 +1458,10 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
   $('profile-dialog').close();
   if(joinedTeam)navigateTeam(joinedTeam.id);else navigateCup();
  },footerActions);
- if(user)button('Sign out',signOut,continueAfterSave?footerActions:extras);
+ if(store.user)button('Sign out',signOut,continueAfterSave?footerActions:extras);
 
  show('profile-dialog');
- if(profile.steamAccountId&&!profile.signatureHeroes?.length&&(!profileSaved||!profile.preferredRoles?.length))void importButton.click();
+ if(store.profile.steamAccountId&&!store.profile.signatureHeroes?.length&&(!profileSaved||!store.profile.preferredRoles?.length))void importButton.click();
 
 }
 
@@ -1579,7 +1475,7 @@ function stopLiveWatch() {
 
 async function checkLiveWatch(watch) {
  if(liveWatch!==watch)return;
- if(watch.generation!==generation||document.body.dataset.view!=='board'){stopLiveWatch();return;}
+ if(watch.generation!==store.generation||document.body.dataset.view!=='board'){stopLiveWatch();return;}
  const retry=()=>{if(liveWatch===watch)watch.timer=setTimeout(()=>void checkLiveWatch(watch),LIVE_WATCH_RETRY_MS);};
  const controller=new AbortController();
  watch.abort=controller;
@@ -1588,7 +1484,7 @@ async function checkLiveWatch(watch) {
   const response=await fetch(LOCAL_HELPER_ORIGIN+'/live-roster',{signal:controller.signal,credentials:'omit',cache:'no-store'});
   if(!response.ok)throw Error('The helper did not accept the connection.');
   const data=await response.json();
-  if(liveWatch!==watch||watch.generation!==generation)return;
+  if(liveWatch!==watch||watch.generation!==store.generation)return;
   const lineup=data.status==='ready'&&liveLineup(data);
   if(!lineup){
    watch.status.textContent=data.status==='ready'?'Waiting for both complete teams and your Dota account.':data.message||'Waiting for a live match.';
@@ -1598,14 +1494,14 @@ async function checkLiveWatch(watch) {
    watch.status.textContent='Waiting for the drafter seat before importing the lineup.';
    retry();return;
   }
-  if(shared&&team?.id===shared.team_id&&teamRoster.length===0)await loadTeam(shared.team_id,{preserveSelection:true});
-  if(liveWatch!==watch||watch.generation!==generation)return;
-  const profiles=[...(state.roster||[]),...teamRoster];
+  if(store.shared&&store.team?.id===store.shared.team_id&&teamRoster.length===0)await loadTeam(store.shared.team_id,{preserveSelection:true});
+  if(liveWatch!==watch||watch.generation!==store.generation)return;
+  const profiles=[...(store.state.roster||[]),...teamRoster];
   const roster=lineup.ours.map(id=>{
    const profile=profiles.find(player=>String(accountOf(player))===id);
    return profile?{...profile,id:memberId(profile)}:{id,steamAccountId:id};
   });
-  if(state.actions.some(action=>action.playerId&&!roster.some(player=>player.id===action.playerId))){
+  if(store.state.actions.some(action=>action.playerId&&!roster.some(player=>player.id===action.playerId))){
    stopLiveWatch();
    watch.control.textContent='Detect live lineup';
    watch.status.textContent='Live lineup differs from the assigned players. Open a new draft to import it.';
@@ -1622,7 +1518,7 @@ async function checkLiveWatch(watch) {
    }
    return;
   }
-  if(liveWatch!==watch||watch.generation!==generation)return;
+  if(liveWatch!==watch||watch.generation!==store.generation)return;
   const input=$('enemy-account-input');
   if(input)input.value=lineup.enemies.join(' ');
   stopLiveWatch();
@@ -1638,21 +1534,21 @@ async function checkLiveWatch(watch) {
 
 let lobbyEdited=false;
 function sessionButtons(){
- $('create-session').disabled=!user||!team||demo;
- $('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';
- $('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!user?'Sign in to create a shared draft with your team.':!team?(teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';
+ $('create-session').disabled=!store.user||!store.team||demo;
+ $('create-session').textContent=store.team?'Create draft for '+store.team.name:'Create shared draft';
+ $('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!store.user?'Sign in to create a shared draft with your team.':!store.team?(store.teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';
 }
 async function lobby(){
  lobbyEdited=false;
  // Default to the team shown on Team home so shared draft creation is not silently disabled.
  // The roster loads in the background so a slow response never blocks Setup.
- if(user&&!demo&&!team&&teams.length){
-  const id=(teams.find(t=>t.id===homeTeamId)||teams[0]).id;
-  void safe(async()=>{if(!await loadTeam(id)||team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();
+ if(store.user&&!demo&&!store.team&&store.teams.length){
+  const id=(store.teams.find(t=>t.id===homeTeamId)||store.teams[0]).id;
+  void safe(async()=>{if(!await loadTeam(id)||store.team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();
  }
- else if(team&&!teamRoster.length)await loadTeam(team.id,{preserveSelection:true});
+ else if(store.team&&!teamRoster.length)await loadTeam(store.team.id,{preserveSelection:true});
  const details=document.querySelector('[data-connection-details]'),manual=document.querySelector('[data-manual-entry]');
- details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
+ details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':store.backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
  const link=el('a','Open legacy live/replay helper');
  link.href=LOCAL_HELPER_ORIGIN;
  link.target='_blank';
@@ -1679,19 +1575,19 @@ async function lobby(){
    }
    liveControl.textContent='Stop live detection';
    liveStatus.textContent='Waiting for the local Dota helper…';
-   liveWatch={generation,control:liveControl,status:liveStatus};
+   liveWatch={generation:store.generation,control:liveControl,status:liveStatus};
    void checkLiveWatch(liveWatch);
   },scouting);
   liveControl.disabled=!canWrite();
   scouting.append(liveStatus);
-  if(liveWatch?.generation===generation){
+  if(liveWatch?.generation===store.generation){
    liveStatus.textContent=liveWatch.status.textContent;
    liveControl.textContent='Stop live detection';
    liveControl.disabled=false;
    Object.assign(liveWatch,{control:liveControl,status:liveStatus});
   }
  }
- const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(state.enemyIds||[]).join(' '),'textarea');
+ const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(store.state.enemyIds||[]).join(' '),'textarea');
  enemies.id='enemy-account-input';
  enemies.placeholder='One player ID or link per line';
  enemies.rows=3;
@@ -1720,18 +1616,18 @@ async function lobby(){
   enemies.removeAttribute('aria-invalid');
   notice('Enemy scouting cleared.');
  },scoutingActions).disabled=!canWrite();
- if(!shared){
+ if(!store.shared){
   // Local practice: tick members of the active team and/or add stand-ins by public ID (max five).
   const ours=el('section',null,'lobby-card lobby-local');
   ours.setAttribute('aria-label','Our team');
   ours.append(el('h3','Our team'));
   manual.append(ours);
-  const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
-  const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
+  const current=Array.isArray(store.state.roster)?store.state.roster.filter(p=>p&&typeof p==='object'):[];
+  const members=store.user&&!demo&&store.team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
   const savedMembers=current.map(p=>memberId(p)).filter(id=>memberIds.has(id));
-  let picked=savedMembers.some(id=>id!==user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
+  let picked=savedMembers.some(id=>id!==store.user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
   if(members.length){
-   ours.append(el('p','Load players from '+team.name+':'));
+   ours.append(el('p','Load players from '+store.team.name+':'));
    const list=el('div',null,'lobby-roster');ours.append(list);
    for(const p of members){
     const label=el('label',p.displayName),check=el('input');
@@ -1741,7 +1637,7 @@ async function lobby(){
     label.prepend(check);
     list.append(label);
    }
-  }else if(user&&!demo)ours.append(el('p',teams.length?'Select an active team under Team management to load your teammates.':'Create or join a team to load your teammates.','secondary'));
+  }else if(store.user&&!demo)ours.append(el('p',store.teams.length?'Select an active team under Team management to load your teammates.':'Create or join a team to load your teammates.','secondary'));
   const manualIds=current.filter(p=>!memberIds.has(memberId(p))).map(p=>accountOf(p)).filter(Boolean);
   const ownIds=field(ours,members.length?'Add other players by public ID or URL':'Teammate public player IDs or URLs (up to 5)',manualIds.join(' '),'textarea');
   ownIds.rows=3;
@@ -1765,7 +1661,7 @@ async function lobby(){
    await mutate('set_state',{roster:rows});notice('Our team saved.');
   },ourActions,'primary').disabled=!canWrite();
  }
- if(user&&!demo){
+ if(store.user&&!demo){
   const section=el('section',null,'team-management lobby-card');
   section.setAttribute('aria-label','Team management');
   section.append(el('h3','Team management'));
@@ -1778,36 +1674,36 @@ async function lobby(){
   teamName.placeholder='Your team name';
   invite.placeholder='Paste invite link or code';
   button('Create team',async()=>{
-   const result=await backend.createTeam(teamName.value);
-   teams=await backend.listTeams();
-   team=teams.find(t=>t.id===result.id)||result;
-   await loadTeam(team.id);
+   const result=await store.backend.createTeam(teamName.value);
+   store.teams=await store.backend.listTeams();
+   store.team=store.teams.find(t=>t.id===result.id)||result;
+   await loadTeam(store.team.id);
    await lobby();
-   notice('Created team '+team.name+'.');
+   notice('Created team '+store.team.name+'.');
   },create);
   button('Join team',async()=>{
-   const gen=generation,joined=await backend.joinTeam(codeFromInvitation(invite.value),user.id);
-   if(gen!==generation)return;
-   const refreshed=await backend.listTeams();
-   if(gen!==generation)return;
-   teams=refreshed;
-   team=teams.find(t=>t.id===joined?.id);
-   if(!team)throw Error('Team joined. Reopen Setup to select it.');
-   if(!await loadTeam(team.id))return;
+   const gen=store.generation,joined=await store.backend.joinTeam(codeFromInvitation(invite.value),store.user.id);
+   if(gen!==store.generation)return;
+   const refreshed=await store.backend.listTeams();
+   if(gen!==store.generation)return;
+   store.teams=refreshed;
+   store.team=store.teams.find(t=>t.id===joined?.id);
+   if(!store.team)throw Error('Team joined. Reopen Setup to select it.');
+   if(!await loadTeam(store.team.id))return;
    await lobby();
-   notice('Joined '+team.name+'. This team is now selected.');
+   notice('Joined '+store.team.name+'. This team is now selected.');
   },join);
   const select=el('select');
   select.setAttribute('aria-label','Team');
   select.append(new Option('Select a team',''));
-  for(const t of teams)select.append(new Option(t.name,t.id));
-  select.value=team?.id||'';
+  for(const t of store.teams)select.append(new Option(t.name,t.id));
+  select.value=store.team?.id||'';
   select.onchange=safe(async()=>{await loadTeam(select.value);await lobby();});
   const teamLabel=el('label','Active team');
   teamLabel.append(select);
   section.append(teamLabel);
-  if(team){
-   section.append(el('p','Selected team: '+team.name),el('p','Select up to five players for the draft roster:'));
+  if(store.team){
+   section.append(el('p','Selected team: '+store.team.name),el('p','Select up to five players for the draft roster:'));
    const rosterList=el('div',null,'lobby-roster');
    section.append(rosterList);
    for(const p of teamRoster){
@@ -1818,14 +1714,14 @@ async function lobby(){
     label.prepend(check);
     rosterList.append(label);
    }
-   if(team.owner_user_id===user.id&&teamInviteCode.test(team.invite_code)){
-    const inviteTeam=team,expiry=Date.parse(inviteTeam.invite_expires_at);
+   if(store.team.owner_user_id===store.user.id&&teamInviteCode.test(store.team.invite_code)){
+    const inviteTeam=store.team,expiry=Date.parse(inviteTeam.invite_expires_at);
     if(expiry<=Date.now())section.append(el('p','This team invite link has expired.'));
     else{
      if(Number.isFinite(expiry))section.append(el('p','Team invite link expires '+new Date(expiry).toLocaleDateString()+'.'));
      button('Copy team invite link',async()=>{
       if(expiry<=Date.now())throw Error('This team invite link has expired.');
-      if(user?.id!==inviteTeam.owner_user_id||team?.id!==inviteTeam.id)return;
+      if(store.user?.id!==inviteTeam.owner_user_id||store.team?.id!==inviteTeam.id)return;
       const url=new URL('/',location.origin);url.hash=new URLSearchParams({invite:inviteTeam.invite_code}).toString();
       try{await navigator.clipboard.writeText(url.href);}catch{
        if(!section.isConnected)return;
@@ -1837,24 +1733,24 @@ async function lobby(){
      },section);
     }
    }
-   if(team.owner_user_id===user.id){
+   if(store.team.owner_user_id===store.user.id){
     // Renewing issues a new code server-side, so the old link stops working.
-    const renewing=team,account=user.id,current=Date.parse(renewing.invite_expires_at)>Date.now()&&teamInviteCode.test(renewing.invite_code);
+    const renewing=store.team,account=store.user.id,current=Date.parse(renewing.invite_expires_at)>Date.now()&&teamInviteCode.test(renewing.invite_code);
     const renew=button('Renew link',async()=>{
-     if(renew.disabled||team?.id!==renewing.id||user?.id!==account)return;
+     if(renew.disabled||store.team?.id!==renewing.id||store.user?.id!==account)return;
      if(current&&!confirm('Renew the invite link for '+renewing.name+'? The current link stops working.'))return;
-     renew.disabled=true;let fresh;try{fresh=await backend.renewTeamInvite(renewing.id,account);}finally{renew.disabled=false;}
-     if(user?.id!==account)return;
+     renew.disabled=true;let fresh;try{fresh=await store.backend.renewTeamInvite(renewing.id,account);}finally{renew.disabled=false;}
+     if(store.user?.id!==account)return;
      if(!teamInviteCode.test(fresh?.invite_code))throw Error('Could not renew the team invite link. Reload the page and try again.');
      const renewed=t=>t.id===renewing.id?{...t,invite_code:fresh.invite_code,invite_expires_at:fresh.invite_expires_at}:t;
-     teams=teams.map(renewed);if(team?.id===renewing.id)team=renewed(team);
-     if(section.isConnected&&team?.id===renewing.id)await lobby();
-     if(user?.id===account)notice('New invite link ready. The old link no longer works.');
+     store.teams=store.teams.map(renewed);if(store.team?.id===renewing.id)store.team=renewed(store.team);
+     if(section.isConnected&&store.team?.id===renewing.id)await lobby();
+     if(store.user?.id===account)notice('New invite link ready. The old link no longer works.');
     },section);
    }
-   if(shared&&team.id===shared.team_id)button('Refresh draft roster snapshot',async()=>{
-    if(!await loadTeam(shared.team_id,{preserveSelection:true}))return;
-    const roster=draftRoster(),removed=(state.roster||[]).filter(p=>p&&!roster.some(current=>current.id===memberId(p)));
+   if(store.shared&&store.team.id===store.shared.team_id)button('Refresh draft roster snapshot',async()=>{
+    if(!await loadTeam(store.shared.team_id,{preserveSelection:true}))return;
+    const roster=draftRoster(),removed=(store.state.roster||[]).filter(p=>p&&!roster.some(current=>current.id===memberId(p)));
     section.querySelector('.roster-refresh-preview')?.remove();
     if(removed.length){
      const preview=el('div',null,'roster-refresh-preview snapshot-preview');
@@ -1866,24 +1762,24 @@ async function lobby(){
     }
     else{await mutate('set_state',{roster});notice('Roster snapshot refreshed.');}
    },section).disabled=!canWrite();
-   if(shared&&teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id)button('Owner reclaim drafter',()=>mutateOwner(),section);
-   const ownsTeam=team.owner_user_id===user.id,leaving=team,account=user.id;
+   if(store.shared&&store.teams.find(t=>t.id===store.shared.team_id)?.owner_user_id===store.user.id)button('Owner reclaim drafter',()=>mutateOwner(),section);
+   const ownsTeam=store.team.owner_user_id===store.user.id,leaving=store.team,account=store.user.id;
    const exit=button(ownsTeam?'Delete team':'Leave team',async()=>{
-    if(exit.disabled||team?.id!==leaving.id||user?.id!==account)return;
+    if(exit.disabled||store.team?.id!==leaving.id||store.user?.id!==account)return;
     if(!confirm(ownsTeam?'Delete '+leaving.name+' for everyone? Its drafts, scouting notes, Battle Cup spots and members are removed permanently.':'Leave '+leaving.name+'? You lose access to its drafts and release any draft control you hold.'))return;
-    exit.disabled=true;try{await (ownsTeam?backend.deleteTeam(leaving.id,account):backend.leaveTeam(leaving.id,account));}finally{exit.disabled=false;}
-    if(user?.id!==account)return;
-    if(shared?.team_id===leaving.id)enterPractice();
-    ++teamLoad;team=null;teamRoster=[];selectedTeamIds=[];
+    exit.disabled=true;try{await (ownsTeam?store.backend.deleteTeam(leaving.id,account):store.backend.leaveTeam(leaving.id,account));}finally{exit.disabled=false;}
+    if(store.user?.id!==account)return;
+    if(store.shared?.team_id===leaving.id)enterPractice();
+    ++teamLoad;store.team=null;teamRoster=[];selectedTeamIds=[];
     if(homeTeamId===leaving.id){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
-    teams=await backend.listTeams();if(user?.id!==account)return;
+    store.teams=await store.backend.listTeams();if(store.user?.id!==account)return;
     await lobby();notice(ownsTeam?'Deleted team '+leaving.name+'.':'You left '+leaving.name+'.');
    },section,ownsTeam?'danger':undefined);
    const results=el('div',null,'team-draft-results');
    results.setAttribute('aria-live','polite');
    button('List team drafts',async()=>{
-    const teamId=team.id,drafts=await backend.listDrafts(teamId);
-    if(team?.id!==teamId)return;
+    const teamId=store.team.id,drafts=await store.backend.listDrafts(teamId);
+    if(store.team?.id!==teamId)return;
     results.replaceChildren();
     for(const d of drafts)button(`${d.id.slice(0,8)} - ${d.status} - revision ${d.revision}`,()=>openDraft(d.id),results);
     if(!drafts.length)results.append(el('p','No drafts yet.'));
@@ -1892,25 +1788,25 @@ async function lobby(){
   }
  }
  sessionButtons();
- $('join-session').disabled=!user||demo;
+ $('join-session').disabled=!store.user||demo;
  showIfClosed('session-dialog');
 }
 
 async function loadTeam(id,{preserveSelection=false}={}){
 
- const request=++teamLoad,gen=generation;
+ const request=++teamLoad,gen=store.generation;
 
- const previous=preserveSelection&&team?.id===id?[...selectedTeamIds]:null;
+ const previous=preserveSelection&&store.team?.id===id?[...selectedTeamIds]:null;
 
- team=teams.find(t=>t.id===id);
+ store.team=store.teams.find(t=>t.id===id);
 
  // Clear stale rows while another team's roster is loading.
 
  teamRoster=[];selectedTeamIds=[];
 
- const rows=id?await backend.loadRoster(id):[];
+ const rows=id?await store.backend.loadRoster(id):[];
 
- if(gen!==generation||request!==teamLoad)return false;
+ if(gen!==store.generation||request!==teamLoad)return false;
 
  teamRoster=rows;
 
@@ -1921,14 +1817,14 @@ async function loadTeam(id,{preserveSelection=false}={}){
 }
 
 async function mutateOwner(){
- if(!shared||pending)return;
- pending=true;
+ if(!store.shared||store.pending)return;
+ store.pending=true;
  render();
- const gen=generation,id=shared.id;
+ const gen=store.generation,id=store.shared.id;
  try{
-  const row=await backend.mutateDraft(id,shared.revision,'assign',{userId:user.id});
-  if(gen===generation)adopt(row);
- }catch(e){if(gen===generation)await reloadDraft(id,gen);throw e;}finally{if(gen===generation){pending=false;render();}}
+  const row=await store.backend.mutateDraft(id,store.shared.revision,'assign',{userId:store.user.id});
+  if(gen===store.generation)adopt(row);
+ }catch(e){if(gen===store.generation)await reloadDraft(id,gen);throw e;}finally{if(gen===store.generation){store.pending=false;render();}}
 }
 
 let cupAccountVersion=0;
@@ -1940,7 +1836,7 @@ async function authChanged(session,event){
  // Only a sign-in may open the board here: USER_UPDATED (password saved) and TOKEN_REFRESHED
  // must not replace "Continue to board" or skip its gates.
  const id=session?.user?.id||null;
- if(id===(user?.id||null)){if(user&&!recovery&&!store.teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
+ if(id===(store.user?.id||null)){if(store.user&&!recovery&&!store.teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
 
  stopLiveWatch();
  resetAllyEntry();
@@ -1952,29 +1848,29 @@ async function authChanged(session,event){
  profileSaved=false;
  profileSetupRequired=false;
  delete $('app-shell').dataset.profileSetup;
- const gen=++generation,acct=++accountGen;
- user=session?.user||null;
- welcome.setAccount(!!user,recovery);
- shared=null;
- team=null;
- teams=[];
+ const gen=++store.generation,acct=++accountGen;
+ store.user=session?.user||null;
+ welcome.setAccount(!!store.user,recovery);
+ store.shared=null;
+ store.team=null;
+ store.teams=[];
  teamRoster=[];
  selectedTeamIds=[];
- profile={};
- state=initialState();
+ store.profile={};
+ store.state=initialState();
  ++cupAccountVersion;
  cup.sync();
  const inviteOnEntry=!!store.teamInvitation;
 
- if(!user)restorePractice();
+ if(!store.user)restorePractice();
 
  resetDraftData();
- selected=null;
- pending=false;
- polling=false;
- healthy=true;
- localControl=true;
- lastRoster=0;
+ store.selected=null;
+ store.pending=false;
+ store.polling=false;
+ store.healthy=true;
+ store.localControl=true;
+ store.lastRoster=0;
 
  $('profile-content').replaceChildren();
  $('notice').textContent='';
@@ -1982,23 +1878,23 @@ async function authChanged(session,event){
  document.querySelector('[data-manual-entry]')?.replaceChildren();
  for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
 
- if(!user){
+ if(!store.user){
   accountReady=Promise.resolve();
   const url=new URL(location.href);
   url.searchParams.delete('draft');
   history.replaceState(null,'',url);
   if(!showTeamInvitation())welcome.home(pendingDraft()?'signin':undefined);
  }else{
-  const activeUser=user;
-  accountReady=Promise.allSettled([backend.loadProfile(),backend.listTeams()]).then(([p,t])=>{
+  const activeUser=store.user;
+  accountReady=Promise.allSettled([store.backend.loadProfile(),store.backend.listTeams()]).then(([p,t])=>{
    // Account data belongs to the account, not the workspace: Home or Practice mid-load
    // must not leave profile setup and teams unloaded.
    if(acct!==accountGen)return;
    profileSaved=p.status==='fulfilled'&&!!p.value;
-   profile=(p.status==='fulfilled'&&p.value)||{displayName:providerName(activeUser)||'',steamAccountId:activeUser.user_metadata?.steam_account_id||''};
+   store.profile=(p.status==='fulfilled'&&p.value)||{displayName:providerName(activeUser)||'',steamAccountId:activeUser.user_metadata?.steam_account_id||''};
    profileSetupRequired=p.status==='fulfilled'&&(!p.value||!!activeUser.user_metadata?.steam_account_id&&!p.value.preferredRoles?.length);
-   if(t.status==='fulfilled')teams=t.value;
-   if(gen===generation){restorePractice();refreshScouting();}
+   if(t.status==='fulfilled')store.teams=t.value;
+   if(gen===store.generation){restorePractice();refreshScouting();}
    if(p.status==='rejected'||t.status==='rejected')notice('Some team account information could not be loaded. Reload the page to try again.');
   });
   if(!recovery&&!showTeamInvitation()){
@@ -2007,7 +1903,7 @@ async function authChanged(session,event){
   }
  }
  render();
- if(user){
+ if(store.user){
   // Recovery and a pending invitation never resume here: "Continue to board" and
   // declining the invitation do, through enterGated.
   if(!recovery&&!inviteOnEntry)resumingAccount=gen;
@@ -2016,7 +1912,7 @@ async function authChanged(session,event){
   // Clear the loading marker even if Home/Practice changed the workspace meanwhile;
   // left set, it hides the whole board.
   if(acct===accountGen&&$('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
-  if(gen!==generation)return;
+  if(gen!==store.generation)return;
   if(!inviteOnEntry&&!store.teamInvitation&&!recovery&&!welcome.recovery){
    if(profileSetupRequired)startProfileSetup(resumeRoute);
    else await resumeRoute();
@@ -2032,24 +1928,24 @@ if(playerDemo){
  replay.setAttribute('aria-label','Player demo replay');
  replay.append(el('strong','Watching as Alex · Carry'),el('p','Follow a sample Captain’s Mode draft. Replay controls advance the captain’s actions.'));
  const advance=button('Show next captain action',()=>{
-  const turn=nextTurn(state.actions,state.firstPick);
+  const turn=nextTurn(store.state.actions,store.state.firstPick);
   if(!turn)return;
-  const heroId=playerDemoHeroes[state.actions.length];
+  const heroId=playerDemoHeroes[store.state.actions.length];
   const action={mode:turn.mode,heroId};
   if(turn.mode==='ourPick'){
-   const playerIndex=state.actions.filter(item=>item.mode==='ourPick').length;
-   action.playerId=state.roster[playerIndex].id;
+   const playerIndex=store.state.actions.filter(item=>item.mode==='ourPick').length;
+   action.playerId=store.state.roster[playerIndex].id;
    action.position=playerIndex+1;
   }
-  state=reduceDraft(state,'append',action,{canWrite:true,heroes});
-  selected=null;
+  store.state=reduceDraft(store.state,'append',action,{canWrite:true,heroes:store.heroes});
+  store.selected=null;
   render();
   result.textContent=(turn.side==='our'?'Our team':'Enemy team')+' '+(turn.action==='pick'?'picked ':'banned ')+heroName(heroId)+'.';
-  advance.disabled=state.actions.length===CM_ORDER.length;
+  advance.disabled=store.state.actions.length===CM_ORDER.length;
  },replay,'primary');
  button('Restart replay',()=>{
-  state=demoState();
-  selected=null;
+  store.state=demoState();
+  store.selected=null;
   advance.disabled=false;
   result.textContent='Replay restarted.';
   render();
@@ -2066,22 +1962,22 @@ for(const id of ['setup-button','connection-status'])$(id).onclick=safe(lobby);
 $('profile-button').onclick=safe(()=>profileDialog());
 let signingOut=false;
 async function signOut(){
- if(signingOut||!user||!backend)return;
- const control=$('signout-button'),account=user.id;
+ if(signingOut||!store.user||!store.backend)return;
+ const control=$('signout-button'),account=store.user.id;
  signingOut=true;control.disabled=true;control.textContent='Signing out…';control.setAttribute('aria-busy','true');
- try{await backend.signOut();forgetDraft();if(user?.id===account)await authChanged(null,'SIGNED_OUT');}
+ try{await store.backend.signOut();forgetDraft();if(store.user?.id===account)await authChanged(null,'SIGNED_OUT');}
  finally{signingOut=false;control.disabled=false;control.textContent='Sign out';control.removeAttribute('aria-busy');}
 }
 $('signout-button').onclick=safe(signOut);
 
-const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user,teams,teamId:homeTeamId||team?.id,backend},(id,name,imageId)=>{
+const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user:store.user,teams:store.teams,teamId:homeTeamId||store.team?.id,backend:store.backend},(id,name,imageId)=>{
  if(demo)Object.assign(sampleTeam,{name,identity_image_id:imageId});
- teams=teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);
+ store.teams=store.teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);
  if(homeTeamId===id)renderTeamHome();
 });
 const cup=mountBattleCup({
  root:$('cup-view'),
- getContext:()=>({user,teams,teamId:team?.id,backend,demo,profileReady:demo||profileSaved,profileHasDraftDetails:demo||!!(profile.preferredRoles?.length&&(profile.signatureHeroes?.length||profile.desiredHeroes?.length)),version:cupAccountVersion}),
+ getContext:()=>({user:store.user,teams:store.teams,teamId:store.team?.id,backend:store.backend,demo,profileReady:demo||profileSaved,profileHasDraftDetails:demo||!!(store.profile.preferredRoles?.length&&(store.profile.signatureHeroes?.length||store.profile.desiredHeroes?.length)),version:cupAccountVersion}),
  onSignIn:()=>welcome.home('signin'),
  onSetup:safe(lobby),
  onTeam:safe(async id=>{if(!demo&&id&&await loadTeam(id)===false)return;navigateTeam(id);}),
@@ -2106,7 +2002,7 @@ function leaveCup(){
  if(url.searchParams.has('cup')){
   url.searchParams.delete('cup');
   // Back from Cup during a shared draft: keep its link so refresh/copy still opens the draft.
-  if(shared&&!demo&&!url.searchParams.has('draft'))url.searchParams.set('draft',shared.id);
+  if(store.shared&&!demo&&!url.searchParams.has('draft'))url.searchParams.set('draft',store.shared.id);
   else if(!url.searchParams.has('draft')&&!url.searchParams.has('demo')&&!url.searchParams.has('mock'))url.searchParams.set('practice','');
   history.pushState(null,'',url);
  }
@@ -2117,7 +2013,7 @@ $('draft-button').onclick=()=>{
  const url=new URL(location.href);
  if(url.searchParams.has('team')){
   url.searchParams.delete('team');
-  if(!demo)url.searchParams.set(shared?'draft':'practice',shared?.id||'');
+  if(!demo)url.searchParams.set(store.shared?'draft':'practice',store.shared?.id||'');
   history.pushState(null,'',url);
  }
  showWorkspace('draft');
@@ -2130,24 +2026,24 @@ let homeRequest=0;
 const sampleTeam={id:'demo-team',name:'Night Shift',owner_user_id:'demo-2'};
 function renderTeamHome(message=''){
  const root=$('team-home');
- const active=demo?sampleTeam:teams.find(item=>item.id===homeTeamId);
- const me=demo?(captainDemo?'demo-2':'demo-0'):user?.id||'local-player';
- const current={...profile,userId:me,displayName:profile.displayName||'You'};
+ const active=demo?sampleTeam:store.teams.find(item=>item.id===homeTeamId);
+ const me=demo?(captainDemo?'demo-2':'demo-0'):store.user?.id||'local-player';
+ const current={...store.profile,userId:me,displayName:store.profile.displayName||'You'};
  const source=demo?demoState().roster.map(item=>({...item.selfReport,userId:item.id,displayName:item.name})):homeRoster;
  const players=active?source.map(item=>item.userId===me?{...item,...current}:item):[current];
  if(active&&!players.some(item=>item.userId===me)&&me)players.push(current);
  const title=el('h1',active?.name||'Your player home');title.id='team-title';title.tabIndex=-1;
  root.replaceChildren(title);
- if(active?.identity_image_id&&(demo||backend)){
+ if(active?.identity_image_id&&(demo||store.backend)){
   const request=homeRequest;
-  void (demo?demoIdentityBackend:backend).getTeamIdentityImage(active.identity_image_id).then(image=>{
+  void (demo?demoIdentityBackend:store.backend).getTeamIdentityImage(active.identity_image_id).then(image=>{
    if(request!==homeRequest||!title.isConnected||!['image/png','image/jpeg','image/webp'].includes(image?.mime))return;
    const logo=el('img',null,'team-home-emblem');logo.alt='Team emblem';logo.src='data:'+image.mime+';base64,'+image.data;title.before(logo);
   }).catch(()=>{});
  }
- if(!demo&&teams.length>1){
+ if(!demo&&store.teams.length>1){
   const switcher=el('select');switcher.setAttribute('aria-label','Choose team');
-  for(const item of teams)switcher.append(new Option(item.name,item.id));
+  for(const item of store.teams)switcher.append(new Option(item.name,item.id));
   switcher.value=homeTeamId;switcher.onchange=()=>navigateTeam(switcher.value);root.append(switcher);
  }
  if(message){const status=el('p',message);status.setAttribute('role','status');root.append(status);}
@@ -2161,9 +2057,9 @@ function renderTeamHome(message=''){
   const captainCard=player===captain;
   const node=el('article',null,'team-home-card');
   node.dataset.captain=String(captainCard);
-  const choices=(player.signatureHeroes||[]).filter(id=>heroes[id]);
+  const choices=(player.signatureHeroes||[]).filter(id=>store.heroes[id]);
   const seed=Array.from(String(player.userId||'solo')).reduce((sum,ch)=>(sum*31+ch.charCodeAt(0))>>>0,0);
-  const hero=heroes[player.avatarHeroId]?player.avatarHeroId:choices[seed%choices.length];
+  const hero=store.heroes[player.avatarHeroId]?player.avatarHeroId:choices[seed%choices.length];
   if(hero)node.append(portrait(hero));else node.append(el('div',(player.displayName||'Player').slice(0,1).toUpperCase(),'team-home-placeholder'));
   node.append(el('h2',player.displayName||'Teammate'));
   const label=[captainCard?'Captain':null,player.userId===me?'You':null,...(player.preferredRoles||[]).map(role=>'P'+role)].filter(Boolean);
@@ -2180,20 +2076,20 @@ function renderTeamHome(message=''){
   const manage=el('details',null,'team-roster-details');
   manage.append(el('summary','Manage teammates'));
   const status=el('p');status.setAttribute('role','status');
-  const account=user.id, request=homeRequest;
+  const account=store.user.id, request=homeRequest;
   let removing=false;
   for(const member of homeRoster.filter(item=>item.userId!==account)){
    const row=el('div',null,'team-member-management');
    const label=member.displayName||'Teammate';
    row.append(el('strong',label));
    const remove=button('Remove '+label,async()=>{
-    if(removing||request!==homeRequest||user?.id!==account)return;
+    if(removing||request!==homeRequest||store.user?.id!==account)return;
     if(!confirm('Remove '+label+' from '+active.name+'? This also releases their team Battle Cup spot and draft control, and resets the team invite link.'))return;
     removing=true;remove.disabled=true;
     try{
-     await backend.removeTeamMember(active.id,member.userId,account);
-     if(request!==homeRequest||user?.id!==account)return;
-     if(team?.id===active.id){
+     await store.backend.removeTeamMember(active.id,member.userId,account);
+     if(request!==homeRequest||store.user?.id!==account)return;
+     if(store.team?.id===active.id){
       ++teamLoad;
       teamRoster=teamRoster.filter(item=>item.userId!==member.userId);
       selectedTeamIds=selectedTeamIds.filter(id=>id!==member.userId);
@@ -2201,9 +2097,9 @@ function renderTeamHome(message=''){
      homeRoster=homeRoster.filter(item=>item.userId!==member.userId);
      // Removal resets the invite code server-side; reload teams so Copy invite link uses the new one.
      let reloaded=true;
-     try{const fresh=await backend.listTeams();if(request===homeRequest&&user?.id===account){teams=fresh;if(team)team=teams.find(t=>t.id===team.id)||team;}}
-     catch{reloaded=false;teams=teams.map(t=>t.id===active.id?{...t,invite_code:undefined}:t);if(team?.id===active.id)team={...team,invite_code:undefined};}
-     if(request!==homeRequest||user?.id!==account)return;
+     try{const fresh=await store.backend.listTeams();if(request===homeRequest&&store.user?.id===account){store.teams=fresh;if(store.team)store.team=store.teams.find(t=>t.id===store.team.id)||store.team;}}
+     catch{reloaded=false;store.teams=store.teams.map(t=>t.id===active.id?{...t,invite_code:undefined}:t);if(store.team?.id===active.id)store.team={...store.team,invite_code:undefined};}
+     if(request!==homeRequest||store.user?.id!==account)return;
      renderTeamHome(label+' was removed from the team. The team invite link was reset'+(reloaded?': share the new one with players who have not joined yet.':'. Reload the page to get the new link.'));
      renderRoster();
      root.querySelector('summary')?.focus();
@@ -2216,14 +2112,14 @@ function renderTeamHome(message=''){
  }
  const actions=el('div',null,'team-home-actions');
  button('Edit my profile',()=>profileDialog(),actions);
- if(!active&&user)button('Create or join a team',lobby,actions);
+ if(!active&&store.user)button('Create or join a team',lobby,actions);
  button('Battle Cup',navigateCup,actions);
  button('Open draft board',focusDraftView,actions,'primary');
  root.append(actions);
 }
 function navigateTeam(id){
- const chosen=demo?sampleTeam:teams.find(item=>item.id===(id||homeTeamId||team?.id))||teams[0];
- const request=++homeRequest, account=user?.id;
+ const chosen=demo?sampleTeam:store.teams.find(item=>item.id===(id||homeTeamId||store.team?.id))||store.teams[0];
+ const request=++homeRequest, account=store.user?.id;
  homeTeamId=chosen?.id||'';
  homeRoster=[];
  const url=new URL(location.href);
@@ -2233,12 +2129,12 @@ function navigateTeam(id){
  showWorkspace('team');welcome.board();renderRoster();
  renderTeamHome(chosen&&!demo?'Loading team roster…':'');
  teamIdentity.open(homeTeamId);
- if(chosen&&!demo&&backend?.loadRoster){
-  void backend.loadRoster(chosen.id).then(rows=>{
-   if(request!==homeRequest||account!==user?.id||$('team-view').hidden)return;
+ if(chosen&&!demo&&store.backend?.loadRoster){
+  void store.backend.loadRoster(chosen.id).then(rows=>{
+   if(request!==homeRequest||account!==store.user?.id||$('team-view').hidden)return;
    homeRoster=rows;renderTeamHome();renderRoster();
   }).catch(()=>{
-   if(request===homeRequest&&account===user?.id&&!$('team-view').hidden)renderTeamHome('Could not load the roster. Reopen Team to retry.');
+   if(request===homeRequest&&account===store.user?.id&&!$('team-view').hidden)renderTeamHome('Could not load the roster. Reopen Team to retry.');
   });
  }
 }
@@ -2265,10 +2161,10 @@ $('first-pick').onchange=safe(()=>mutate('set_state',{firstPick:$('first-pick').
 $('reset-draft').onclick=safe(async()=>{if(confirm('Reset all draft actions?'))await mutate('reset');});
 
 $('create-session').onclick=safe(async()=>{
- if(!user||!team||demo)throw Error('Select a team first.');
- const teamId=team.id;
+ if(!store.user||!store.team||demo)throw Error('Select a team first.');
+ const teamId=store.team.id;
  if(!await loadTeam(teamId,{preserveSelection:true}))return;
- const row=await backend.createDraft(teamId,{actions:[],firstPick:true,enemyIds:[],roster:draftRoster(),assignments:{},source:'manual'});
+ const row=await store.backend.createDraft(teamId,{actions:[],firstPick:true,enemyIds:[],roster:draftRoster(),assignments:{},source:'manual'});
  await openDraft(row.id);
 });
 
@@ -2280,9 +2176,9 @@ $('join-session').onclick=safe(async()=>{
  await openDraft(id);
 });
 $('copy-session').onclick=safe(async()=>{
- if(!shared)return;
+ if(!store.shared)return;
  const url=new URL(location.origin+location.pathname);
- url.searchParams.set('draft',shared.id);
+ url.searchParams.set('draft',store.shared.id);
  await navigator.clipboard.writeText(url.href);
  notice('Session link copied. Team membership is required.');
 });
@@ -2297,8 +2193,8 @@ document.addEventListener('keydown',e=>{
   highlightSearch();
   return;
  }
- if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}
- if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}
+ if(e.key==='Escape'){store.selected=null;$('hero-search').value='';render();return;}
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&store.state.actions.length)void safe(()=>mutate('undo'))();return;}
  if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}
  if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){
   e.preventDefault();
@@ -2337,13 +2233,13 @@ window.addEventListener('popstate',()=>void safe(async()=>{
  // invitation stay in front, and signed-in routes pass the sign-in gates.
  if(welcome.recovery||showTeamInvitation())return;
  const params=urlParams();
- if(params.has('cup')){if(user)await enterGated(openCup);else openCup();return;}
- if(params.has('team')&&(user||demo)){if(user)await enterGated(()=>navigateTeam());else navigateTeam();return;}
+ if(params.has('cup')){if(store.user)await enterGated(openCup);else openCup();return;}
+ if(params.has('team')&&(store.user||demo)){if(store.user)await enterGated(()=>navigateTeam());else navigateTeam();return;}
  showWorkspace('draft');
  if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}
  const draft=params.get('draft');
  if(draft){
-  if(user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}
+  if(store.user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}
  }else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}
 })());
 // A hidden tab skips its sync ticks and catches up once when shown again; poll() ignores
@@ -2361,13 +2257,13 @@ if(imageId!==null){
 } else {showTeamInvitation();render();refreshScouting();if(demo&&urlParams().has('profile'))profileDialog();}
 
 if(imageId===null)void loadHeroes().then(value=>{
- heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));
+ store.heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...store.heroes[id],...h,pub_pick:store.heroes[id]?.pub_pick??h.pub_pick}]));
  touch();
  render();
 }).catch(()=>{});
 
 if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:DAY_MS}).then(rows=>{
- for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};
+ for(const h of rows)if(store.heroes[h.id])store.heroes[h.id]={...store.heroes[h.id],...h};
  touch();
  render();
 }).catch(()=>{});
@@ -2433,23 +2329,23 @@ else if(!demo)void (async()=>{
  }
   steamEnabled=config.steamAuth===true;
   googleEnabled=config.googleAuth===true;
-  backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
- if(store.teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
+  store.backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
+ if(store.teamInvitation&&!store.user&&$('team-invite-heading'))showTeamInvitation(true);
  if(urlParams().has('steam-error')){
   welcome.home('signin');
   const message=$('welcome-auth').querySelector('.auth-message[role=status]');
   if(message){message.dataset.state='error';message.textContent='Steam sign-in did not finish. Try again.';}
  }
  if(steamToken){
-  try {await backend.verifySteam(steamToken);}
+  try {await store.backend.verifySteam(steamToken);}
   catch {history.replaceState(null,'','/?steam-error');location.reload();return;}
  }
- if(googleAttempt){try{await backend.finishGoogle(googleToken,googleAttempt.nonce);}catch{welcome.linkError('google');}}
- backend.onAuthChange((session,event)=>{
+ if(googleAttempt){try{await store.backend.finishGoogle(googleToken,googleAttempt.nonce);}catch{welcome.linkError('google');}}
+ store.backend.onAuthChange((session,event)=>{
   observedAuthUser=session?.user?.id||null;++authEvent;
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });
-  const initialSession=await backend.getSession();
+  const initialSession=await store.backend.getSession();
  if(!initialSession&&pendingDraft()&&!store.teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!urlParams().has('steam-error'))welcome.home('signin');
  await authChanged(initialSession);
   welcome.loading();

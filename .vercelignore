@@ -11,6 +11,7 @@
 !web/store.js
 !web/dom.js
 !web/ui.js
+!web/draft-data.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
