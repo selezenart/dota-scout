@@ -119,7 +119,10 @@ let observations=new VersionedMap(),matchups={},requestedMatchups=new Set(),draf
 let allyCounterMatchups={},focusedPlayer=null,suggestionCache={};
 const matchupErrors=new Set(),allyCounterRequests=new Set(),allyCounterFailures=new Set();
 
-try {const saved=JSON.parse(localStorage.getItem(storageKey)||'null');if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}}catch{}
+try {
+ const saved=JSON.parse(localStorage.getItem(storageKey)||'null');
+ if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}
+}catch{}
 
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
 
@@ -135,16 +138,37 @@ const safe=fn=>(...args)=>Promise.resolve().then(()=>fn(...args)).catch(e=>notic
 
 function button(text,fn,parent,cls){const b=el('button',text,cls);b.type='button';b.onclick=safe(fn);parent?.append(b);return b;}
 
-function field(parent,label,value='',type='text'){const l=el('label',label),i=el(type==='textarea'?'textarea':'input');if(type!=='textarea')i.type=type;i.value=value;l.append(i);parent.append(l);return i;}
+function field(parent,label,value='',type='text'){
+ const l=el('label',label),i=el(type==='textarea'?'textarea':'input');
+ if(type!=='textarea')i.type=type;
+ i.value=value;
+ l.append(i);
+ parent.append(l);
+ return i;
+}
 
 function practiceKey(){return user?'captain-practice-v1:'+user.id:storageKey;}
 function saveLocal(){if(!shared&&!demo)try{localStorage.setItem(practiceKey(),JSON.stringify({state,profile}));}catch{}}
 function restorePractice(){
  state=initialState();
- try{const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');if(saved){state={...initialState(),...saved.state};if(!user)profile=saved.profile||{};return;}}catch{}
+ try{
+  const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');
+  if(saved){state={...initialState(),...saved.state};if(!user)profile=saved.profile||{};return;}
+ }catch{}
  if(user){state.roster=[{...profile,id:user.id}];touch();}
 }
-function resetDraftData(){observations.clear();matchups={};requestedMatchups.clear();matchupErrors.clear();allyCounterMatchups={};allyCounterRequests.clear();allyCounterFailures.clear();touch();suggestionCache={};focusedPlayer=null;}
+function resetDraftData(){
+ observations.clear();
+ matchups={};
+ requestedMatchups.clear();
+ matchupErrors.clear();
+ allyCounterMatchups={};
+ allyCounterRequests.clear();
+ allyCounterFailures.clear();
+ touch();
+ suggestionCache={};
+ focusedPlayer=null;
+}
 function detachWorkspace(){
  stopLiveWatch();resetAllyEntry();
  ++generation;++draftOpen;++teamLoad;shared=null;pending=false;healthy=true;polling=false;selected=null;localControl=true;
@@ -161,7 +185,9 @@ function focusDraftView(){ $('draft-button').click();$('surface-heroes').checked
 function matchupCoverage(){
  const ours=state.actions.filter(a=>a.mode==='ourPick'),enemies=state.actions.filter(a=>a.mode==='enemyPick');
  let observed=0;
- for(const ally of ours)for(const enemy of enemies){if((matchups[ally.heroId]||[]).some(row=>+row.hero_id===+enemy.heroId&&+row.games_played>0)||(matchups[enemy.heroId]||[]).some(row=>+row.hero_id===+ally.heroId&&+row.games_played>0))observed++;}
+ for(const ally of ours)for(const enemy of enemies){
+  if((matchups[ally.heroId]||[]).some(row=>+row.hero_id===+enemy.heroId&&+row.games_played>0)||(matchups[enemy.heroId]||[]).some(row=>+row.hero_id===+ally.heroId&&+row.games_played>0))observed++;
+ }
  return {observed,total:ours.length*enemies.length};
 }
 
@@ -171,7 +197,13 @@ const roleNames=ROLE_NAMES;
 
 const heroName=id=>heroes[id]?.localized_name||'Unknown hero';
 
-function portrait(id){const h=heroes[id],img=el('img');img.alt=heroName(id);img.loading='lazy';img.src=HERO_PORTRAIT_BASE+String(h?.name||'').replace('npc_dota_hero_','')+'.png';return img;}
+function portrait(id){
+ const h=heroes[id],img=el('img');
+ img.alt=heroName(id);
+ img.loading='lazy';
+ img.src=HERO_PORTRAIT_BASE+String(h?.name||'').replace('npc_dota_hero_','')+'.png';
+ return img;
+}
 
 // Derived draft data, rebuilt only when a ranking input changes.
 function derived(){
@@ -201,14 +233,24 @@ function scheduleRender(){
  if(typeof requestAnimationFrame==='function'&&!document.hidden)requestAnimationFrame(run);else queueMicrotask(run);
 }
 
-function buildRoster(){return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(accountOf(p)||'')),...p,name:p.displayName||p.name||observations.get(String(accountOf(p)||''))?.name,id:memberId(p),selfReport:p.selfReport||p}));}
+function buildRoster(){
+ return (Array.isArray(state.roster)?state.roster:[]).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)).map(p=>normalizeProfile({...observations.get(String(accountOf(p)||'')),...p,name:p.displayName||p.name||observations.get(String(accountOf(p)||''))?.name,id:memberId(p),selfReport:p.selfReport||p}));
+}
 
-function buildOpponents(){return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));}
+function buildOpponents(){
+ return demo?(state.opponents||[]).map(p=>normalizeProfile(p)):(state.enemyIds||[]).map(id=>normalizeProfile(observations.get(String(id))||{id,name:String(id)}));
+}
 
 // Failed loads (often OpenDota's per-IP rate limit, shared by every open board) are
 // retried a few times per draft; meanwhile the card says it is waiting.
 const scoutRetries=new Map();
-function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){const key=String(id);if(observations.has(key))continue;observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});scheduleRender();}).then(p=>{
+function scout(ids){
+ const gen=generation;
+ for(const id of ids.filter(Boolean)){
+  const key=String(id);
+  if(observations.has(key))continue;
+  observations.set(key,{id:key,sources:{profile:{status:'fetching'}}});
+  void loadPlayer(id,p=>{if(gen!==generation)return;observations.set(key,{...p,sources:{...p.sources}});scheduleRender();}).then(p=>{
  if(gen!==generation)return;
  const failed=Object.values(p.sources||{}).filter(s=>s?.status==='error');if(!failed.length)return;
  const tries=scoutRetries.get(gen+':'+key)||0;if(tries>=3)return;
@@ -216,11 +258,23 @@ function scout(ids){const gen=generation;for(const id of ids.filter(Boolean)){co
  const sources=Object.fromEntries(Object.entries(p.sources).map(([k,s])=>[k,s?.status==='error'?{...s,retrying:true}:s]));
  observations.set(key,{...p,sources});scheduleRender();
  // Re-scout through refreshScouting so a player removed meanwhile is not fetched again.
- setTimeout(()=>{if(gen!==generation||observations.get(key)?.sources!==sources)return;observations.delete(key);refreshScouting();},failed.some(s=>s.rateLimited)?SCOUT_RETRY_RATE_LIMITED_MS:SCOUT_RETRY_MS);
-}).catch(e=>{if(gen===generation)notice(e.message);});}}
+ setTimeout(()=>{
+  if(gen!==generation||observations.get(key)?.sources!==sources)return;
+  observations.delete(key);
+  refreshScouting();
+ },failed.some(s=>s.rateLimited)?SCOUT_RETRY_RATE_LIMITED_MS:SCOUT_RETRY_MS);
+}).catch(e=>{if(gen===generation)notice(e.message);});
+ }
+}
 
 // Credit for STRATZ counter and synergy data, shown once whenever it is in use.
-function stratzCredit(){const credit=el('a','Powered by STRATZ','stratz-credit');credit.href='https://stratz.com';credit.target='_blank';credit.rel='noopener noreferrer';return credit;}
+function stratzCredit(){
+ const credit=el('a','Powered by STRATZ','stratz-credit');
+ credit.href='https://stratz.com';
+ credit.target='_blank';
+ credit.rel='noopener noreferrer';
+ return credit;
+}
 function appendStratzCredit(){
  const root=$('suggestions');if(!root||root.querySelector('.stratz-credit')||!state.actions.some(a=>stratz[a.heroId]))return;
  root.append(stratzCredit());
@@ -229,9 +283,18 @@ const stratzFailures=new Map();
 function requestStratz(id){
  if(demo||stratzRequested.has(String(id)))return;
  stratzRequested.add(String(id));
- void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;touch();scheduleRender();}})
+ void Promise.resolve().then(()=>matchData.loadStratz(id)).then(data=>{
+  if(Array.isArray(data?.vs)&&Array.isArray(data?.with)){stratz[id]=data;touch();scheduleRender();}
+ })
   // Back off 1, 2, 4… minutes (at most 15), then retry on its own while the hero is still picked.
-  .catch(()=>{const n=(stratzFailures.get(String(id))||0)+1;stratzFailures.set(String(id),n);setTimeout(()=>{stratzRequested.delete(String(id));if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);},Math.min(STRATZ_RETRY_MAX_MS,STRATZ_RETRY_BASE_MS*2**(n-1)));});
+  .catch(()=>{
+   const n=(stratzFailures.get(String(id))||0)+1;
+   stratzFailures.set(String(id),n);
+   setTimeout(()=>{
+    stratzRequested.delete(String(id));
+    if(state.actions.some(a=>a.mode.endsWith('Pick')&&String(a.heroId)===String(id)))requestStratz(id);
+   },Math.min(STRATZ_RETRY_MAX_MS,STRATZ_RETRY_BASE_MS*2**(n-1)));
+  });
 }
 // One loader for both matchup caches. `matchups` feeds recommend() (a load bumps
 // the ranking caches; a failure shows the draft-wide retry); `allyCounterMatchups`
@@ -268,7 +331,10 @@ const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnable
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
  enterPractice();
-},onHome:()=>{forgetDraft();detachWorkspace();},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:safe(async()=>{
+},onHome:()=>{
+ forgetDraft();
+ detachWorkspace();
+},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:safe(async()=>{
  if(openingTeam)return;
  openingTeam=true;
  try{await enterGated(()=>navigateTeam());}finally{openingTeam=false;}
@@ -335,7 +401,13 @@ function showTeamInvitation(force=false){
    void roster.catch(()=>{}); // Setup can retry loading the selected roster independently.
   },
   onSwitch:async()=>{await backend.signOut();if(user?.id===account)await authChanged(null);},
-  onDismiss:()=>{if(teamInvitation!==invitation)return;forgetInvitation(invitation.code);teamInvitation=null;if(user)return enterGated(resumeRoute);welcome.home();},
+  onDismiss:()=>{
+   if(teamInvitation!==invitation)return;
+   forgetInvitation(invitation.code);
+   teamInvitation=null;
+   if(user)return enterGated(resumeRoute);
+   welcome.home();
+  },
  });
  if(invitation.code&&backend?.previewTeamInvitation&&!invitation.previewRequested){
   invitation.previewRequested=true;
@@ -374,7 +446,13 @@ function render(){
  let selector=active?.id?'#'+active.id:active?.dataset.heroId?'[data-hero-id="'+active.dataset.heroId+'"]':active?.name?'[name="'+active.name+'"][value="'+active.value+'"]':active?.classList.contains('primary')&&active.closest('#suggestions')?'#suggestions button.primary':null;
  const value=active?.value;
  renderView();
- if(selector&&!active.isConnected){const replacement=document.querySelector(selector);if(replacement){if(replacement.tagName==='SELECT'&&[...replacement.options].some(o=>o.value===value))replacement.value=value;replacement.focus({preventScroll:true});}}
+ if(selector&&!active.isConnected){
+  const replacement=document.querySelector(selector);
+  if(replacement){
+   if(replacement.tagName==='SELECT'&&[...replacement.options].some(o=>o.value===value))replacement.value=value;
+   replacement.focus({preventScroll:true});
+  }
+ }
 }
 function renderView(){
  $('signout-button').hidden=!user||demo;
@@ -383,13 +461,15 @@ function renderView(){
 
  $('connection-status').textContent=demo?'Demo · sample data':shared?(healthy?'Shared · synced':'Shared · reconnecting'):'Practice · this device';
 
- $('session-code').textContent=shared?shared.id.slice(0,8):'Local';$('copy-session').disabled=!shared;
+ $('session-code').textContent=shared?shared.id.slice(0,8):'Local';
+ $('copy-session').disabled=!shared;
 
  $('session-status').textContent=shared&&!write?'Following draft · updates sync automatically. Become drafter to make changes.':demo?'Demo never writes to the backend.':user?'Signed in · select a team and draft.':'Local practice. Sign in for shared drafts.';
 
  $('draft-owner').textContent=playerDemo?'Sam · captain controls the draft':shared?(shared.drafter_user_id?(roster().find(p=>p.id===shared.drafter_user_id)?.name||'Team member')+' controls the draft':'Seat available'):(localControl?'You · local practice':'Local seat available');
 
- $('claim-drafter').disabled=pending||!healthy||!!(shared?.drafter_user_id)||(!shared&&localControl);$('release-drafter').hidden=shared?!user||!(shared.drafter_user_id===user.id||teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id):!localControl;
+ $('claim-drafter').disabled=pending||!healthy||!!(shared?.drafter_user_id)||(!shared&&localControl);
+ $('release-drafter').hidden=shared?!user||!(shared.drafter_user_id===user.id||teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id):!localControl;
 
  if(playerDemo){
   $('claim-drafter').hidden=true;
@@ -397,17 +477,58 @@ function renderView(){
   $('drafter-seat').hidden=true;
   $('session-status').textContent='Player demo · follow the captain’s picks and bans.';
  }
- $('turn-label').textContent=turn?(turn.side==='our'?'Our ':'Enemy ')+turn.action:'Draft complete';$('turn-progress').textContent=`${state.actions.length} / ${CM_ORDER.length} actions · ${demo?'Invented demo':shared?'Shared team draft':'Manual practice'}`;
+ $('turn-label').textContent=turn?(turn.side==='our'?'Our ':'Enemy ')+turn.action:'Draft complete';
+ $('turn-progress').textContent=`${state.actions.length} / ${CM_ORDER.length} actions · ${demo?'Invented demo':shared?'Shared team draft':'Manual practice'}`;
 
- $('undo').disabled=!write||!state.actions.length;$('reset-draft').disabled=!write;$('first-pick').checked=state.firstPick;$('first-pick').disabled=!write||!!state.actions.length;
+ $('undo').disabled=!write||!state.actions.length;
+ $('reset-draft').disabled=!write;
+ $('first-pick').checked=state.firstPick;
+ $('first-pick').disabled=!write||!!state.actions.length;
 
- renderSeats();renderDraftTree();
+ renderSeats();
+ renderDraftTree();
 
- for(const side of ['our','enemy']){const list=$(side+'-lineup');list.replaceChildren();const picks=state.actions.filter(a=>a.mode===side+'Pick');for(let i=0;i<ROSTER_SIZE;i++){const li=el('li',null,'lineup-slot'),a=picks[i];if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));list.append(li);}}
+ for(const side of ['our','enemy']){
+  const list=$(side+'-lineup');
+  list.replaceChildren();
+  const picks=state.actions.filter(a=>a.mode===side+'Pick');
+  for(let i=0;i<ROSTER_SIZE;i++){
+   const li=el('li',null,'lineup-slot'),a=picks[i];
+   if(a)li.append(portrait(a.heroId));else li.append(el('span',String(i+1).padStart(2,'0'),'slot-portrait'));
+   li.append(el('span',a?heroName(a.heroId)+(a.position?' · P'+a.position:''):'Empty','slot-name'));
+   list.append(li);
+  }
+ }
 
- renderRecommendations(turn,write);appendStratzCredit();renderHeroes();renderRoster();renderDraftEnemies();
+ renderRecommendations(turn,write);
+ appendStratzCredit();
+ renderHeroes();
+ renderRoster();
+ renderDraftEnemies();
 
- $('analysis').hidden=!!turn||!reviewVisible;if(turn)$('analysis').replaceChildren();if(!turn){const n=$('analysis');n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));const review=reviewLineup({draft:state.actions,stratz,heroes});for(const side of ['our','enemy']){const picks=state.actions.filter(a=>a.mode===side+'Pick'),info=review[side];n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));for(const a of picks){const row=el('div',null,'review-player');row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));n.append(row);const notes=el('ul',null,'review-notes');for(const note of info.heroes.find(h=>h.heroId===+a.heroId)?.notes||[])notes.append(el('li',note.text,'review-note-'+note.tone));n.append(notes);}n.append(el('p','Matchup edge (Divine+): '+(info.edge===null?'no data':`${info.edge>=0?'+':''}${info.edge.toFixed(1)} per matchup across ${info.pairs} matchups`)));}if([...review.our.heroes,...review.enemy.heroes].some(h=>h.notes.some(x=>x.tone!=='info')))n.append(stratzCredit());n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));button('Show hero board',()=>{reviewVisible=false;render();},n);}
+ $('analysis').hidden=!!turn||!reviewVisible;
+ if(turn)$('analysis').replaceChildren();
+ if(!turn){
+  const n=$('analysis');
+  n.replaceChildren(el('h2','Draft review'),el('p','Heuristic composition review; ranking indices are not win probabilities. Missing public history remains unknown.'));
+  const review=reviewLineup({draft:state.actions,stratz,heroes});
+  for(const side of ['our','enemy']){
+   const picks=state.actions.filter(a=>a.mode===side+'Pick'),info=review[side];
+   n.append(el('h3',side==='our'?'Our lineup':'Enemy lineup'));
+   for(const a of picks){
+    const row=el('div',null,'review-player');
+    row.append(portrait(a.heroId),el('p',heroName(a.heroId)+(a.position?' · Position '+a.position:' · Position unassigned')+(a.playerId?' · '+(roster().find(p=>p.id===a.playerId)?.name||a.playerId):'')));
+    n.append(row);
+    const notes=el('ul',null,'review-notes');
+    for(const note of info.heroes.find(h=>h.heroId===+a.heroId)?.notes||[])notes.append(el('li',note.text,'review-note-'+note.tone));
+    n.append(notes);
+   }
+   n.append(el('p','Matchup edge (Divine+): '+(info.edge===null?'no data':`${info.edge>=0?'+':''}${info.edge.toFixed(1)} per matchup across ${info.pairs} matchups`)));
+  }
+  if([...review.our.heroes,...review.enemy.heroes].some(h=>h.notes.some(x=>x.tone!=='info')))n.append(stratzCredit());
+  n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));
+  button('Show hero board',()=>{reviewVisible=false;render();},n);
+ }
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
 }
@@ -473,25 +594,47 @@ function renderDraftTree(){
  CM_ORDER.forEach((step,index)=>{
   const ours=step.team===(state.firstPick?'A':'B');
   const recorded=state.actions[index],current=index===state.actions.length;
-  const row=el('div',null,'tree-turn');row.dataset.side=ours?'our':'enemy';row.dataset.action=step.action.toLowerCase();
+  const row=el('div',null,'tree-turn');
+  row.dataset.side=ours?'our':'enemy';
+  row.dataset.action=step.action.toLowerCase();
   row.classList.toggle('phase-start',CM_PHASE_STARTS.includes(index));
-  const slot=el('button',null,'tree-row');slot.type='button';slot.id='draft-turn-'+index;
-  slot.dataset.action=step.action.toLowerCase();slot.dataset.turn=index;
-  slot.classList.toggle('is-recorded',!!recorded);slot.classList.toggle('is-fresh',index===freshActionIndex&&!!recorded);slot.classList.toggle('is-current',current);
+  const slot=el('button',null,'tree-row');
+  slot.type='button';
+  slot.id='draft-turn-'+index;
+  slot.dataset.action=step.action.toLowerCase();
+  slot.dataset.turn=index;
+  slot.classList.toggle('is-recorded',!!recorded);
+  slot.classList.toggle('is-fresh',index===freshActionIndex&&!!recorded);
+  slot.classList.toggle('is-current',current);
   const label=`Turn ${index+1}, ${ours?'our':'enemy'} ${step.action.toLowerCase()}${recorded?', '+heroName(recorded.heroId):current?', select a hero':', waiting'}`;
-  slot.setAttribute('aria-label',label);slot.title=label;
+  slot.setAttribute('aria-label',label);
+  slot.title=label;
   if(current)slot.setAttribute('aria-current','step');
   const preview=current&&selected&&heroes[selected.id]&&!state.actions.some(a=>+a.heroId===+selected.id)?selected.id:null;
-  if(preview!=null){const text=label+', previewing '+heroName(preview);slot.setAttribute('aria-label',text);slot.title=text;const img=portrait(preview);img.className='tree-hero tree-preview';slot.append(img);}
+  if(preview!=null){
+   const text=label+', previewing '+heroName(preview);
+   slot.setAttribute('aria-label',text);
+   slot.title=text;
+   const img=portrait(preview);
+   img.className='tree-hero tree-preview';
+   slot.append(img);
+  }
   else if(recorded){const img=portrait(recorded.heroId);img.className='tree-hero';slot.append(img);}
-  else{const placeholder=el('span',null,'tree-placeholder'),icon=el('span',current?step.action.toUpperCase():'');icon.setAttribute('aria-hidden','true');placeholder.append(icon);slot.append(placeholder);}
+  else{
+   const placeholder=el('span',null,'tree-placeholder'),icon=el('span',current?step.action.toUpperCase():'');
+   icon.setAttribute('aria-hidden','true');
+   placeholder.append(icon);
+   slot.append(placeholder);
+  }
   slot.disabled=!recorded&&!current;
   slot.onclick=()=>{
    if(current){focusDraftView();return;}
    $('history-inspect').replaceChildren(portrait(recorded.heroId),el('strong',heroName(recorded.heroId)),el('span',(ours?'Our ':'Enemy ')+step.action.toLowerCase()+' · turn '+(index+1)+(recorded.position?' · P'+recorded.position:'')));
   };
-  const number=el('span',String(index+1),'tree-number');number.setAttribute('aria-hidden','true');
-  row.append(slot,number);tree.append(row);
+  const number=el('span',String(index+1),'tree-number');
+  number.setAttribute('aria-hidden','true');
+  row.append(slot,number);
+  tree.append(row);
  });
 }
 
@@ -558,7 +701,12 @@ function renderHeroes(){
   }
   root.append(section);
  }
- if(!root.children.length||(query&&!matched)){root.replaceChildren();const empty=el('p','No heroes match your search or filters. Try another name or All heroes.');empty.setAttribute('role','status');root.append(empty);}
+ if(!root.children.length||(query&&!matched)){
+  root.replaceChildren();
+  const empty=el('p','No heroes match your search or filters. Try another name or All heroes.');
+  empty.setAttribute('role','status');
+  root.append(empty);
+ }
  highlightSearch();
 }
 
@@ -573,7 +721,14 @@ function searchHeroes(){
  highlightSearch();
 }
 function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:not(:disabled):not(.is-search-miss)')];}
-function highlightSearch(){const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});tiles[searchIndex]?.classList.add('is-highlighted');const search=$('hero-search');if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');}
+function highlightSearch(){
+ const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();
+ searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));
+ all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});
+ tiles[searchIndex]?.classList.add('is-highlighted');
+ const search=$('hero-search');
+ if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');
+}
 
 function evidenceSummaries(turn){
  const mode=turn.mode,sum=(players,enemy)=>players.map(player=>({player,enemy,stats:heroStatRows(player.heroes)}));
@@ -589,27 +744,135 @@ function heroEvidence(heroId,sources,playerId){
  return top?`${top.enemy?'Enemy ':''}${top.player.name} · ${top.winRate}% · ${top.games} games`:'';
 }
 
-function renderRecommendations(turn,write){const root=$('suggestions');root.replaceChildren();if(!turn){rankedIds.clear();const done=el('div',null,'decision-dock');root.append(done);done.append(el('p',`All ${CM_ORDER.length} actions recorded.`));button('Show draft review',()=>{reviewVisible=true;render();},done);return;}const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');const evidenceSources=evidenceSummaries(turn);root.append(best,dock);const ranked=ranking(turn.mode);rankedIds=new Set(ranked.slice(0,TOP_RECOMMENDATIONS).map(r=>r.heroId));const rec=selected?ranked.find(r=>r.heroId===selected.id):null;if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
+function renderRecommendations(turn,write){
+ const root=$('suggestions');
+ root.replaceChildren();
+ if(!turn){
+  rankedIds.clear();
+  const done=el('div',null,'decision-dock');
+  root.append(done);
+  done.append(el('p',`All ${CM_ORDER.length} actions recorded.`));
+  button('Show draft review',()=>{reviewVisible=true;render();},done);
+  return;
+ }
+ const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');
+ const evidenceSources=evidenceSummaries(turn);
+ root.append(best,dock);
+ const ranked=ranking(turn.mode);
+ rankedIds=new Set(ranked.slice(0,TOP_RECOMMENDATIONS).map(r=>r.heroId));
+ const rec=selected?ranked.find(r=>r.heroId===selected.id):null;
+ if(selected&&!state.actions.some(a=>+a.heroId===selected.id)){
 
- const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');feature.append(portrait(selected.id),body);body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
+ const feature=el('div',null,'rec-feature'),body=el('div',null,'rec-body');
+  feature.append(portrait(selected.id),body);
+  body.append(el('h3',heroName(selected.id)),el('p',rec?`Original recommendation: ranking index ${rec.score} · ${rec.playerName||'Unassigned player'}`:'Manual selection · evidence unavailable'));
+  const reasons=[...(rec?.reasons||[]),...(rec?.evidence||[])];
  if(reasons.length)body.append(el('p',reasons[0],'decision-reason'));
- if(reasons.length>1){const details=el('details',null,'decision-reasons');details.append(el('summary','Why this hero'));for(const reason of reasons.slice(1))details.append(el('p',reason));body.append(details);}
+ if(reasons.length>1){
+  const details=el('details',null,'decision-reasons');
+  details.append(el('summary','Why this hero'));
+  for(const reason of reasons.slice(1))details.append(el('p',reason));
+  body.append(details);
+ }
 
- let player,position;if(turn.mode==='ourPick'){const used=state.actions.filter(a=>a.mode==='ourPick'),playerLabel=el('label','Assign allied player','player-assignment');player=el('select');player.id='assigned-player';playerLabel.htmlFor=player.id;player.append(new Option('Unassigned',''));for(const p of roster().filter(p=>!used.some(a=>a.playerId===p.id)))player.append(new Option(p.name,p.id));player.value=selected.playerId??rec?.playerId??'';player.onchange=()=>{selected.playerId=player.value;};playerLabel.append(player);const picker=el('fieldset',null,'position-picker'),options=el('div',null,'position-options'),status=el('p',null,'position-status');status.setAttribute('role','status');position=Object.hasOwn(selected,'position')?selected.position:rec?.position??'';if(used.some(a=>+a.position===+position))position='';const update=()=>{status.textContent=position?'P'+position+' · '+roleNames[+position-1]:'Unassigned';};picker.append(el('legend','Assign position'),options);for(let i=1;i<=5;i++){const label=el('label',null,'position-option'),radio=el('input'),copy=el('span',null,'position-copy');radio.type='radio';radio.name='assigned-position';radio.value=String(i);radio.checked=+position===i;radio.disabled=used.some(a=>+a.position===i);radio.onchange=()=>{if(radio.checked){selected.position=position=radio.value;update();}};copy.append(el('strong','P'+i),el('small',roleNames[i-1]));label.append(radio,copy);options.append(label);}button('Unassigned',()=>{selected.position=position='';for(const radio of options.querySelectorAll('input'))radio.checked=false;update();},picker,'position-auto');update();picker.append(status);body.append(playerLabel,picker);}
+ let player,position;
+  if(turn.mode==='ourPick'){
+   const used=state.actions.filter(a=>a.mode==='ourPick'),playerLabel=el('label','Assign allied player','player-assignment');
+   player=el('select');
+   player.id='assigned-player';
+   playerLabel.htmlFor=player.id;
+   player.append(new Option('Unassigned',''));
+   for(const p of roster().filter(p=>!used.some(a=>a.playerId===p.id)))player.append(new Option(p.name,p.id));
+   player.value=selected.playerId??rec?.playerId??'';
+   player.onchange=()=>{selected.playerId=player.value;};
+   playerLabel.append(player);
+   const picker=el('fieldset',null,'position-picker'),options=el('div',null,'position-options'),status=el('p',null,'position-status');
+   status.setAttribute('role','status');
+   position=Object.hasOwn(selected,'position')?selected.position:rec?.position??'';
+   if(used.some(a=>+a.position===+position))position='';
+   const update=()=>{status.textContent=position?'P'+position+' · '+roleNames[+position-1]:'Unassigned';};
+   picker.append(el('legend','Assign position'),options);
+   for(let i=1;i<=5;i++){
+    const label=el('label',null,'position-option'),radio=el('input'),copy=el('span',null,'position-copy');
+    radio.type='radio';
+    radio.name='assigned-position';
+    radio.value=String(i);
+    radio.checked=+position===i;
+    radio.disabled=used.some(a=>+a.position===i);
+    radio.onchange=()=>{if(radio.checked){selected.position=position=radio.value;update();}};
+    copy.append(el('strong','P'+i),el('small',roleNames[i-1]));
+    label.append(radio,copy);
+    options.append(label);
+   }
+   button('Unassigned',()=>{
+    selected.position=position='';
+    for(const radio of options.querySelectorAll('input'))radio.checked=false;
+    update();
+   },picker,'position-auto');
+   update();
+   picker.append(status);
+   body.append(playerLabel,picker);
+  }
 
- const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{const a={mode:turn.mode,heroId:selected.id};if(player?.value)a.playerId=player.value;if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;const before=state.actions.length;await mutate('append',a);if(state.actions.length===before+1){freshActionIndex=before;render();freshActionIndex=-1;}},feature,'primary');confirm.disabled=!write;
+ const confirm=button(`${turn.side==='enemy'?'Enemy ':''}${turn.action==='pick'?'Pick':'Ban'} ${heroName(selected.id)}`,async()=>{
+  const a={mode:turn.mode,heroId:selected.id};
+  if(player?.value)a.playerId=player.value;
+  if(position&&!state.actions.some(a=>a.mode==='ourPick'&&+a.position===+position))a.position=+position;
+  const before=state.actions.length;
+  await mutate('append',a);
+  if(state.actions.length===before+1){freshActionIndex=before;render();freshActionIndex=-1;}
+ },feature,'primary');
+  confirm.disabled=!write;
  button('Clear selection',()=>{selected=null;render();$('hero-search').focus();},feature,'clear-staged');
  if(!write)feature.append(el('p',playerDemo?'Only the captain can confirm picks and bans.':shared?'Become drafter to confirm this action.':'Take the drafter seat to confirm this action.','decision-readonly'));
  dock.append(feature);
 
  }else dock.append(el('p','Choose a suggested hero or browse the pool. Review your selection here before confirming.','decision-empty'));
 
- const candidates=el('div',null,'decision-candidates');candidates.append(el('h3',turn.action==='ban'?'Best bans now':'Best picks now'));best.append(candidates);const more=el('details',null,'more-candidates');more.append(el('summary','More suggestions'));let candidateIndex=0;const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
- if(turn.mode==='ourPick'&&visibleCandidates.length){const legend=el('div',null,'rec-legend');legend.setAttribute('aria-label','Suggestion categories');for(const [cls,label] of [['team','Team'],['counter','Counter'],['meta','Meta'],['all','All three']])legend.append(el('span',label,'rec-badge rec-badge-'+cls));candidates.before(legend);}for(const r of visibleCandidates){const b=button('',()=>stage(r.heroId,r),candidateIndex++<6?candidates:more,'rec-row');const summary=el('span',null,'rec-summary');summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));b.append(portrait(r.heroId),summary);
- const win=heroEvidence(r.heroId,evidenceSources,r.playerId);if(win)summary.append(el('span',win,'rec-win'));const tags=r.tags||[];if(tags.length){const badges=el('span',null,'rec-badges');if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}summary.append(badges);}b.title=[...r.reasons,...r.evidence].join('\n');}if(!ranked.length)best.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
+ const candidates=el('div',null,'decision-candidates');
+ candidates.append(el('h3',turn.action==='ban'?'Best bans now':'Best picks now'));
+ best.append(candidates);
+ const more=el('details',null,'more-candidates');
+ more.append(el('summary','More suggestions'));
+ let candidateIndex=0;
+ const visibleCandidates=diverseTop(ranked.filter(candidate=>candidate.heroId!==selected?.id),8,2);
+ if(turn.mode==='ourPick'&&visibleCandidates.length){
+  const legend=el('div',null,'rec-legend');
+  legend.setAttribute('aria-label','Suggestion categories');
+  for(const [cls,label] of [['team','Team'],['counter','Counter'],['meta','Meta'],['all','All three']])legend.append(el('span',label,'rec-badge rec-badge-'+cls));
+  candidates.before(legend);
+ }
+ for(const r of visibleCandidates){
+  const b=button('',()=>stage(r.heroId,r),candidateIndex++<6?candidates:more,'rec-row');
+  const summary=el('span',null,'rec-summary');
+  summary.append(el('strong',heroName(r.heroId)),el('span',[r.playerName,r.position?'P'+r.position:null].filter(Boolean).join(' · ')),el('small',r.reasons[0]||r.evidence[0]||'Limited data'));
+  b.append(portrait(r.heroId),summary);
+ const win=heroEvidence(r.heroId,evidenceSources,r.playerId);
+  if(win)summary.append(el('span',win,'rec-win'));
+  const tags=r.tags||[];
+  if(tags.length){
+   const badges=el('span',null,'rec-badges');
+   if(tags.length===3){b.classList.add('rec-all-three');badges.append(el('span','All three','rec-badge rec-badge-all'));}
+   for(const t of tags){b.classList.add('rec-tag-'+t);badges.append(el('span',{team:'Team',counter:'Counter',meta:'Meta'}[t],'rec-badge rec-badge-'+t));}
+   summary.append(badges);
+  }
+  b.title=[...r.reasons,...r.evidence].join('\n');
+ }
+ if(!ranked.length)best.append(el('p','No evidence-backed recommendations for this turn. Manual selection is available.'));
  if(visibleCandidates.length>6)best.append(more);
- const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));dock.append(evidence);
- if(matchupErrors.size){evidence.append(el('p','Some matchup requests are unavailable.'));button('Retry unavailable matchup data',()=>{for(const id of matchupErrors)requestedMatchups.delete(id);matchupErrors.clear();allyCounterFailures.clear();refreshScouting();render();},dock);}
+ const coverage=matchupCoverage(),evidence=el('details',null,'decision-evidence');
+ evidence.append(el('summary',`Matchup evidence · ${coverage.observed} / ${coverage.total} pairs`),el('p','Heuristic rankings · public coverage varies. Enemy assignments stay unconfirmed.'));
+ dock.append(evidence);
+ if(matchupErrors.size){
+  evidence.append(el('p','Some matchup requests are unavailable.'));
+  button('Retry unavailable matchup data',()=>{
+   for(const id of matchupErrors)requestedMatchups.delete(id);
+   matchupErrors.clear();
+   allyCounterFailures.clear();
+   refreshScouting();
+   render();
+  },dock);
+ }
 
 
 }
@@ -618,7 +881,10 @@ function renderRecommendations(turn,write){const root=$('suggestions');root.repl
 function enemyDetails(card,p){
  const s=playerSummary(p,Math.floor(Date.now()/1000));
  const seen=seenAgainstUs(p);if(seen)card.append(el('p',seen,'enemy-seen'));
- if(s.state!=='ready'){card.append(el('p',{loading:'Loading public stats…',waiting:'Waiting for OpenDota…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));return;}
+ if(s.state!=='ready'){
+  card.append(el('p',{loading:'Loading public stats…',waiting:'Waiting for OpenDota…',closed:'Closed account — no public match history.',error:'Public stats unavailable (OpenDota error).'}[s.state],'enemy-status'));
+  return;
+ }
  card.append(el('p',s.positions.length?'Likely '+likelyPositions(s):'Position unknown','player-role-summary'));
  const strip=(title,cls,rows,label,empty)=>{
   card.append(el('h4',title));const root=el('div',null,'roster-hero-strip '+cls);
@@ -638,7 +904,9 @@ const matchStore=createTeamScopedStore({key:'captain-enemy-matches-v1',cap:LOCAL
  onMissing:()=>notice('Team match storage is not set up yet. Battle Cup matches are kept on this device.'),
  onLoadError:error=>notice('Could not load team Battle Cup matches: '+(error.message||'try again later.'))});
 async function addEnemyMatches(text){
- const ids=matchData.parseMatchIds(text);if(!ids.length)throw Error('Enter match IDs or match links.');if(ids.length>10)throw Error('Load at most 10 matches at a time.');
+ const ids=matchData.parseMatchIds(text);
+ if(!ids.length)throw Error('Enter match IDs or match links.');
+ if(ids.length>10)throw Error('Load at most 10 matches at a time.');
  matchStore.sync();
  if(matchStore.state==='loading')throw Error('Team matches are still loading. Try again in a moment.');
  // A failed team load is retried on the next attempt instead of needing a reload.
@@ -654,7 +922,8 @@ async function addEnemyMatches(text){
   if(scope!==matchStore.scope)return false;
   matchStore.rows=[row,...matchStore.rows.filter(r=>r.matchId!==id)];
  }
- if(!teamId)matchStore.writeLocal();render();
+ if(!teamId)matchStore.writeLocal();
+ render();
  const problems=[];
  if(failed.length)problems.push('Could not load match '+failed.join(', ')+'. Check the ID, or try again if OpenDota is busy.');
  if(unsaved.length)problems.push('Could not save match '+unsaved.join(', ')+' to the team. Check your team access and try again.');
@@ -673,7 +942,12 @@ function renderEnemyMatches(section){
  const r=enemyMatchReport(rows,state.enemyIds||[]),root=el('div',null,'draft-enemy-matches');
  const resolved=r.matches.filter(m=>m.side),wins=resolved.filter(m=>m.won).length;
  root.append(el('h4','Their Battle Cup matches'),el('p',`${rows.length} match${rows.length===1?'':'es'} · ${wins}W ${resolved.filter(m=>m.won===false).length}L${r.anonymous?` · ${r.anonymous} anonymous picks`:''}`,'draft-enemy-match-summary'));
- const list=(cls,items,label)=>{if(!items.length)return;const box=el('div',null,'draft-enemy-match-list');for(const h of items.slice(0,8))box.append(el('span',label(h),cls));root.append(box);};
+ const list=(cls,items,label)=>{
+  if(!items.length)return;
+  const box=el('div',null,'draft-enemy-match-list');
+  for(const h of items.slice(0,8))box.append(el('span',label(h),cls));
+  root.append(box);
+ };
  list('draft-enemy-match-pick',r.picks,h=>`${heroName(h.heroId)} ×${h.games}${h.wins?` (${h.wins}W)`:''}`);
  if(r.bans.length)root.append(el('p','They banned:','draft-enemy-match-label'));
  list('draft-enemy-match-ban',r.bans,h=>`${heroName(h.heroId)} ×${h.count}`);
@@ -685,7 +959,8 @@ function renderEnemyMatches(section){
  // A wrongly chosen or inferred side can be corrected; kept collapsed so the panel stays short.
  const resolvedSides=r.matches.filter(m=>m.side);
  if(resolvedSides.length){
-  const sides=el('details',null,'draft-enemy-match-sides');sides.append(el('summary',`Enemy side in ${resolvedSides.length} match${resolvedSides.length===1?'':'es'}`));
+  const sides=el('details',null,'draft-enemy-match-sides');
+  sides.append(el('summary',`Enemy side in ${resolvedSides.length} match${resolvedSides.length===1?'':'es'}`));
   for(const m of resolvedSides.slice(0,10)){
    const box=el('div',null,'draft-enemy-match-side');box.append(el('span',`Match ${m.matchId}: enemy was ${m.side==='radiant'?'Radiant':'Dire'}`));
    button('Switch side for match '+m.matchId,()=>setEnemyMatchSide(m.matchId,m.side==='radiant'?'dire':'radiant'),box);
@@ -704,11 +979,19 @@ let assignment={key:null,map:{},result:''};
 // Called from the draft poll so idle teammates also see a newly saved assignment.
 function refreshSightings(){
  const teamId=sightingStore.team();
- if(teamId&&sightingStore.remote&&sightingStore.state==='ready'&&state.actions.length>=CM_ORDER.length&&Date.now()-sightingStore.loadedAt>SIGHTING_REFRESH_MS){sightingStore.loadedAt=Date.now();sightingStore.reload(teamId);}
+ if(teamId&&sightingStore.remote&&sightingStore.state==='ready'&&state.actions.length>=CM_ORDER.length&&Date.now()-sightingStore.loadedAt>SIGHTING_REFRESH_MS){
+  sightingStore.loadedAt=Date.now();
+  sightingStore.reload(teamId);
+ }
 }
 // One key per game. Reset keeps the draft id, so the key also uses the opening bans
 // and the enemy accounts; a later Undo and re-pick stays the same game.
-function draftFingerprint(){let h=0x811c9dc5;const text=state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(state.enemyIds||[])].map(String).sort().join(',');for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+function draftFingerprint(){
+ let h=0x811c9dc5;
+ const text=state.actions.slice(0,4).map(a=>a.mode[0]+a.heroId).join(',')+'|'+[...(state.enemyIds||[])].map(String).sort().join(',');
+ for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0;}
+ return h.toString(16).padStart(8,'0');
+}
 const sightingDraftBase=()=>shared?.id?'draft:'+shared.id:'draft:practice';
 const sightingGameKey=()=>sightingDraftBase()+':'+draftFingerprint();
 // Key last saved per draft in this session, so a corrected enemy list or opening replaces it.
@@ -718,7 +1001,11 @@ async function saveSightings(entries){
  if(shared&&!canWrite())throw Error('Only the current drafter can save who played what.');
  sightingStore.sync();
  if(sightingStore.state==='loading')throw Error('The team scouting list is still loading. Try again in a moment.');
- if(sightingStore.state==='failed'){sightingStore.scope=null;sightingStore.sync();throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');}
+ if(sightingStore.state==='failed'){
+  sightingStore.scope=null;
+  sightingStore.sync();
+  throw Error('The team scouting list could not be loaded. Retrying now; try again in a moment.');
+ }
  const teamId=sightingStore.remote?sightingStore.team():null,scope=sightingStore.scope,key=sightingGameKey(),slot=scope+'|'+sightingDraftBase();
  const previous=lastSightingKey.get(slot)!==key?lastSightingKey.get(slot):null;
  if(teamId)await backend.recordEnemySightings(teamId,key,entries,'manual');
@@ -743,7 +1030,8 @@ function seenAgainstUs(p){
 function renderEnemyAssignment(root){
  const picks=state.actions.filter(a=>a.mode==='enemyPick'),enemies=opponents();
  if(!picks.length||!enemies.length)return;
- sightingStore.sync();const key=sightingStore.scope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
+ sightingStore.sync();
+ const key=sightingStore.scope+'|'+sightingGameKey(),readOnly=!!shared&&!canWrite();
  // Teammates outside the drafter seat always see the saved assignment (refreshed by the poll);
  // the drafter's unsaved edits survive a failed poll or a pending action.
  const viewer=!!shared&&shared.drafter_user_id!==user?.id;
@@ -760,9 +1048,14 @@ function renderEnemyAssignment(root){
   select.value=assignment.map[a.heroId]||'';select.disabled=readOnly;select.onchange=()=>{assignment.map[a.heroId]=select.value;};
   row.append(el('span',heroName(a.heroId)),select);box.append(row);
  }
- const resultLabel=el('label',null,'enemy-assignment-row'),result=el('select');result.setAttribute('aria-label','Our result');
+ const resultLabel=el('label',null,'enemy-assignment-row'),result=el('select');
+ result.setAttribute('aria-label','Our result');
  for(const [value,label] of [['','Result unknown'],['won','We won'],['lost','We lost']])result.append(new Option(label,value));
- result.value=assignment.result;result.disabled=readOnly;result.onchange=()=>{assignment.result=result.value;};resultLabel.append(el('span','Our result'),result);box.append(resultLabel);
+ result.value=assignment.result;
+ result.disabled=readOnly;
+ result.onchange=()=>{assignment.result=result.value;};
+ resultLabel.append(el('span','Our result'),result);
+ box.append(resultLabel);
  const saveButton=button('Save who played what',async()=>{
   assignment.result=result.value;
   for(const select of box.querySelectorAll('select[data-hero]'))assignment.map[select.dataset.hero]=select.value;
@@ -775,24 +1068,39 @@ function renderEnemyAssignment(root){
 }
 // Compact enemy scouting in the Next decision panel, so it is visible while drafting.
 function renderDraftEnemies(){
- const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');if(!section||!list)return;
- matchStore.sync();sightingStore.sync();
+ const section=$('draft-enemy-scouting'),list=$('draft-enemy-list');
+ if(!section||!list)return;
+ matchStore.sync();
+ sightingStore.sync();
  // An empty draft is a Reset or a new game: later saves must not replace the earlier game.
  // While someone else holds the drafter seat this tab may miss their Reset, so forget too.
  if(!state.actions.length||shared&&shared.drafter_user_id!==user?.id)lastSightingKey.delete(sightingStore.scope+'|'+sightingDraftBase());
- const enemies=opponents();list.replaceChildren();section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));const hasReport=renderEnemyMatches(section);section.classList.toggle('has-match-report',hasReport);section.hidden=!hasReport&&!enemies.length;
+ const enemies=opponents();
+ list.replaceChildren();
+ section.classList.toggle('is-detail-open',enemies.some(p=>String(p.id)===focusedPlayer));
+ const hasReport=renderEnemyMatches(section);
+ section.classList.toggle('has-match-report',hasReport);
+ section.hidden=!hasReport&&!enemies.length;
  const now=Math.floor(Date.now()/1000);
  for(const p of enemies){
-  const s=playerSummary(p,now),row=el('div',null,'draft-enemy');row.dataset.playerId=String(p.id);row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
+  const s=playerSummary(p,now),row=el('div',null,'draft-enemy');
+  row.dataset.playerId=String(p.id);
+  row.classList.toggle('is-focused',String(p.id)===focusedPlayer);
   const meta=SEAT_STATUS[s.state]||(s.positions.length?likelyPositions(s):'Position unknown');
   row.append(el('strong',p.name,'draft-enemy-name'),el('span',meta,'draft-enemy-meta'));
   if(s.state==='ready'){
    const heroesRow=el('div',null,'draft-enemy-heroes');
-   for(const h of s.topHeroes.slice(0,3)){const item=el('span',null,'draft-enemy-hero'),img=portrait(h.heroId);img.alt='';item.append(img,el('small',`${heroName(h.heroId)} ${h.winRate==null?h.games+' games':`${h.winRate}% · ${h.games}`}`));heroesRow.append(item);}
+   for(const h of s.topHeroes.slice(0,3)){
+    const item=el('span',null,'draft-enemy-hero'),img=portrait(h.heroId);
+    img.alt='';
+    item.append(img,el('small',`${heroName(h.heroId)} ${h.winRate==null?h.games+' games':`${h.winRate}% · ${h.games}`}`));
+    heroesRow.append(item);
+   }
    row.append(heroesRow);
    if(s.cup.length)row.append(el('p','Battle Cup: '+s.cup.slice(0,3).map(h=>heroName(h.heroId)).join(', '),'draft-enemy-cup'));
   }
-  const seen=seenAgainstUs(p);if(seen)row.append(el('p',seen,'draft-enemy-seen'));
+  const seen=seenAgainstUs(p);
+  if(seen)row.append(el('p',seen,'draft-enemy-seen'));
   list.append(row);
  }
 }
@@ -814,31 +1122,95 @@ function renderRoster(){
     if(!ids.length)strip.append(el('span','Not set','secondary'));card.append(strip);
    }
    const sources=Object.entries(p.sources||{}).filter(([,source])=>source&&typeof source==='object');
-   if(sources.length){const details=el('details',null,'roster-sources');details.append(el('summary','Public data and freshness'));for(const [source,status] of sources)details.append(el('p',`${source}: ${status.status}${status.cached?' - cached':''}${status.at?' · '+new Date(status.at).toLocaleString():''}${status.message?' · '+status.message:''}`));card.append(details);}
+   if(sources.length){
+    const details=el('details',null,'roster-sources');
+    details.append(el('summary','Public data and freshness'));
+    for(const [source,status] of sources)details.append(el('p',`${source}: ${status.status}${status.cached?' - cached':''}${status.at?' · '+new Date(status.at).toLocaleString():''}${status.message?' · '+status.message:''}`));
+    card.append(details);
+   }
    root.append(card);
   }
  }
- if(!root.children.length){root.append(el('p','Your team starts here. Add your profile or invite teammates from Setup.'));button('Edit my profile',()=>profileDialog(),root,'primary');button('Invite or import players',lobby,root);}
+ if(!root.children.length){
+  root.append(el('p','Your team starts here. Add your profile or invite teammates from Setup.'));
+  button('Edit my profile',()=>profileDialog(),root,'primary');
+  button('Invite or import players',lobby,root);
+ }
 }
 
 
 // After a rejected change: adopt the draft as the server has it, unless this view moved on.
-async function reloadDraft(id,gen){try{const row=await backend.getDraft(id);if(gen===generation){adopt(row);healthy=true;}}catch{if(gen===generation)healthy=false;}}
-async function mutate(operation,payload={}){if(playerDemo)return;if(pending) return;if(!['claim','release'].includes(operation)&&!canWrite())throw Error('Become the confirmed drafter first.');pending=true;render();const gen=generation;try{if(shared){const id=shared.id;try{const row=await backend.mutateDraft(id,shared.revision,operation,payload);if(gen===generation)adopt(row);}catch(e){if(gen===generation){await reloadDraft(id,gen);throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}}else{if(operation==='claim')localControl=true;else if(operation==='release')localControl=false;else if(operation==='set_state'){if('firstPick'in payload)state=reduceDraft(state,'set_first_pick',payload,{canWrite:true});state={...state,...payload};}else state=reduceDraft(state,operation,payload,{canWrite:true,heroes});saveLocal();}selected=null;$('hero-search').value='';searchIndex=0;refreshScouting();}finally{if(gen===generation){pending=false;render();}}}
+async function reloadDraft(id,gen){
+ try{const row=await backend.getDraft(id);if(gen===generation){adopt(row);healthy=true;}}catch{if(gen===generation)healthy=false;}
+}
+async function mutate(operation,payload={}){
+ if(playerDemo)return;
+ if(pending) return;
+ if(!['claim','release'].includes(operation)&&!canWrite())throw Error('Become the confirmed drafter first.');
+ pending=true;
+ render();
+ const gen=generation;
+ try{
+  if(shared){
+   const id=shared.id;
+   try{
+    const row=await backend.mutateDraft(id,shared.revision,operation,payload);
+    if(gen===generation)adopt(row);
+   }catch(e){if(gen===generation){await reloadDraft(id,gen);throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}
+  }else{
+   if(operation==='claim')localControl=true;else if(operation==='release')localControl=false;else if(operation==='set_state'){
+    if('firstPick'in payload)state=reduceDraft(state,'set_first_pick',payload,{canWrite:true});
+    state={...state,...payload};
+   }else state=reduceDraft(state,operation,payload,{canWrite:true,heroes});
+   saveLocal();
+  }
+  selected=null;
+  $('hero-search').value='';
+  searchIndex=0;
+  refreshScouting();
+ }finally{if(gen===generation){pending=false;render();}}
+}
 
-function adopt(row){if(!row||shared&&row.id!==shared.id)return;if(shared&&row.revision<shared.revision)return;shared=row;state={...initialState(),...row.state};healthy=true;refreshScouting();}
+function adopt(row){
+ if(!row||shared&&row.id!==shared.id)return;
+ if(shared&&row.revision<shared.revision)return;
+ shared=row;
+ state={...initialState(),...row.state};
+ healthy=true;
+ refreshScouting();
+}
 
 async function openDraft(id,{navigate=true}={}){
  if(!user||demo)throw Error('Sign in to open a shared draft.');
  const currentUser=user.id,gen=generation,request=++draftOpen;
- let row;try{row=await backend.getDraft(id);}catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
+ let row;
+ try{
+  row=await backend.getDraft(id);
+ }catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
  if(user?.id!==currentUser||gen!==generation||request!==draftOpen)return;
- ++generation;shared=null;resetDraftData();pending=false;polling=false;
- shared=row;team=teams.find(t=>t.id===row.team_id);teamRoster=[];
+ ++generation;
+ shared=null;
+ resetDraftData();
+ pending=false;
+ polling=false;
+ shared=row;
+ team=teams.find(t=>t.id===row.team_id);
+ teamRoster=[];
  selectedTeamIds=(row.state.roster||[]).filter(p=>p&&typeof p==='object').map(p=>p.userId||p.id);
- adopt(row);selected=null;reviewVisible=true;
- if(navigate){const url=new URL(location.href);url.searchParams.delete('practice');url.searchParams.delete('cup');url.searchParams.set('draft',id);if(url.href!==location.href)history.pushState(null,'',url);}
- render();$('session-dialog').close();welcome.board();focusDraftView();
+ adopt(row);
+ selected=null;
+ reviewVisible=true;
+ if(navigate){
+  const url=new URL(location.href);
+  url.searchParams.delete('practice');
+  url.searchParams.delete('cup');
+  url.searchParams.set('draft',id);
+  if(url.href!==location.href)history.pushState(null,'',url);
+ }
+ render();
+ $('session-dialog').close();
+ welcome.board();
+ focusDraftView();
 }
 async function poll(){
  if(!shared||polling||pending||!user)return;
@@ -848,7 +1220,10 @@ async function poll(){
   // Every server-side draft update bumps revision; drafter is compared too as a cheap guard.
   changed=!healthy||row.revision!==shared.revision||row.drafter_user_id!==shared.drafter_user_id;
   if(changed)adopt(row);
-  if(Date.now()-lastRoster>ROSTER_REFRESH_MS){const fresh=await backend.loadRoster(row.team_id);if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}}
+  if(Date.now()-lastRoster>ROSTER_REFRESH_MS){
+   const fresh=await backend.loadRoster(row.team_id);
+   if(gen===generation&&team?.id===row.team_id){lastRoster=Date.now();teamRoster=fresh;}
+  }
  }catch(e){
   // The draft is no longer visible: the team was deleted or this account left / was removed.
   if(gen===generation&&e.code==='PGRST116'){leaving=true;void safe(()=>leaveVanishedDraft(gen))().finally(()=>{if(gen===generation)polling=false;});return;}
@@ -868,7 +1243,13 @@ async function leaveVanishedDraft(gen){
 }
 let teamRoster=[],selectedTeamIds=[],teamLoad=0;
 
-function draftRoster(){const rows=teamRoster.filter(p=>selectedTeamIds.includes(p.userId));if(rows.length>5)throw Error('Select at most five players.');const accounts=rows.map(p=>p.steamAccountId).filter(Boolean);if(new Set(accounts).size!==accounts.length)throw Error('Duplicate public account IDs in selected roster. Resolve profiles or deselect a duplicate.');return rows.map(p=>({...p,id:p.userId}));}
+function draftRoster(){
+ const rows=teamRoster.filter(p=>selectedTeamIds.includes(p.userId));
+ if(rows.length>5)throw Error('Select at most five players.');
+ const accounts=rows.map(p=>p.steamAccountId).filter(Boolean);
+ if(new Set(accounts).size!==accounts.length)throw Error('Duplicate public account IDs in selected roster. Resolve profiles or deselect a duplicate.');
+ return rows.map(p=>({...p,id:p.userId}));
+}
 
 function show(id){$(id).showModal();}
 
@@ -956,7 +1337,16 @@ function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={})
 
  search.oninput=draw;draw();
 
- return {values:()=>[...selected],draw,replace(values){if(values.length>HERO_LIST_MAX){onError(`This list has more than ${HERO_LIST_MAX} heroes. Choose up to ${HERO_LIST_MAX} before copying it to Today.`);return false;}selected.clear();for(const id of values)selected.add(id);draw();return true;}};
+ return {values:()=>[...selected],draw,replace(values){
+  if(values.length>HERO_LIST_MAX){
+   onError(`This list has more than ${HERO_LIST_MAX} heroes. Choose up to ${HERO_LIST_MAX} before copying it to Today.`);
+   return false;
+  }
+  selected.clear();
+  for(const id of values)selected.add(id);
+  draw();
+  return true;
+ }};
 
 }
 
@@ -970,7 +1360,8 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
  if(backend&&!user&&!demo&&!local){welcome.home('signin');return;}
 
- const root=$('profile-content');root.replaceChildren();
+ const root=$('profile-content');
+ root.replaceChildren();
  $('profile-title').textContent=continueAfterSave?'Set up your player profile':'Your profile';
  $('profile-dialog').querySelector('[data-close]').hidden=!!continueAfterSave;
  $('profile-dialog').oncancel=continueAfterSave?event=>event.preventDefault():null;
@@ -984,15 +1375,19 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
  root.append(el('p','Build your player card. Choose your roles, then tell your captain what you want to play.','profile-intro'));
 
- const identity=el('div',null,'profile-identity');root.append(identity);
+ const identity=el('div',null,'profile-identity');
+ root.append(identity);
 
  const name=field(identity,'Display name',profile.displayName||''),account=field(identity,'Public account ID or player URL · optional',profile.steamAccountId||'');
- const workspace=el('div',null,'profile-workspace'),roleSection=el('section',null,'profile-roles-section'),heroSection=el('section',null,'profile-heroes-section');workspace.append(roleSection,heroSection);root.append(workspace);
+ const workspace=el('div',null,'profile-workspace'),roleSection=el('section',null,'profile-roles-section'),heroSection=el('section',null,'profile-heroes-section');
+ workspace.append(roleSection,heroSection);
+ root.append(workspace);
 
  const presetBar=el('div',null,'profile-role-presets'),roles=el('div',null,'profile-role-grid');
 
  roleSection.append(el('h3','Where do you play?'),el('p','Select your preferred positions. Open Comfort to adjust your experience.','profile-help'),presetBar,roles);
- const presetHelp=el('p','Presets replace your roles and comfort levels. Undo is available.','profile-help profile-preset-help');roleSection.append(presetHelp);
+ const presetHelp=el('p','Presets replace your roles and comfort levels. Undo is available.','profile-help profile-preset-help');
+ roleSection.append(presetHelp);
 
  const roleInputs=[],pickers=[];
 
@@ -1016,11 +1411,19 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
   ['Unset','Learning','Playable','Comfortable','Strong','Signature'].forEach((text,value)=>{
 
-   const label=el('label'),radio=el('input');radio.type='radio';radio.name='profile-comfort-'+i;radio.id='profile-comfort-'+i+'-'+value;radio.value=String(value);
+   const label=el('label'),radio=el('input');
+   radio.type='radio';
+   radio.name='profile-comfort-'+i;
+   radio.id='profile-comfort-'+i+'-'+value;
+   radio.value=String(value);
 
-   radio.checked=Number(profile.roleComfort?.[i]||0)===value;radio.onchange=clearPreset;label.htmlFor=radio.id;
+   radio.checked=Number(profile.roleComfort?.[i]||0)===value;
+   radio.onchange=clearPreset;
+   label.htmlFor=radio.id;
 
-   label.append(radio,el('span',text));comfort.append(label);radios.push(radio);
+   label.append(radio,el('span',text));
+   comfort.append(label);
+   radios.push(radio);
 
   });
 
@@ -1050,18 +1453,35 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
  }
 
- const undoPreset=button('Undo preset',()=>{if(!previousRoles)return;roleInputs.forEach((role,index)=>{role.c.checked=previousRoles[index].checked;for(const radio of role.radios)radio.checked=radio.value===previousRoles[index].comfort;});for(const b of presetBar.querySelectorAll('button'))b.setAttribute('aria-pressed','false');undoPreset.hidden=true;updateComfort();redrawHeroes();},presetBar);undoPreset.hidden=true;
+ const undoPreset=button('Undo preset',()=>{
+  if(!previousRoles)return;
+  roleInputs.forEach((role,index)=>{
+   role.c.checked=previousRoles[index].checked;
+   for(const radio of role.radios)radio.checked=radio.value===previousRoles[index].comfort;
+  });
+  for(const b of presetBar.querySelectorAll('button'))b.setAttribute('aria-pressed','false');
+  undoPreset.hidden=true;
+  updateComfort();
+  redrawHeroes();
+ },presetBar);
+ undoPreset.hidden=true;
 
- const status=el('p',null,'profile-save-status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+ const status=el('p',null,'profile-save-status');
+ status.setAttribute('role','status');
+ status.setAttribute('aria-live','polite');
 
  function message(text,error=false){status.textContent=text;status.dataset.state=error?'error':'idle';}
 
  const options=kind=>({kind,getRoles:()=>roleInputs.filter(role=>role.c.checked).map(role=>role.i),getAccountId:()=>String(parseAccountIds(account.value)[0]||''),onError:text=>message(text,!!text)});
 
  heroSection.append(el('h3','Your hero pool'),el('p','Keep your proven picks separate from what you feel like playing today.','profile-help'));
- const heroTabs=el('div',null,'profile-hero-tabs');heroTabs.setAttribute('role','tablist');heroTabs.setAttribute('aria-label','Hero preferences');heroSection.append(heroTabs);
+ const heroTabs=el('div',null,'profile-hero-tabs');
+ heroTabs.setAttribute('role','tablist');
+ heroTabs.setAttribute('aria-label','Hero preferences');
+ heroSection.append(heroTabs);
 
- const heroSections=el('div');heroSection.append(heroSections);
+ const heroSections=el('div');
+ heroSection.append(heroSections);
 
  const signatures=heroPicker(heroSections,'Signature heroes · your proven picks',profile.signatureHeroes,options('signature'));
 
@@ -1078,7 +1498,9 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
  const avoid=heroPicker(heroSections,'Avoid · heroes to leave out',profile.avoidHeroes,options('avoid'));
 
  pickers.push(signatures,desired,avoid);
- const importPanel=el('div',null,'profile-import'),importStatus=el('p','Start here: import your public match history to fill empty Signatures and Today lists. Review the suggestions before saving.','profile-help');importStatus.setAttribute('role','status');identity.after(importPanel);
+ const importPanel=el('div',null,'profile-import'),importStatus=el('p','Start here: import your public match history to fill empty Signatures and Today lists. Review the suggestions before saving.','profile-help');
+ importStatus.setAttribute('role','status');
+ identity.after(importPanel);
  account.placeholder='Dotabuff or OpenDota player link, or Steam ID';
  const importHelp=el('details',null,'profile-import-help');
  importHelp.append(el('summary','Where do I find my player link?'),el('p','Open your player page on Dotabuff or OpenDota and copy its address. You can also paste your numeric Dota account ID or Steam ID. Enable public match data in Dota if your history is private.'));
@@ -1086,9 +1508,13 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
  if(/^Steam \d+$/.test(name.value))name.parentElement.append(el('small','Use a nickname your teammates will recognize.','profile-help'));
  const importButton=button('Import public stats',async()=>{
   if(importButton.disabled)return;
-  const ids=parseAccountIds(account.value);if(ids.length!==1){importStatus.textContent='Enter one Dota account ID, Steam ID or player URL first.';account.focus();return;}
+  const ids=parseAccountIds(account.value);
+  if(ids.length!==1){importStatus.textContent='Enter one Dota account ID, Steam ID or player URL first.';account.focus();return;}
   const id=String(ids[0]),gen=generation,initialName=name.value;
-  importButton.disabled=true;save.disabled=true;importButton.setAttribute('aria-busy','true');importStatus.textContent='Loading public match history…';
+  importButton.disabled=true;
+  save.disabled=true;
+  importButton.setAttribute('aria-busy','true');
+  importStatus.textContent='Loading public match history…';
   try{
    const player=await loadPlayer(id);
    if(gen!==generation||!root.contains(importPanel)||parseAccountIds(account.value).map(String).join()!==id)return;
@@ -1105,7 +1531,8 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
    redrawHeroes();
   }catch{importStatus.textContent='Public stats are unavailable. Try again, or select heroes manually.';}
   finally{importButton.disabled=false;save.disabled=false;importButton.removeAttribute('aria-busy');}
- },importPanel,'primary');importPanel.append(importStatus);
+ },importPanel,'primary');
+ importPanel.append(importStatus);
 
  function activateHeroTab(index,focus=false){
   for(const [i,section] of [...heroSections.children].entries())section.hidden=i!==index;
@@ -1113,22 +1540,40 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
   if(focus)heroTabs.children[index].focus();
  }
  for(const [index,label] of ['Signatures','Today','Avoid'].entries()){
-  const panel=heroSections.children[index];panel.id='profile-hero-panel-'+index;panel.setAttribute('role','tabpanel');
-  const tab=button(label,()=>activateHeroTab(index),heroTabs);tab.id='profile-hero-tab-'+index;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',panel.id);
-  tab.onkeydown=event=>{let next;if(event.key==='ArrowRight')next=(index+1)%3;else if(event.key==='ArrowLeft')next=(index+2)%3;else if(event.key==='Home')next=0;else if(event.key==='End')next=2;else return;event.preventDefault();activateHeroTab(next,true);};
+  const panel=heroSections.children[index];
+  panel.id='profile-hero-panel-'+index;
+  panel.setAttribute('role','tabpanel');
+  const tab=button(label,()=>activateHeroTab(index),heroTabs);
+  tab.id='profile-hero-tab-'+index;
+  tab.setAttribute('role','tab');
+  tab.setAttribute('aria-controls',panel.id);
+  tab.onkeydown=event=>{
+   let next;
+   if(event.key==='ArrowRight')next=(index+1)%3;else if(event.key==='ArrowLeft')next=(index+2)%3;else if(event.key==='Home')next=0;else if(event.key==='End')next=2;else return;
+   event.preventDefault();
+   activateHeroTab(next,true);
+  };
   panel.setAttribute('aria-labelledby',tab.id);
  }
  activateHeroTab(initialHeroTab);
 
- const extras=el('details',null,'profile-extras');extras.append(el('summary','Notes and availability · optional'));root.append(extras);
+ const extras=el('details',null,'profile-extras');
+ extras.append(el('summary','Notes and availability · optional'));
+ root.append(extras);
 
  const notes=field(extras,'Notes · optional',profile.notes||'','textarea'),availabilityLabel=el('label','Availability · optional'),availability=el('select');
 
- availability.id='profile-availability';availabilityLabel.htmlFor=availability.id;
+ availability.id='profile-availability';
+ availabilityLabel.htmlFor=availability.id;
 
- for(const value of ['available','maybe','unavailable'])availability.append(new Option(value,value));availability.value=profile.availability||'available';availabilityLabel.append(availability);extras.append(availabilityLabel);
+ for(const value of ['available','maybe','unavailable'])availability.append(new Option(value,value));
+ availability.value=profile.availability||'available';
+ availabilityLabel.append(availability);
+ extras.append(availabilityLabel);
 
- const footer=el('div',null,'profile-footer'),footerActions=el('div',null,'profile-footer-actions');footer.append(status,footerActions);$('profile-dialog').append(footer);
+ const footer=el('div',null,'profile-footer'),footerActions=el('div',null,'profile-footer-actions');
+ footer.append(status,footerActions);
+ $('profile-dialog').append(footer);
 
  const avatar=el('select');
  avatar.append(new Option('Random signature hero',''));
@@ -1154,7 +1599,11 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
    if(continueAfterSave&&(!name.value.trim()||!p.preferredRoles.length))throw Error('Enter your display name and choose at least one position.');
    const conflicts=p.avoidHeroes.filter(id=>p.signatureHeroes.includes(id)||p.desiredHeroes.includes(id));
-   if(conflicts.length){activateHeroTab(2);heroSections.children[2].querySelector('input')?.focus();throw Error('Remove '+conflicts.map(heroName).join(', ')+' from Avoid before saving: also selected in Signatures or Today.');}
+   if(conflicts.length){
+    activateHeroTab(2);
+    heroSections.children[2].querySelector('input')?.focus();
+    throw Error('Remove '+conflicts.map(heroName).join(', ')+' from Avoid before saving: also selected in Signatures or Today.');
+   }
 
    save.disabled=true;importButton.disabled=true;save.textContent='Saving…';save.setAttribute('aria-busy','true');message('Saving your profile…');
 
@@ -1165,7 +1614,10 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
    profile=saved;profileSaved=true;
 
    if(!$('team-view').hidden){homeRoster=homeRoster.map(item=>item.userId===user?.id?{...item,...profile}:item);renderTeamHome();}
-   if(!shared){state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,ROSTER_SIZE);touch();}
+   if(!shared){
+    state.roster=[{...profile,id:user?.id||'local-own'},...state.roster.filter(p=>p.id!=='local-own'&&p.id!==user?.id)].slice(0,ROSTER_SIZE);
+    touch();
+   }
 
    observations.clear();refreshScouting();saveLocal();render();
 
@@ -1187,7 +1639,10 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
  },footerActions,'primary profile-save');
 
- if(!continueAfterSave&&(joinedTeam||continueToCup))button(joinedTeam?'Back to team':'Skip to Battle Cup',()=>{$('profile-dialog').close();if(joinedTeam)navigateTeam(joinedTeam.id);else navigateCup();},footerActions);
+ if(!continueAfterSave&&(joinedTeam||continueToCup))button(joinedTeam?'Back to team':'Skip to Battle Cup',()=>{
+  $('profile-dialog').close();
+  if(joinedTeam)navigateTeam(joinedTeam.id);else navigateCup();
+ },footerActions);
  if(user)button('Sign out',signOut,continueAfterSave?footerActions:extras);
 
  show('profile-dialog');
@@ -1263,19 +1718,38 @@ async function checkLiveWatch(watch) {
 }
 
 let lobbyEdited=false;
-function sessionButtons(){$('create-session').disabled=!user||!team||demo;$('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';$('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!user?'Sign in to create a shared draft with your team.':!team?(teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';}
+function sessionButtons(){
+ $('create-session').disabled=!user||!team||demo;
+ $('create-session').textContent=team?'Create draft for '+team.name:'Create shared draft';
+ $('create-session-hint').textContent=demo?'The demo never creates shared drafts.':!user?'Sign in to create a shared draft with your team.':!team?(teams.length?'Select an active team below to create a shared draft.':'Create or join a team below to create a shared draft.'):'';
+}
 async function lobby(){
  lobbyEdited=false;
  // Default to the team shown on Team home so shared draft creation is not silently disabled.
  // The roster loads in the background so a slow response never blocks Setup.
- if(user&&!demo&&!team&&teams.length){const id=(teams.find(t=>t.id===homeTeamId)||teams[0]).id;void safe(async()=>{if(!await loadTeam(id)||team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();}
+ if(user&&!demo&&!team&&teams.length){
+  const id=(teams.find(t=>t.id===homeTeamId)||teams[0]).id;
+  void safe(async()=>{if(!await loadTeam(id)||team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();
+ }
  else if(team&&!teamRoster.length)await loadTeam(team.id,{preserveSelection:true});
  const details=document.querySelector('[data-connection-details]'),manual=document.querySelector('[data-manual-entry]');
  details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
- const link=el('a','Open legacy live/replay helper');link.href=LOCAL_HELPER_ORIGIN;link.target='_blank';link.rel='noopener';if(['localhost','127.0.0.1'].includes(location.hostname))details.append(link);
- const demoLink=el('a','Try the demo');demoLink.href='?demo';
- const links=el('div',null,'lobby-links');links.append(link,demoLink);details.append(links);manual.replaceChildren();manual.oninput=()=>{lobbyEdited=true;};
- const scouting=el('section',null,'lobby-card');scouting.setAttribute('aria-label','Enemy scouting');scouting.append(el('h3','Enemy scouting'));manual.append(scouting);
+ const link=el('a','Open legacy live/replay helper');
+ link.href=LOCAL_HELPER_ORIGIN;
+ link.target='_blank';
+ link.rel='noopener';
+ if(['localhost','127.0.0.1'].includes(location.hostname))details.append(link);
+ const demoLink=el('a','Try the demo');
+ demoLink.href='?demo';
+ const links=el('div',null,'lobby-links');
+ links.append(link,demoLink);
+ details.append(links);
+ manual.replaceChildren();
+ manual.oninput=()=>{lobbyEdited=true;};
+ const scouting=el('section',null,'lobby-card');
+ scouting.setAttribute('aria-label','Enemy scouting');
+ scouting.append(el('h3','Enemy scouting'));
+ manual.append(scouting);
  const scoutingActions=el('div',null,'lobby-actions');
  if(!demo){
   const liveStatus=el('p',null,'secondary');
@@ -1298,9 +1772,17 @@ async function lobby(){
    Object.assign(liveWatch,{control:liveControl,status:liveStatus});
   }
  }
- const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(state.enemyIds||[]).join(' '),'textarea');enemies.id='enemy-account-input';enemies.placeholder='One player ID or link per line';enemies.rows=3;scouting.append(scoutingActions);
- const matchIds=field(scouting,'Their earlier Battle Cup matches (IDs or links)','','textarea');matchIds.id='enemy-match-input';matchIds.placeholder='Match IDs or Dotabuff/OpenDota links from the bracket';matchIds.rows=2;
- const matchActions=el('div',null,'lobby-actions');scouting.append(matchActions);
+ const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(state.enemyIds||[]).join(' '),'textarea');
+ enemies.id='enemy-account-input';
+ enemies.placeholder='One player ID or link per line';
+ enemies.rows=3;
+ scouting.append(scoutingActions);
+ const matchIds=field(scouting,'Their earlier Battle Cup matches (IDs or links)','','textarea');
+ matchIds.id='enemy-match-input';
+ matchIds.placeholder='Match IDs or Dotabuff/OpenDota links from the bracket';
+ matchIds.rows=2;
+ const matchActions=el('div',null,'lobby-actions');
+ scouting.append(matchActions);
  button('Load matches',async()=>{if(!await addEnemyMatches(matchIds.value))return;matchIds.value='';notice('Battle Cup matches loaded.');},matchActions);
  const validateEnemies=()=>{
   const tokens=enemies.value.trim().split(/[\s,;]+/).filter(Boolean);
@@ -1309,11 +1791,22 @@ async function lobby(){
   if(!tokens.length)throw Error('Enter enemy IDs, or use Clear enemy scouting to remove them intentionally.');
   const ids=parseAccountIds(enemies.value);if(ids.length>5)throw Error('Maximum five opponents.');enemies.removeAttribute('aria-invalid');return ids;
  };
- button('Save and scout enemies',async()=>{await mutate('set_state',{enemyIds:validateEnemies()});notice('Enemy scouting saved.');},scoutingActions,'primary').disabled=!canWrite();
- button('Clear enemy scouting',async()=>{await mutate('set_state',{enemyIds:[]});enemies.value='';enemies.removeAttribute('aria-invalid');notice('Enemy scouting cleared.');},scoutingActions).disabled=!canWrite();
+ button('Save and scout enemies',async()=>{
+  await mutate('set_state',{enemyIds:validateEnemies()});
+  notice('Enemy scouting saved.');
+ },scoutingActions,'primary').disabled=!canWrite();
+ button('Clear enemy scouting',async()=>{
+  await mutate('set_state',{enemyIds:[]});
+  enemies.value='';
+  enemies.removeAttribute('aria-invalid');
+  notice('Enemy scouting cleared.');
+ },scoutingActions).disabled=!canWrite();
  if(!shared){
   // Local practice: tick members of the active team and/or add stand-ins by public ID (max five).
-  const ours=el('section',null,'lobby-card lobby-local');ours.setAttribute('aria-label','Our team');ours.append(el('h3','Our team'));manual.append(ours);
+  const ours=el('section',null,'lobby-card lobby-local');
+  ours.setAttribute('aria-label','Our team');
+  ours.append(el('h3','Our team'));
+  manual.append(ours);
   const current=Array.isArray(state.roster)?state.roster.filter(p=>p&&typeof p==='object'):[];
   const members=user&&!demo&&team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
   const savedMembers=current.map(p=>memberId(p)).filter(id=>memberIds.has(id));
@@ -1321,15 +1814,28 @@ async function lobby(){
   if(members.length){
    ours.append(el('p','Load players from '+team.name+':'));
    const list=el('div',null,'lobby-roster');ours.append(list);
-   for(const p of members){const label=el('label',p.displayName),check=el('input');check.type='checkbox';check.checked=picked.includes(p.userId);check.onchange=()=>{picked=check.checked?[...new Set([...picked,p.userId])]:picked.filter(id=>id!==p.userId);};label.prepend(check);list.append(label);}
+   for(const p of members){
+    const label=el('label',p.displayName),check=el('input');
+    check.type='checkbox';
+    check.checked=picked.includes(p.userId);
+    check.onchange=()=>{picked=check.checked?[...new Set([...picked,p.userId])]:picked.filter(id=>id!==p.userId);};
+    label.prepend(check);
+    list.append(label);
+   }
   }else if(user&&!demo)ours.append(el('p',teams.length?'Select an active team under Team management to load your teammates.':'Create or join a team to load your teammates.','secondary'));
   const manualIds=current.filter(p=>!memberIds.has(memberId(p))).map(p=>accountOf(p)).filter(Boolean);
-  const ownIds=field(ours,members.length?'Add other players by public ID or URL':'Teammate public player IDs or URLs (up to 5)',manualIds.join(' '),'textarea');ownIds.rows=3;ownIds.placeholder='One player ID or link per line';
-  const ourActions=el('div',null,'lobby-actions');ours.append(ourActions);
+  const ownIds=field(ours,members.length?'Add other players by public ID or URL':'Teammate public player IDs or URLs (up to 5)',manualIds.join(' '),'textarea');
+  ownIds.rows=3;
+  ownIds.placeholder='One player ID or link per line';
+  const ourActions=el('div',null,'lobby-actions');
+  ours.append(ourActions);
   button('Save our team',async()=>{
    if(!canWrite())throw Error('Become local drafter first.');
    const tokens=ownIds.value.trim().split(/[\s,;]+/).filter(Boolean);
-   if(tokens.some(token=>parseAccountIds(token).length!==1)){ownIds.setAttribute('aria-invalid','true');throw Error('Correct invalid teammate account entries first.');}
+   if(tokens.some(token=>parseAccountIds(token).length!==1)){
+    ownIds.setAttribute('aria-invalid','true');
+    throw Error('Correct invalid teammate account entries first.');
+   }
    const chosen=members.filter(p=>picked.includes(p.userId)).map(p=>({...p,id:p.userId}));
    const extra=parseAccountIds(ownIds.value).map(id=>({id:String(id),name:String(id),steamAccountId:String(id)}));
    const rows=[...chosen,...extra];
@@ -1341,21 +1847,58 @@ async function lobby(){
   },ourActions,'primary').disabled=!canWrite();
  }
  if(user&&!demo){
-  const section=el('section',null,'team-management lobby-card');section.setAttribute('aria-label','Team management');section.append(el('h3','Team management'));manual.append(section);
+  const section=el('section',null,'team-management lobby-card');
+  section.setAttribute('aria-label','Team management');
+  section.append(el('h3','Team management'));
+  manual.append(section);
   const teamActions=el('div',null,'lobby-team-actions');
   const create=el('div',null,'lobby-team-action'),join=el('div',null,'lobby-team-action');
-  teamActions.append(create,join);section.append(teamActions);
+  teamActions.append(create,join);
+  section.append(teamActions);
   const teamName=field(create,'New team name'),invite=field(join,'Team invitation code (separate from draft ID)');
-  teamName.placeholder='Your team name';invite.placeholder='Paste invite link or code';
-  button('Create team',async()=>{const result=await backend.createTeam(teamName.value);teams=await backend.listTeams();team=teams.find(t=>t.id===result.id)||result;await loadTeam(team.id);await lobby();notice('Created team '+team.name+'.');},create);
-  button('Join team',async()=>{const gen=generation,joined=await backend.joinTeam(codeFromInvitation(invite.value),user.id);if(gen!==generation)return;const refreshed=await backend.listTeams();if(gen!==generation)return;teams=refreshed;team=teams.find(t=>t.id===joined?.id);if(!team)throw Error('Team joined. Reopen Setup to select it.');if(!await loadTeam(team.id))return;await lobby();notice('Joined '+team.name+'. This team is now selected.');},join);
-  const select=el('select');select.setAttribute('aria-label','Team');select.append(new Option('Select a team',''));for(const t of teams)select.append(new Option(t.name,t.id));select.value=team?.id||'';
+  teamName.placeholder='Your team name';
+  invite.placeholder='Paste invite link or code';
+  button('Create team',async()=>{
+   const result=await backend.createTeam(teamName.value);
+   teams=await backend.listTeams();
+   team=teams.find(t=>t.id===result.id)||result;
+   await loadTeam(team.id);
+   await lobby();
+   notice('Created team '+team.name+'.');
+  },create);
+  button('Join team',async()=>{
+   const gen=generation,joined=await backend.joinTeam(codeFromInvitation(invite.value),user.id);
+   if(gen!==generation)return;
+   const refreshed=await backend.listTeams();
+   if(gen!==generation)return;
+   teams=refreshed;
+   team=teams.find(t=>t.id===joined?.id);
+   if(!team)throw Error('Team joined. Reopen Setup to select it.');
+   if(!await loadTeam(team.id))return;
+   await lobby();
+   notice('Joined '+team.name+'. This team is now selected.');
+  },join);
+  const select=el('select');
+  select.setAttribute('aria-label','Team');
+  select.append(new Option('Select a team',''));
+  for(const t of teams)select.append(new Option(t.name,t.id));
+  select.value=team?.id||'';
   select.onchange=safe(async()=>{await loadTeam(select.value);await lobby();});
-  const teamLabel=el('label','Active team');teamLabel.append(select);section.append(teamLabel);
+  const teamLabel=el('label','Active team');
+  teamLabel.append(select);
+  section.append(teamLabel);
   if(team){
    section.append(el('p','Selected team: '+team.name),el('p','Select up to five players for the draft roster:'));
-   const rosterList=el('div',null,'lobby-roster');section.append(rosterList);
-   for(const p of teamRoster){const label=el('label',p.displayName+' - '+p.availability),check=el('input');check.type='checkbox';check.checked=selectedTeamIds.includes(p.userId);check.onchange=()=>{selectedTeamIds=check.checked?[...new Set([...selectedTeamIds,p.userId])]:selectedTeamIds.filter(id=>id!==p.userId);};label.prepend(check);rosterList.append(label);}
+   const rosterList=el('div',null,'lobby-roster');
+   section.append(rosterList);
+   for(const p of teamRoster){
+    const label=el('label',p.displayName+' - '+p.availability),check=el('input');
+    check.type='checkbox';
+    check.checked=selectedTeamIds.includes(p.userId);
+    check.onchange=()=>{selectedTeamIds=check.checked?[...new Set([...selectedTeamIds,p.userId])]:selectedTeamIds.filter(id=>id!==p.userId);};
+    label.prepend(check);
+    rosterList.append(label);
+   }
    if(team.owner_user_id===user.id&&teamInviteCode.test(team.invite_code)){
     const inviteTeam=team,expiry=Date.parse(inviteTeam.invite_expires_at);
     if(expiry<=Date.now())section.append(el('p','This team invite link has expired.'));
@@ -1394,7 +1937,14 @@ async function lobby(){
     if(!await loadTeam(shared.team_id,{preserveSelection:true}))return;
     const roster=draftRoster(),removed=(state.roster||[]).filter(p=>p&&!roster.some(current=>current.id===memberId(p)));
     section.querySelector('.roster-refresh-preview')?.remove();
-    if(removed.length){const preview=el('div',null,'roster-refresh-preview snapshot-preview');preview.setAttribute('role','status');preview.append(el('p','This refresh will remove: '+removed.map(p=>p.displayName||p.name||p.id).join(', ')+'.'));button('Apply roster refresh',async()=>{await mutate('set_state',{roster});preview.remove();notice('Roster snapshot refreshed.');},preview);button('Cancel roster refresh',()=>preview.remove(),preview);section.append(preview);}
+    if(removed.length){
+     const preview=el('div',null,'roster-refresh-preview snapshot-preview');
+     preview.setAttribute('role','status');
+     preview.append(el('p','This refresh will remove: '+removed.map(p=>p.displayName||p.name||p.id).join(', ')+'.'));
+     button('Apply roster refresh',async()=>{await mutate('set_state',{roster});preview.remove();notice('Roster snapshot refreshed.');},preview);
+     button('Cancel roster refresh',()=>preview.remove(),preview);
+     section.append(preview);
+    }
     else{await mutate('set_state',{roster});notice('Roster snapshot refreshed.');}
    },section).disabled=!canWrite();
    if(shared&&teams.find(t=>t.id===shared.team_id)?.owner_user_id===user.id)button('Owner reclaim drafter',()=>mutateOwner(),section);
@@ -1410,11 +1960,21 @@ async function lobby(){
     teams=await backend.listTeams();if(user?.id!==account)return;
     await lobby();notice(ownsTeam?'Deleted team '+leaving.name+'.':'You left '+leaving.name+'.');
    },section,ownsTeam?'danger':undefined);
-   const results=el('div',null,'team-draft-results');results.setAttribute('aria-live','polite');
-   button('List team drafts',async()=>{const teamId=team.id,drafts=await backend.listDrafts(teamId);if(team?.id!==teamId)return;results.replaceChildren();for(const d of drafts)button(`${d.id.slice(0,8)} - ${d.status} - revision ${d.revision}`,()=>openDraft(d.id),results);if(!drafts.length)results.append(el('p','No drafts yet.'));},section);section.append(results);
+   const results=el('div',null,'team-draft-results');
+   results.setAttribute('aria-live','polite');
+   button('List team drafts',async()=>{
+    const teamId=team.id,drafts=await backend.listDrafts(teamId);
+    if(team?.id!==teamId)return;
+    results.replaceChildren();
+    for(const d of drafts)button(`${d.id.slice(0,8)} - ${d.status} - revision ${d.revision}`,()=>openDraft(d.id),results);
+    if(!drafts.length)results.append(el('p','No drafts yet.'));
+   },section);
+   section.append(results);
   }
  }
- sessionButtons();$('join-session').disabled=!user||demo;showIfClosed('session-dialog');
+ sessionButtons();
+ $('join-session').disabled=!user||demo;
+ showIfClosed('session-dialog');
 }
 function showIfClosed(id){if(!$(id).open)show(id);}
 
@@ -1442,31 +2002,74 @@ async function loadTeam(id,{preserveSelection=false}={}){
 
 }
 
-async function mutateOwner(){if(!shared||pending)return;pending=true;render();const gen=generation,id=shared.id;try{const row=await backend.mutateDraft(id,shared.revision,'assign',{userId:user.id});if(gen===generation)adopt(row);}catch(e){if(gen===generation)await reloadDraft(id,gen);throw e;}finally{if(gen===generation){pending=false;render();}}}
+async function mutateOwner(){
+ if(!shared||pending)return;
+ pending=true;
+ render();
+ const gen=generation,id=shared.id;
+ try{
+  const row=await backend.mutateDraft(id,shared.revision,'assign',{userId:user.id});
+  if(gen===generation)adopt(row);
+ }catch(e){if(gen===generation)await reloadDraft(id,gen);throw e;}finally{if(gen===generation){pending=false;render();}}
+}
 
 let cupAccountVersion=0;
 async function authChanged(session,event){
 
- const recovery=event==='PASSWORD_RECOVERY';if(recovery)welcome.recover();
+ const recovery=event==='PASSWORD_RECOVERY';
+ if(recovery)welcome.recover();
 
  // Only a sign-in may open the board here: USER_UPDATED (password saved) and TOKEN_REFRESHED
  // must not replace "Continue to board" or skip its gates.
- const id=session?.user?.id||null;if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
+ const id=session?.user?.id||null;
+ if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
 
- stopLiveWatch();resetAllyEntry();teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];$('team-home').replaceChildren();profileSaved=false;profileSetupRequired=false;delete $('app-shell').dataset.profileSetup;
- const gen=++generation,acct=++accountGen;user=session?.user||null;welcome.setAccount(!!user,recovery);shared=null;team=null;teams=[];teamRoster=[];selectedTeamIds=[];profile={};state=initialState();
- ++cupAccountVersion;cup.sync();
+ stopLiveWatch();
+ resetAllyEntry();
+ teamIdentity.clear();
+ homeRequest++;
+ homeTeamId='';
+ homeRoster=[];
+ $('team-home').replaceChildren();
+ profileSaved=false;
+ profileSetupRequired=false;
+ delete $('app-shell').dataset.profileSetup;
+ const gen=++generation,acct=++accountGen;
+ user=session?.user||null;
+ welcome.setAccount(!!user,recovery);
+ shared=null;
+ team=null;
+ teams=[];
+ teamRoster=[];
+ selectedTeamIds=[];
+ profile={};
+ state=initialState();
+ ++cupAccountVersion;
+ cup.sync();
  const inviteOnEntry=!!teamInvitation;
 
  if(!user)restorePractice();
 
- resetDraftData();selected=null;pending=false;polling=false;healthy=true;localControl=true;lastRoster=0;
+ resetDraftData();
+ selected=null;
+ pending=false;
+ polling=false;
+ healthy=true;
+ localControl=true;
+ lastRoster=0;
 
- $('profile-content').replaceChildren();$('notice').textContent='';$('session-input').value='';document.querySelector('[data-manual-entry]')?.replaceChildren();for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
+ $('profile-content').replaceChildren();
+ $('notice').textContent='';
+ $('session-input').value='';
+ document.querySelector('[data-manual-entry]')?.replaceChildren();
+ for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
 
  if(!user){
   accountReady=Promise.resolve();
-  const url=new URL(location.href);url.searchParams.delete('draft');history.replaceState(null,'',url);if(!showTeamInvitation())welcome.home(pendingDraft()?'signin':undefined);
+  const url=new URL(location.href);
+  url.searchParams.delete('draft');
+  history.replaceState(null,'',url);
+  if(!showTeamInvitation())welcome.home(pendingDraft()?'signin':undefined);
  }else{
   const activeUser=user;
   accountReady=Promise.allSettled([backend.loadProfile(),backend.listTeams()]).then(([p,t])=>{
@@ -1541,7 +2144,8 @@ if(playerDemo){
 
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.dataset.close).close();
 
-for(const id of ['setup-button','connection-status'])$(id).onclick=safe(lobby);$('profile-button').onclick=safe(()=>profileDialog());
+for(const id of ['setup-button','connection-status'])$(id).onclick=safe(lobby);
+$('profile-button').onclick=safe(()=>profileDialog());
 let signingOut=false;
 async function signOut(){
  if(signingOut||!user||!backend)return;
@@ -1552,7 +2156,11 @@ async function signOut(){
 }
 $('signout-button').onclick=safe(signOut);
 
-const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user,teams,teamId:homeTeamId||team?.id,backend},(id,name,imageId)=>{if(demo)Object.assign(sampleTeam,{name,identity_image_id:imageId});teams=teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);if(homeTeamId===id)renderTeamHome();});
+const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user,teams,teamId:homeTeamId||team?.id,backend},(id,name,imageId)=>{
+ if(demo)Object.assign(sampleTeam,{name,identity_image_id:imageId});
+ teams=teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);
+ if(homeTeamId===id)renderTeamHome();
+});
 const imageId=urlParams().get('team-image');
 const cup=mountBattleCup({
  root:$('cup-view'),
@@ -1587,7 +2195,16 @@ function leaveCup(){
  }
 }
 function openCup(){showWorkspace('cup');welcome.board();void cup.refresh();}
-$('draft-button').onclick=()=>{leaveCup();const url=new URL(location.href);if(url.searchParams.has('team')){url.searchParams.delete('team');if(!demo)url.searchParams.set(shared?'draft':'practice',shared?.id||'');history.pushState(null,'',url);}showWorkspace('draft');};
+$('draft-button').onclick=()=>{
+ leaveCup();
+ const url=new URL(location.href);
+ if(url.searchParams.has('team')){
+  url.searchParams.delete('team');
+  if(!demo)url.searchParams.set(shared?'draft':'practice',shared?.id||'');
+  history.pushState(null,'',url);
+ }
+ showWorkspace('draft');
+};
 $('team-button').onclick=()=>navigateTeam();
 $('cup-button').onclick=()=>navigateCup();
 let homeTeamId='';
@@ -1670,7 +2287,8 @@ function renderTeamHome(message=''){
      try{const fresh=await backend.listTeams();if(request===homeRequest&&user?.id===account){teams=fresh;if(team)team=teams.find(t=>t.id===team.id)||team;}}
      catch{reloaded=false;teams=teams.map(t=>t.id===active.id?{...t,invite_code:undefined}:t);if(team?.id===active.id)team={...team,invite_code:undefined};}
      if(request!==homeRequest||user?.id!==account)return;
-     renderTeamHome(label+' was removed from the team. The team invite link was reset'+(reloaded?': share the new one with players who have not joined yet.':'. Reload the page to get the new link.'));renderRoster();
+     renderTeamHome(label+' was removed from the team. The team invite link was reset'+(reloaded?': share the new one with players who have not joined yet.':'. Reload the page to get the new link.'));
+     renderRoster();
      root.querySelector('summary')?.focus();
     }catch(error){status.textContent=error.code==='PGRST202'?'Team removal is not available yet.':'Could not remove this player. Try again.';}
     finally{removing=false;remove.disabled=false;}
@@ -1712,7 +2330,8 @@ function navigateCup(){
  const url=new URL(location.href);url.searchParams.delete('draft');url.searchParams.delete('team');url.searchParams.set('cup','');
  if(url.href!==location.href)history.pushState(null,'',url);
  openCup();
-};
+}
+;
 $('session-dialog').addEventListener('close',()=>{if(!$('cup-view').hidden)void cup.refresh();});
 for(const event of ['focus','online'])window.addEventListener(event,()=>{
  if(!$('cup-view').hidden&&document.body.dataset.view==='board')void cup.refresh();
@@ -1721,18 +2340,74 @@ if(!teamInvitation&&urlParams().has('cup'))openCup();
 if(demo&&urlParams().has('team'))navigateTeam();
 
 
-$('hero-search').oninput=searchHeroes;$('claim-drafter').onclick=safe(()=>mutate('claim'));$('release-drafter').onclick=safe(()=>mutate('release'));$('undo').onclick=safe(()=>mutate('undo'));$('first-pick').onchange=safe(()=>mutate('set_state',{firstPick:$('first-pick').checked}));$('reset-draft').onclick=safe(async()=>{if(confirm('Reset all draft actions?'))await mutate('reset');});
+$('hero-search').oninput=searchHeroes;
+$('claim-drafter').onclick=safe(()=>mutate('claim'));
+$('release-drafter').onclick=safe(()=>mutate('release'));
+$('undo').onclick=safe(()=>mutate('undo'));
+$('first-pick').onchange=safe(()=>mutate('set_state',{firstPick:$('first-pick').checked}));
+$('reset-draft').onclick=safe(async()=>{if(confirm('Reset all draft actions?'))await mutate('reset');});
 
-$('create-session').onclick=safe(async()=>{if(!user||!team||demo)throw Error('Select a team first.');const teamId=team.id;if(!await loadTeam(teamId,{preserveSelection:true}))return;const row=await backend.createDraft(teamId,{actions:[],firstPick:true,enemyIds:[],roster:draftRoster(),assignments:{},source:'manual'});await openDraft(row.id);});
+$('create-session').onclick=safe(async()=>{
+ if(!user||!team||demo)throw Error('Select a team first.');
+ const teamId=team.id;
+ if(!await loadTeam(teamId,{preserveSelection:true}))return;
+ const row=await backend.createDraft(teamId,{actions:[],firstPick:true,enemyIds:[],roster:draftRoster(),assignments:{},source:'manual'});
+ await openDraft(row.id);
+});
 
-$('join-session').onclick=safe(async()=>{let id=$('session-input').value.trim();try{id=new URL(id).searchParams.get('draft')||id;}catch{}if(!validDraftId(id)){$('session-input').setAttribute('aria-invalid','true');throw Error('Enter a valid draft UUID or full session URL.');}$('session-input').removeAttribute('aria-invalid');await openDraft(id);});$('copy-session').onclick=safe(async()=>{if(!shared)return;const url=new URL(location.origin+location.pathname);url.searchParams.set('draft',shared.id);await navigator.clipboard.writeText(url.href);notice('Session link copied. Team membership is required.');});
+$('join-session').onclick=safe(async()=>{
+ let id=$('session-input').value.trim();
+ try{id=new URL(id).searchParams.get('draft')||id;}catch{}
+ if(!validDraftId(id)){$('session-input').setAttribute('aria-invalid','true');throw Error('Enter a valid draft UUID or full session URL.');}
+ $('session-input').removeAttribute('aria-invalid');
+ await openDraft(id);
+});
+$('copy-session').onclick=safe(async()=>{
+ if(!shared)return;
+ const url=new URL(location.origin+location.pathname);
+ url.searchParams.set('draft',shared.id);
+ await navigator.clipboard.writeText(url.href);
+ notice('Session link copied. Team membership is required.');
+});
 
-document.addEventListener('keydown',e=>{if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const count=heroChoices().length;searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;highlightSearch();return;}if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){e.preventDefault();$('hero-search').focus();$('hero-search').value+=e.key==='/'?'':e.key;renderHeroes();}});
+document.addEventListener('keydown',e=>{
+ if(document.body.dataset.view==='welcome'||$('draft-view').hidden||document.querySelector('dialog[open]'))return;
+ const editing=e.target.closest('input,textarea,select,fieldset,[contenteditable]');
+ if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){
+  e.preventDefault();
+  const count=heroChoices().length;
+  searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;
+  highlightSearch();
+  return;
+ }
+ if(e.key==='Escape'){selected=null;$('hero-search').value='';render();return;}
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&state.actions.length)void safe(()=>mutate('undo'))();return;}
+ if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}
+ if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){
+  e.preventDefault();
+  $('hero-search').focus();
+  $('hero-search').value+=e.key==='/'?'':e.key;
+  renderHeroes();
+ }
+});
 
-for(const control of document.querySelectorAll('[data-hero-filter]'))control.onclick=()=>{heroFilter=control.dataset.heroFilter;searchIndex=0;for(const other of document.querySelectorAll('[data-hero-filter]'))other.setAttribute('aria-pressed',String(other===control));renderHeroes();};
+for(const control of document.querySelectorAll('[data-hero-filter]'))control.onclick=()=>{
+ heroFilter=control.dataset.heroFilter;
+ searchIndex=0;
+ for(const other of document.querySelectorAll('[data-hero-filter]'))other.setAttribute('aria-pressed',String(other===control));
+ renderHeroes();
+};
 $('clear-hero-search').onclick=()=>{$('hero-search').value='';searchHeroes();$('hero-search').focus();};
-$('drafter-seat').onclick=()=>{const action=!$('claim-drafter').disabled?$('claim-drafter'):$('release-drafter');action.scrollIntoView?.({block:'center'});if(!action.hidden)action.focus();};
-const skip=document.querySelector('.skip-link');if(skip)skip.onclick=e=>{e.preventDefault();if(!$('cup-view').hidden)$('cup-view').focus();else if(!$('team-view').hidden)$('team-title')?.focus();else focusDraftView();};
+$('drafter-seat').onclick=()=>{
+ const action=!$('claim-drafter').disabled?$('claim-drafter'):$('release-drafter');
+ action.scrollIntoView?.({block:'center'});
+ if(!action.hidden)action.focus();
+};
+const skip=document.querySelector('.skip-link');
+if(skip)skip.onclick=e=>{
+ e.preventDefault();
+ if(!$('cup-view').hidden)$('cup-view').focus();else if(!$('team-view').hidden)$('team-title')?.focus();else focusDraftView();
+};
 function openLinkInvitation(){
  if(demo)return false;
  const invite=readInvitation();if(!invite)return false;
@@ -1747,11 +2422,20 @@ window.addEventListener('popstate',()=>void safe(async()=>{
  const params=urlParams();
  if(params.has('cup')){if(user)await enterGated(openCup);else openCup();return;}
  if(params.has('team')&&(user||demo)){if(user)await enterGated(()=>navigateTeam());else navigateTeam();return;}
- showWorkspace('draft');if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}const draft=params.get('draft');if(draft){if(user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}}else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}})());
+ showWorkspace('draft');
+ if(params.has('demo')||params.has('mock')){if(demo){detachWorkspace();welcome.board();render();}else location.reload();return;}
+ const draft=params.get('draft');
+ if(draft){
+  if(user)await enterGated(()=>openDraft(draft,{navigate:false}));else{detachWorkspace();welcome.home('signin');}
+ }else if(params.has('practice')){enterPractice({navigate:false});welcome.board();}else if(!showTeamInvitation()){detachWorkspace();welcome.home();}
+})());
 // A hidden tab skips its sync ticks and catches up once when shown again; poll() ignores
 // overlapping calls, so a focus event arriving with the visibility change cannot double it.
 const syncTick=()=>{if(document.hidden)return;void poll();refreshSightings();};
-setInterval(syncTick,SYNC_POLL_MS);document.addEventListener('visibilitychange',syncTick);window.addEventListener('focus',()=>void poll());window.addEventListener('online',()=>void poll());
+setInterval(syncTick,SYNC_POLL_MS);
+document.addEventListener('visibilitychange',syncTick);
+window.addEventListener('focus',()=>void poll());
+window.addEventListener('online',()=>void poll());
 
 if(imageId!==null){
  $('welcome-view').hidden=true;
@@ -1759,9 +2443,17 @@ if(imageId!==null){
  $('identity-download').hidden=false;
 } else {showTeamInvitation();render();refreshScouting();if(demo&&urlParams().has('profile'))profileDialog();}
 
-if(imageId===null)void loadHeroes().then(value=>{heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));touch();render();}).catch(()=>{});
+if(imageId===null)void loadHeroes().then(value=>{
+ heroes=Object.fromEntries(Object.entries(value).map(([id,h])=>[id,{...heroes[id],...h,pub_pick:heroes[id]?.pub_pick??h.pub_pick}]));
+ touch();
+ render();
+}).catch(()=>{});
 
-if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:DAY_MS}).then(rows=>{for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};touch();render();}).catch(()=>{});
+if(imageId===null)void publicData.request('/heroStats',{priority:0,ttl:DAY_MS}).then(rows=>{
+ for(const h of rows)if(heroes[h.id])heroes[h.id]={...heroes[h.id],...h};
+ touch();
+ render();
+}).catch(()=>{});
 
 if(imageId!==null)void (async()=>{
  const root=$('identity-download');
@@ -1772,14 +2464,17 @@ if(imageId!==null)void (async()=>{
   await showIdentityDownload(root,createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey}),imageId);
  }catch{root.textContent='This image is unavailable.';}
 })();
-else if(!demo)void (async()=>{try{
+else if(!demo)void (async()=>{
+ try{
 
  const authFragment=new URLSearchParams(location.hash.slice(1));
- let oauthProvider;try{oauthProvider=sessionStorage.getItem(OAUTH_PROVIDER_KEY);sessionStorage.removeItem(OAUTH_PROVIDER_KEY);}catch{}
+ let oauthProvider;
+  try{oauthProvider=sessionStorage.getItem(OAUTH_PROVIDER_KEY);sessionStorage.removeItem(OAUTH_PROVIDER_KEY);}catch{}
  const steamToken=authFragment.get('steam_token');
  // Direct Google sign-in returns #id_token&state. Remove it from the address at once, use the saved
  // attempt once, and only accept a matching state from the last 10 minutes.
- const googleToken=authFragment.get('id_token');let googleAttempt=null,googleRejected=false;
+ const googleToken=authFragment.get('id_token');
+  let googleAttempt=null,googleRejected=false;
  if(googleToken||(authFragment.has('state')&&!authFragment.has('access_token'))){
   let saved=null;try{saved=JSON.parse(sessionStorage.getItem(GOOGLE_ATTEMPT_KEY)||'null');sessionStorage.removeItem(GOOGLE_ATTEMPT_KEY);}catch{}
   const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);
@@ -1788,8 +2483,12 @@ else if(!demo)void (async()=>{try{
  }
  // Show progress instead of a signed-out home while a callback or a stored session resolves.
  const callback=!googleRejected&&!!(steamToken||googleAttempt||oauthProvider||authFragment.has('access_token')||urlParams().has('code'));
- let storedSession=false;try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
- if(callback||storedSession||'authPending' in document.documentElement.dataset){welcome.loading(callback?'Signing you in…':'Loading your account…');setTimeout(()=>welcome.loading(),LOADING_FALLBACK_MS);}
+ let storedSession=false;
+  try{storedSession=Object.keys(localStorage).some(key=>/^sb-.+-auth-token$/.test(key));}catch{}
+ if(callback||storedSession||'authPending' in document.documentElement.dataset){
+  welcome.loading(callback?'Signing you in…':'Loading your account…');
+  setTimeout(()=>welcome.loading(),LOADING_FALLBACK_MS);
+ }
  // A rejected Google return shows its error after the loading state is set, so nothing covers it.
  if(googleRejected)welcome.linkError('google');
  if(steamToken){const clean=new URL(location.href);clean.hash='';history.replaceState(null,'',clean);}
@@ -1807,8 +2506,17 @@ else if(!demo)void (async()=>{try{
  }
 
  // Use the config baked in at build time; fall back to /api/config when the build had none.
- const inlined=inlinedConfig();let config=inlined;
- if(!config){const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok){welcome.setConnection('unavailable');return;}config=await response.json();if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}}steamEnabled=config.steamAuth===true;googleEnabled=config.googleAuth===true;backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
+ const inlined=inlinedConfig();
+  let config=inlined;
+ if(!config){
+  const response=await fetch('/api/config',{cache:'no-store'});
+  if(!response.ok){welcome.setConnection('unavailable');return;}
+  config=await response.json();
+  if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}
+ }
+  steamEnabled=config.steamAuth===true;
+  googleEnabled=config.googleAuth===true;
+  backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
  if(teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
  if(urlParams().has('steam-error')){
   welcome.home('signin');
@@ -1823,11 +2531,22 @@ else if(!demo)void (async()=>{try{
  backend.onAuthChange((session,event)=>{
   observedAuthUser=session?.user?.id||null;++authEvent;
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
- });const initialSession=await backend.getSession();
+ });
+  const initialSession=await backend.getSession();
  if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!urlParams().has('steam-error'))welcome.home('signin');
- await authChanged(initialSession);welcome.loading();welcome.setConnection('available');render();
+ await authChanged(initialSession);
+  welcome.loading();
+  welcome.setConnection('available');
+  render();
  // Sign-in provider flags can change without a rebuild; refresh them in the background.
- if(inlined)void fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(fresh=>{if(!fresh?.url)return;steamEnabled=fresh.steamAuth===true;googleEnabled=fresh.googleAuth===true;welcome.setConnection('available');}).catch(()=>{});}catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}})();
+ if(inlined)void fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(fresh=>{
+  if(!fresh?.url)return;
+  steamEnabled=fresh.steamAuth===true;
+  googleEnabled=fresh.googleAuth===true;
+  welcome.setConnection('available');
+ }).catch(()=>{});
+ }catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}
+})();
 
 
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 import {boardCode} from './build-board.js';
 import {markup,dataStub,flush as flushRounds,openBoard} from './board-harness.js';
@@ -259,7 +259,9 @@ test('late hero meta stats refresh suggestion badges',async()=>{
  try{assert.notEqual(marked(h),expected);release(rows);await flush();h.q('hero-search').dispatchEvent(new h.w.Event('input'));assert.equal(marked(h),expected);}finally{h.w.close();}
 });
 test('workspace resets clear ally counters, the suggestion cache, and focus',async()=>{
- const source=await readFile('web/app.js','utf8'),reset=source.match(/function resetDraftData\(\)\{[^\n]*\n?[^\n]*\}/)?.[0]||'';
+ // The board's modules, read together: the reset lives in one of them, its callers in others.
+ const files=(await readdir('web')).filter(file=>file.endsWith('.js')).sort();
+ const source=(await Promise.all(files.map(file=>readFile('web/'+file,'utf8')))).join('\n'),reset=source.match(/function resetDraftData\(\)\{[\s\S]*?\n\}/)?.[0]||'';
  for(const part of ['allyCounterMatchups={}','allyCounterRequests.clear()','allyCounterFailures.clear()','suggestionCache=','focusedPlayer=null'])assert.ok(reset.includes(part),part);
  assert.equal(source.match(/resetDraftData\(\);/g)?.length,3);
 });
