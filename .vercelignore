@@ -9,6 +9,7 @@
 !web/app.js
 !web/url-state.js
 !web/store.js
+!web/dom.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js

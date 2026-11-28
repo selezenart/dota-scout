@@ -18,6 +18,7 @@ import {createTeamScopedStore} from './team-store.js';
 import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
 import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,storageKey,codeFromInvitation,imageId} from './url-state.js';
 import {store} from './store.js';
+import {$,el,notice,safe,button,field,focusDraftView,show,showIfClosed} from './dom.js';
 
 // Timings (ms) and local storage caps of the board.
 const SCOUT_RETRY_RATE_LIMITED_MS=20000;
@@ -35,10 +36,6 @@ const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago i
 const LOADING_FALLBACK_MS=15000;
 const LOCAL_MATCH_CAP=200;
 const LOCAL_SIGHTING_CAP=2000;
-
-
-
-const $=id=>document.getElementById(id);
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
 // A player's public account ID, under either field name a roster entry may use.
 const accountOf=p=>p.steamAccountId||p.accountId;
@@ -94,29 +91,6 @@ try {
  if(saved&&!demo){state={...initialState(),...saved.state};profile=saved.profile||{};}
 }catch{}
 
-const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
-
-const notice=text=>{
- const dialog=document.querySelector('dialog[open]');
- let target=dialog?.querySelector('[data-dialog-notice]');
- if(dialog&&!target){target=el('p',null,'session-feedback');target.dataset.dialogNotice='';target.setAttribute('role','status');dialog.append(target);}
- (target||$('notice')).textContent=text;
- if(dialog?.id==='session-dialog'){$('session-input').setAttribute('aria-describedby',target.id||(target.id='session-notice'));}
-};
-
-const safe=fn=>(...args)=>Promise.resolve().then(()=>fn(...args)).catch(e=>notice(e.message||'Operation failed'));
-
-function button(text,fn,parent,cls){const b=el('button',text,cls);b.type='button';b.onclick=safe(fn);parent?.append(b);return b;}
-
-function field(parent,label,value='',type='text'){
- const l=el('label',label),i=el(type==='textarea'?'textarea':'input');
- if(type!=='textarea')i.type=type;
- i.value=value;
- l.append(i);
- parent.append(l);
- return i;
-}
-
 function practiceKey(){return user?'captain-practice-v1:'+user.id:storageKey;}
 function saveLocal(){if(!shared&&!demo)try{localStorage.setItem(practiceKey(),JSON.stringify({state,profile}));}catch{}}
 function restorePractice(){
@@ -151,7 +125,6 @@ function enterPractice({navigate=true}={}){
  $('draft-button').click();
  render();refreshScouting();
 }
-function focusDraftView(){ $('draft-button').click();$('surface-heroes').checked=true;$('hero-search').focus(); }
 function matchupCoverage(){
  const ours=state.actions.filter(a=>a.mode==='ourPick'),enemies=state.actions.filter(a=>a.mode==='enemyPick');
  let observed=0;
@@ -1219,8 +1192,6 @@ function draftRoster(){
  return rows.map(p=>({...p,id:p.userId}));
 }
 
-function show(id){$(id).showModal();}
-
 function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={}){
 
  const selected=new Set(values||[]),wrap=el('section',null,'profile-hero-picker');
@@ -1944,7 +1915,6 @@ async function lobby(){
  $('join-session').disabled=!user||demo;
  showIfClosed('session-dialog');
 }
-function showIfClosed(id){if(!$(id).open)show(id);}
 
 async function loadTeam(id,{preserveSelection=false}={}){
 
