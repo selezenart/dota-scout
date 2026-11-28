@@ -20,8 +20,8 @@ import {accountOf,memberId,providerName,stratz,touch,observations,requestedMatch
 import {saveLocal,restorePractice} from './practice-store.js';
 import {stratzCredit,appendStratzCredit,requestAllyCounters,refreshScouting} from './scouting.js';
 import {enemyDetails,addEnemyMatches,refreshSightings,renderEnemyAssignment,renderDraftEnemies} from './enemy-intel.js';
-Object.assign(ui,{renderView});
-const ROSTER_REFRESH_MS=30000;
+import {detachWorkspace,enterPractice,mutate,openDraft,poll,draftRoster,loadTeam,mutateOwner} from './draft-sync.js';
+Object.assign(ui,{stopLiveWatch,renderView,renderTeamHome});
 const LIVE_WATCH_RETRY_MS=5000;
 const LIVE_WATCH_TIMEOUT_MS=14000; // local live-roster helper
 const SYNC_POLL_MS=3000;
@@ -35,22 +35,6 @@ let accountReady=Promise.resolve();
 let accountGen=0;
 let observedAuthUser;
 let authEvent=0;
-let draftOpen=0;
-let reviewVisible=true;
-function detachWorkspace(){
- stopLiveWatch();resetAllyEntry();
- ++store.generation;++draftOpen;++teamLoad;store.shared=null;store.pending=false;store.healthy=true;store.polling=false;store.selected=null;store.localControl=true;
- store.state=demo?demoState():initialState();
- resetDraftData();reviewVisible=true;
-}
-function enterPractice({navigate=true}={}){
- detachWorkspace();restorePractice();
- if(navigate){const url=new URL(location.href);url.searchParams.delete('draft');url.searchParams.set('practice','');history.pushState(null,'',url);}
- $('draft-button').click();
- render();refreshScouting();
-}
-
-let searchIndex=0;
 let rankedIds=new Set();
 
 let steamEnabled=false;
@@ -69,6 +53,7 @@ const welcome=createWelcome({getBackend:()=>store.backend,steamEnabled:()=>steam
  openingTeam=true;
  try{await enterGated(()=>navigateTeam());}finally{openingTeam=false;}
 })});
+ui.welcome=welcome;
 let openingTeam=false;
 let resumingAccount=null;
 
@@ -213,7 +198,7 @@ function renderView(){
  renderRoster();
  renderDraftEnemies();
 
- $('analysis').hidden=!!turn||!reviewVisible;
+ $('analysis').hidden=!!turn||!store.reviewVisible;
  if(turn)$('analysis').replaceChildren();
  if(!turn){
   const n=$('analysis');
@@ -234,7 +219,7 @@ function renderView(){
   }
   if([...review.our.heroes,...review.enemy.heroes].some(h=>h.notes.some(x=>x.tone!=='info')))n.append(stratzCredit());
   n.append(el('p',`Observed matchup coverage: ${matchupCoverage().observed} / ${matchupCoverage().total} opposing pairs observed; missing pairs have no matchup evidence. Bans: `+store.state.actions.filter(a=>a.mode.endsWith('Ban')).map(a=>heroName(a.heroId)).join(', ')));
-  button('Show hero board',()=>{reviewVisible=false;render();},n);
+  button('Show hero board',()=>{store.reviewVisible=false;render();},n);
  }
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
@@ -417,7 +402,7 @@ function renderHeroes(){
 // Typing only changes which tiles match, so toggle the existing tiles. The Recommended
 // filter and the no-match message change which tiles exist: rebuild for those.
 function searchHeroes(){
- searchIndex=0;
+ store.searchIndex=0;
  const tiles=[...$('hero-groups').querySelectorAll('.hero-tile')],query=$('hero-search').value.toLowerCase();
  const misses=tiles.map(tile=>!!query&&!String(store.heroes[tile.dataset.heroId]?.localized_name||'').toLowerCase().includes(query));
  if(heroFilter==='recommended'||!tiles.length||misses.every(Boolean)){renderHeroes();return;}
@@ -427,11 +412,11 @@ function searchHeroes(){
 function heroChoices(){return [...$('hero-groups').querySelectorAll('.hero-tile:not(:disabled):not(.is-search-miss)')];}
 function highlightSearch(){
  const all=[...$('hero-groups').querySelectorAll('.hero-tile')],tiles=heroChoices();
- searchIndex=Math.max(0,Math.min(searchIndex,tiles.length-1));
+ store.searchIndex=Math.max(0,Math.min(store.searchIndex,tiles.length-1));
  all.forEach(b=>{b.classList.remove('is-highlighted');b.id='hero-result-'+b.dataset.heroId;});
- tiles[searchIndex]?.classList.add('is-highlighted');
+ tiles[store.searchIndex]?.classList.add('is-highlighted');
  const search=$('hero-search');
- if(tiles[searchIndex])search.setAttribute('aria-activedescendant',tiles[searchIndex].id);else search.removeAttribute('aria-activedescendant');
+ if(tiles[store.searchIndex])search.setAttribute('aria-activedescendant',tiles[store.searchIndex].id);else search.removeAttribute('aria-activedescendant');
 }
 
 function evidenceSummaries(turn){
@@ -456,7 +441,7 @@ function renderRecommendations(turn,write){
   const done=el('div',null,'decision-dock');
   root.append(done);
   done.append(el('p',`All ${CM_ORDER.length} actions recorded.`));
-  button('Show draft review',()=>{reviewVisible=true;render();},done);
+  button('Show draft review',()=>{store.reviewVisible=true;render();},done);
   return;
  }
  const best=el('div',null,'best-now'),dock=el('div',null,'decision-dock');
@@ -583,7 +568,7 @@ function renderRecommendations(turn,write){
 function renderRoster(){
  const root=$('team-roster');root.replaceChildren();
  const homeActive=!$('team-view').hidden&&store.user;
- const allies=homeActive?(homeTeamId?homeRoster:[{...store.profile,userId:store.user.id}]).map(item=>normalizeProfile({...item,id:item.userId,name:item.displayName||'Teammate'},item)):roster();
+ const allies=homeActive?(store.homeTeamId?store.homeRoster:[{...store.profile,userId:store.user.id}]).map(item=>normalizeProfile({...item,id:item.userId,name:item.displayName||'Teammate'},item)):roster();
  for(const [label,players] of [['Our team',allies],['Enemy scouting',opponents()]]){
   if(!players.length)continue;
   const heading=el('h2',label,'roster-group-heading');root.append(heading);
@@ -612,121 +597,6 @@ function renderRoster(){
   button('Edit my profile',()=>profileDialog(),root,'primary');
   button('Invite or import players',lobby,root);
  }
-}
-
-
-// After a rejected change: adopt the draft as the server has it, unless this view moved on.
-async function reloadDraft(id,gen){
- try{const row=await store.backend.getDraft(id);if(gen===store.generation){adopt(row);store.healthy=true;}}catch{if(gen===store.generation)store.healthy=false;}
-}
-async function mutate(operation,payload={}){
- if(playerDemo)return;
- if(store.pending) return;
- if(!['claim','release'].includes(operation)&&!canWrite())throw Error('Become the confirmed drafter first.');
- store.pending=true;
- render();
- const gen=store.generation;
- try{
-  if(store.shared){
-   const id=store.shared.id;
-   try{
-    const row=await store.backend.mutateDraft(id,store.shared.revision,operation,payload);
-    if(gen===store.generation)adopt(row);
-   }catch(e){if(gen===store.generation){await reloadDraft(id,gen);throw Error(e.message+' · Current state reloaded where available. Repeat deliberately.');}}
-  }else{
-   if(operation==='claim')store.localControl=true;else if(operation==='release')store.localControl=false;else if(operation==='set_state'){
-    if('firstPick'in payload)store.state=reduceDraft(store.state,'set_first_pick',payload,{canWrite:true});
-    store.state={...store.state,...payload};
-   }else store.state=reduceDraft(store.state,operation,payload,{canWrite:true,heroes:store.heroes});
-   saveLocal();
-  }
-  store.selected=null;
-  $('hero-search').value='';
-  searchIndex=0;
-  refreshScouting();
- }finally{if(gen===store.generation){store.pending=false;render();}}
-}
-
-function adopt(row){
- if(!row||store.shared&&row.id!==store.shared.id)return;
- if(store.shared&&row.revision<store.shared.revision)return;
- store.shared=row;
- store.state={...initialState(),...row.state};
- store.healthy=true;
- refreshScouting();
-}
-
-async function openDraft(id,{navigate=true}={}){
- if(!store.user||demo)throw Error('Sign in to open a shared draft.');
- const currentUser=store.user.id,gen=store.generation,request=++draftOpen;
- let row;
- try{
-  row=await store.backend.getDraft(id);
- }catch(error){if(error.code==='PGRST116')throw Error('This draft is available to team members only. Ask the captain for a team invitation.');throw error;}
- if(store.user?.id!==currentUser||gen!==store.generation||request!==draftOpen)return;
- ++store.generation;
- store.shared=null;
- resetDraftData();
- store.pending=false;
- store.polling=false;
- store.shared=row;
- store.team=store.teams.find(t=>t.id===row.team_id);
- teamRoster=[];
- selectedTeamIds=(row.state.roster||[]).filter(p=>p&&typeof p==='object').map(p=>p.userId||p.id);
- adopt(row);
- store.selected=null;
- reviewVisible=true;
- if(navigate){
-  const url=new URL(location.href);
-  url.searchParams.delete('practice');
-  url.searchParams.delete('cup');
-  url.searchParams.set('draft',id);
-  if(url.href!==location.href)history.pushState(null,'',url);
- }
- render();
- $('session-dialog').close();
- welcome.board();
- focusDraftView();
-}
-async function poll(){
- if(!store.shared||store.polling||store.pending||!store.user)return;
- store.polling=true;const gen=store.generation,id=store.shared.id;let changed=false,leaving=false;
- try{
-  const row=await store.backend.getDraft(id);if(gen!==store.generation)return;
-  // Every server-side draft update bumps revision; drafter is compared too as a cheap guard.
-  changed=!store.healthy||row.revision!==store.shared.revision||row.drafter_user_id!==store.shared.drafter_user_id;
-  if(changed)adopt(row);
-  if(Date.now()-store.lastRoster>ROSTER_REFRESH_MS){
-   const fresh=await store.backend.loadRoster(row.team_id);
-   if(gen===store.generation&&store.team?.id===row.team_id){store.lastRoster=Date.now();teamRoster=fresh;}
-  }
- }catch(e){
-  // The draft is no longer visible: the team was deleted or this account left / was removed.
-  if(gen===store.generation&&e.code==='PGRST116'){leaving=true;void safe(()=>leaveVanishedDraft(gen))().finally(()=>{if(gen===store.generation)store.polling=false;});return;}
-  if(gen===store.generation){changed=store.healthy;store.healthy=false;notice('Shared state unavailable. Writes paused: '+e.message);}
- }
- finally{if(gen===store.generation){if(!leaving)store.polling=false;if(changed)render();}}
-}
-async function leaveVanishedDraft(gen){
- const teamId=store.shared?.team_id,name=store.teams.find(t=>t.id===teamId)?.name||'This team',account=store.user?.id;
- let fresh=null;try{fresh=await store.backend.listTeams();}catch{}
- if(gen!==store.generation||store.user?.id!==account)return;
- if(fresh)store.teams=fresh;
- const message=!fresh?'This draft is no longer available to you. Switched to local practice.':fresh.some(t=>t.id===teamId)?'This draft is no longer available. Switched to local practice.':name+' was deleted, or you are no longer a member. Switched to local practice.';
- if(store.team?.id===teamId){++teamLoad;store.team=null;teamRoster=[];selectedTeamIds=[];}
- if(homeTeamId===teamId){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
- enterPractice();notice(message);
-}
-let teamRoster=[];
-let selectedTeamIds=[];
-let teamLoad=0;
-
-function draftRoster(){
- const rows=teamRoster.filter(p=>selectedTeamIds.includes(p.userId));
- if(rows.length>5)throw Error('Select at most five players.');
- const accounts=rows.map(p=>p.steamAccountId).filter(Boolean);
- if(new Set(accounts).size!==accounts.length)throw Error('Duplicate public account IDs in selected roster. Resolve profiles or deselect a duplicate.');
- return rows.map(p=>({...p,id:p.userId}));
 }
 
 function heroPicker(parent,label,values,{kind,getRoles,getAccountId,onError}={}){
@@ -1089,7 +959,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
    store.profile=saved;profileSaved=true;
 
-   if(!$('team-view').hidden){homeRoster=homeRoster.map(item=>item.userId===store.user?.id?{...item,...store.profile}:item);renderTeamHome();}
+   if(!$('team-view').hidden){store.homeRoster=store.homeRoster.map(item=>item.userId===store.user?.id?{...item,...store.profile}:item);renderTeamHome();}
    if(!store.shared){
     store.state.roster=[{...store.profile,id:store.user?.id||'local-own'},...store.state.roster.filter(p=>p.id!=='local-own'&&p.id!==store.user?.id)].slice(0,ROSTER_SIZE);
     touch();
@@ -1097,7 +967,7 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
    observations.clear();refreshScouting();saveLocal();render();
 
-   if(joinedTeam&&store.team?.id===joinedTeam.id)void loadTeam(store.team.id,{preserveSelection:teamRoster.length>0}).catch(()=>{});
+   if(joinedTeam&&store.team?.id===joinedTeam.id)void loadTeam(store.team.id,{preserveSelection:store.teamRoster.length>0}).catch(()=>{});
    if(continueAfterSave){
     message('Profile saved.');
     profileSetupRequired=false;
@@ -1155,9 +1025,9 @@ async function checkLiveWatch(watch) {
    watch.status.textContent='Waiting for the drafter seat before importing the lineup.';
    retry();return;
   }
-  if(store.shared&&store.team?.id===store.shared.team_id&&teamRoster.length===0)await loadTeam(store.shared.team_id,{preserveSelection:true});
+  if(store.shared&&store.team?.id===store.shared.team_id&&store.teamRoster.length===0)await loadTeam(store.shared.team_id,{preserveSelection:true});
   if(liveWatch!==watch||watch.generation!==store.generation)return;
-  const profiles=[...(store.state.roster||[]),...teamRoster];
+  const profiles=[...(store.state.roster||[]),...store.teamRoster];
   const roster=lineup.ours.map(id=>{
    const profile=profiles.find(player=>String(accountOf(player))===id);
    return profile?{...profile,id:memberId(profile)}:{id,steamAccountId:id};
@@ -1204,10 +1074,10 @@ async function lobby(){
  // Default to the team shown on Team home so shared draft creation is not silently disabled.
  // The roster loads in the background so a slow response never blocks Setup.
  if(store.user&&!demo&&!store.team&&store.teams.length){
-  const id=(store.teams.find(t=>t.id===homeTeamId)||store.teams[0]).id;
+  const id=(store.teams.find(t=>t.id===store.homeTeamId)||store.teams[0]).id;
   void safe(async()=>{if(!await loadTeam(id)||store.team?.id!==id||!$('session-dialog').open)return;if(lobbyEdited)sessionButtons();else await lobby();})();
  }
- else if(store.team&&!teamRoster.length)await loadTeam(store.team.id,{preserveSelection:true});
+ else if(store.team&&!store.teamRoster.length)await loadTeam(store.team.id,{preserveSelection:true});
  const details=document.querySelector('[data-connection-details]'),manual=document.querySelector('[data-manual-entry]');
  details.replaceChildren(el('p',demo?'Invented demonstration - no backend writes.':store.backend?'Shared drafts require sign-in and team membership.':'Public configuration unavailable. Local practice remains available.'));
  const link=el('a','Open legacy live/replay helper');
@@ -1284,7 +1154,7 @@ async function lobby(){
   ours.append(el('h3','Our team'));
   manual.append(ours);
   const current=Array.isArray(store.state.roster)?store.state.roster.filter(p=>p&&typeof p==='object'):[];
-  const members=store.user&&!demo&&store.team?teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
+  const members=store.user&&!demo&&store.team?store.teamRoster:[],memberIds=new Set(members.map(p=>p.userId));
   const savedMembers=current.map(p=>memberId(p)).filter(id=>memberIds.has(id));
   let picked=savedMembers.some(id=>id!==store.user?.id)?savedMembers:members.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
   if(members.length){
@@ -1367,11 +1237,11 @@ async function lobby(){
    section.append(el('p','Selected team: '+store.team.name),el('p','Select up to five players for the draft roster:'));
    const rosterList=el('div',null,'lobby-roster');
    section.append(rosterList);
-   for(const p of teamRoster){
+   for(const p of store.teamRoster){
     const label=el('label',p.displayName+' - '+p.availability),check=el('input');
     check.type='checkbox';
-    check.checked=selectedTeamIds.includes(p.userId);
-    check.onchange=()=>{selectedTeamIds=check.checked?[...new Set([...selectedTeamIds,p.userId])]:selectedTeamIds.filter(id=>id!==p.userId);};
+    check.checked=store.selectedTeamIds.includes(p.userId);
+    check.onchange=()=>{store.selectedTeamIds=check.checked?[...new Set([...store.selectedTeamIds,p.userId])]:store.selectedTeamIds.filter(id=>id!==p.userId);};
     label.prepend(check);
     rosterList.append(label);
    }
@@ -1431,8 +1301,8 @@ async function lobby(){
     exit.disabled=true;try{await (ownsTeam?store.backend.deleteTeam(leaving.id,account):store.backend.leaveTeam(leaving.id,account));}finally{exit.disabled=false;}
     if(store.user?.id!==account)return;
     if(store.shared?.team_id===leaving.id)enterPractice();
-    ++teamLoad;store.team=null;teamRoster=[];selectedTeamIds=[];
-    if(homeTeamId===leaving.id){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
+    ++store.teamLoad;store.team=null;store.teamRoster=[];store.selectedTeamIds=[];
+    if(store.homeTeamId===leaving.id){teamIdentity.clear();store.homeRequest++;store.homeTeamId='';store.homeRoster=[];renderTeamHome();}
     store.teams=await store.backend.listTeams();if(store.user?.id!==account)return;
     await lobby();notice(ownsTeam?'Deleted team '+leaving.name+'.':'You left '+leaving.name+'.');
    },section,ownsTeam?'danger':undefined);
@@ -1453,41 +1323,6 @@ async function lobby(){
  showIfClosed('session-dialog');
 }
 
-async function loadTeam(id,{preserveSelection=false}={}){
-
- const request=++teamLoad,gen=store.generation;
-
- const previous=preserveSelection&&store.team?.id===id?[...selectedTeamIds]:null;
-
- store.team=store.teams.find(t=>t.id===id);
-
- // Clear stale rows while another team's roster is loading.
-
- teamRoster=[];selectedTeamIds=[];
-
- const rows=id?await store.backend.loadRoster(id):[];
-
- if(gen!==store.generation||request!==teamLoad)return false;
-
- teamRoster=rows;
-
- selectedTeamIds=previous?previous.filter(id=>rows.some(p=>p.userId===id)):rows.filter(p=>p.availability!=='unavailable').slice(0,ROSTER_SIZE).map(p=>p.userId);
-
- return true;
-
-}
-
-async function mutateOwner(){
- if(!store.shared||store.pending)return;
- store.pending=true;
- render();
- const gen=store.generation,id=store.shared.id;
- try{
-  const row=await store.backend.mutateDraft(id,store.shared.revision,'assign',{userId:store.user.id});
-  if(gen===store.generation)adopt(row);
- }catch(e){if(gen===store.generation)await reloadDraft(id,gen);throw e;}finally{if(gen===store.generation){store.pending=false;render();}}
-}
-
 let cupAccountVersion=0;
 async function authChanged(session,event){
 
@@ -1502,9 +1337,9 @@ async function authChanged(session,event){
  stopLiveWatch();
  resetAllyEntry();
  teamIdentity.clear();
- homeRequest++;
- homeTeamId='';
- homeRoster=[];
+ store.homeRequest++;
+ store.homeTeamId='';
+ store.homeRoster=[];
  $('team-home').replaceChildren();
  profileSaved=false;
  profileSetupRequired=false;
@@ -1515,8 +1350,8 @@ async function authChanged(session,event){
  store.shared=null;
  store.team=null;
  store.teams=[];
- teamRoster=[];
- selectedTeamIds=[];
+ store.teamRoster=[];
+ store.selectedTeamIds=[];
  store.profile={};
  store.state=initialState();
  ++cupAccountVersion;
@@ -1631,11 +1466,12 @@ async function signOut(){
 }
 $('signout-button').onclick=safe(signOut);
 
-const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user:store.user,teams:store.teams,teamId:homeTeamId||store.team?.id,backend:store.backend},(id,name,imageId)=>{
+const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:captainDemo?'demo-2':'demo-you'},teams:[sampleTeam],backend:demoIdentityBackend,demo:true}:{user:store.user,teams:store.teams,teamId:store.homeTeamId||store.team?.id,backend:store.backend},(id,name,imageId)=>{
  if(demo)Object.assign(sampleTeam,{name,identity_image_id:imageId});
  store.teams=store.teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);
- if(homeTeamId===id)renderTeamHome();
+ if(store.homeTeamId===id)renderTeamHome();
 });
+ui.teamIdentity=teamIdentity;
 const cup=mountBattleCup({
  root:$('cup-view'),
  getContext:()=>({user:store.user,teams:store.teams,teamId:store.team?.id,backend:store.backend,demo,profileReady:demo||profileSaved,profileHasDraftDetails:demo||!!(store.profile.preferredRoles?.length&&(store.profile.signatureHeroes?.length||store.profile.desiredHeroes?.length)),version:cupAccountVersion}),
@@ -1648,7 +1484,7 @@ const cup=mountBattleCup({
 });
 function showWorkspace(view){
  $('app-shell').dataset.workspace=view;
- if(view!=='team'){teamIdentity.clear();homeRequest++;}
+ if(view!=='team'){teamIdentity.clear();store.homeRequest++;}
  const skip=document.querySelector('.skip-link');
  skip.href=view==='team'?'#team-title':view==='cup'?'#cup-view':'#hero-search';
  skip.textContent=view==='team'?'Skip to team':view==='cup'?'Skip to Battle Cup signup':'Skip to hero search';
@@ -1681,31 +1517,28 @@ $('draft-button').onclick=()=>{
 };
 $('team-button').onclick=()=>navigateTeam();
 $('cup-button').onclick=()=>navigateCup();
-let homeTeamId='';
-let homeRoster=[];
-let homeRequest=0;
 const sampleTeam={id:'demo-team',name:'Night Shift',owner_user_id:'demo-2'};
 function renderTeamHome(message=''){
  const root=$('team-home');
- const active=demo?sampleTeam:store.teams.find(item=>item.id===homeTeamId);
+ const active=demo?sampleTeam:store.teams.find(item=>item.id===store.homeTeamId);
  const me=demo?(captainDemo?'demo-2':'demo-0'):store.user?.id||'local-player';
  const current={...store.profile,userId:me,displayName:store.profile.displayName||'You'};
- const source=demo?demoState().roster.map(item=>({...item.selfReport,userId:item.id,displayName:item.name})):homeRoster;
+ const source=demo?demoState().roster.map(item=>({...item.selfReport,userId:item.id,displayName:item.name})):store.homeRoster;
  const players=active?source.map(item=>item.userId===me?{...item,...current}:item):[current];
  if(active&&!players.some(item=>item.userId===me)&&me)players.push(current);
  const title=el('h1',active?.name||'Your player home');title.id='team-title';title.tabIndex=-1;
  root.replaceChildren(title);
  if(active?.identity_image_id&&(demo||store.backend)){
-  const request=homeRequest;
+  const request=store.homeRequest;
   void (demo?demoIdentityBackend:store.backend).getTeamIdentityImage(active.identity_image_id).then(image=>{
-   if(request!==homeRequest||!title.isConnected||!['image/png','image/jpeg','image/webp'].includes(image?.mime))return;
+   if(request!==store.homeRequest||!title.isConnected||!['image/png','image/jpeg','image/webp'].includes(image?.mime))return;
    const logo=el('img',null,'team-home-emblem');logo.alt='Team emblem';logo.src='data:'+image.mime+';base64,'+image.data;title.before(logo);
   }).catch(()=>{});
  }
  if(!demo&&store.teams.length>1){
   const switcher=el('select');switcher.setAttribute('aria-label','Choose team');
   for(const item of store.teams)switcher.append(new Option(item.name,item.id));
-  switcher.value=homeTeamId;switcher.onchange=()=>navigateTeam(switcher.value);root.append(switcher);
+  switcher.value=store.homeTeamId;switcher.onchange=()=>navigateTeam(switcher.value);root.append(switcher);
  }
  if(message){const status=el('p',message);status.setAttribute('role','status');root.append(status);}
  const stage=el('div',null,'team-home-stage');
@@ -1733,34 +1566,34 @@ function renderTeamHome(message=''){
   extra.append(el('summary','More teammates'),...others.slice(captain?4:5).map(player=>el('p',player.displayName||'Teammate')));
   root.append(extra);
  }
- if(!demo&&active?.owner_user_id===me&&homeRoster.length>1){
+ if(!demo&&active?.owner_user_id===me&&store.homeRoster.length>1){
   const manage=el('details',null,'team-roster-details');
   manage.append(el('summary','Manage teammates'));
   const status=el('p');status.setAttribute('role','status');
-  const account=store.user.id, request=homeRequest;
+  const account=store.user.id, request=store.homeRequest;
   let removing=false;
-  for(const member of homeRoster.filter(item=>item.userId!==account)){
+  for(const member of store.homeRoster.filter(item=>item.userId!==account)){
    const row=el('div',null,'team-member-management');
    const label=member.displayName||'Teammate';
    row.append(el('strong',label));
    const remove=button('Remove '+label,async()=>{
-    if(removing||request!==homeRequest||store.user?.id!==account)return;
+    if(removing||request!==store.homeRequest||store.user?.id!==account)return;
     if(!confirm('Remove '+label+' from '+active.name+'? This also releases their team Battle Cup spot and draft control, and resets the team invite link.'))return;
     removing=true;remove.disabled=true;
     try{
      await store.backend.removeTeamMember(active.id,member.userId,account);
-     if(request!==homeRequest||store.user?.id!==account)return;
+     if(request!==store.homeRequest||store.user?.id!==account)return;
      if(store.team?.id===active.id){
-      ++teamLoad;
-      teamRoster=teamRoster.filter(item=>item.userId!==member.userId);
-      selectedTeamIds=selectedTeamIds.filter(id=>id!==member.userId);
+      ++store.teamLoad;
+      store.teamRoster=store.teamRoster.filter(item=>item.userId!==member.userId);
+      store.selectedTeamIds=store.selectedTeamIds.filter(id=>id!==member.userId);
      }
-     homeRoster=homeRoster.filter(item=>item.userId!==member.userId);
+     store.homeRoster=store.homeRoster.filter(item=>item.userId!==member.userId);
      // Removal resets the invite code server-side; reload teams so Copy invite link uses the new one.
      let reloaded=true;
-     try{const fresh=await store.backend.listTeams();if(request===homeRequest&&store.user?.id===account){store.teams=fresh;if(store.team)store.team=store.teams.find(t=>t.id===store.team.id)||store.team;}}
+     try{const fresh=await store.backend.listTeams();if(request===store.homeRequest&&store.user?.id===account){store.teams=fresh;if(store.team)store.team=store.teams.find(t=>t.id===store.team.id)||store.team;}}
      catch{reloaded=false;store.teams=store.teams.map(t=>t.id===active.id?{...t,invite_code:undefined}:t);if(store.team?.id===active.id)store.team={...store.team,invite_code:undefined};}
-     if(request!==homeRequest||store.user?.id!==account)return;
+     if(request!==store.homeRequest||store.user?.id!==account)return;
      renderTeamHome(label+' was removed from the team. The team invite link was reset'+(reloaded?': share the new one with players who have not joined yet.':'. Reload the page to get the new link.'));
      renderRoster();
      root.querySelector('summary')?.focus();
@@ -1779,23 +1612,23 @@ function renderTeamHome(message=''){
  root.append(actions);
 }
 function navigateTeam(id){
- const chosen=demo?sampleTeam:store.teams.find(item=>item.id===(id||homeTeamId||store.team?.id))||store.teams[0];
- const request=++homeRequest, account=store.user?.id;
- homeTeamId=chosen?.id||'';
- homeRoster=[];
+ const chosen=demo?sampleTeam:store.teams.find(item=>item.id===(id||store.homeTeamId||store.team?.id))||store.teams[0];
+ const request=++store.homeRequest, account=store.user?.id;
+ store.homeTeamId=chosen?.id||'';
+ store.homeRoster=[];
  const url=new URL(location.href);
  url.searchParams.delete('cup');url.searchParams.delete('practice');url.searchParams.delete('draft');
  url.searchParams.set('team','');
  if(url.href!==location.href)history.pushState(null,'',url);
  showWorkspace('team');welcome.board();renderRoster();
  renderTeamHome(chosen&&!demo?'Loading team roster…':'');
- teamIdentity.open(homeTeamId);
+ teamIdentity.open(store.homeTeamId);
  if(chosen&&!demo&&store.backend?.loadRoster){
   void store.backend.loadRoster(chosen.id).then(rows=>{
-   if(request!==homeRequest||account!==store.user?.id||$('team-view').hidden)return;
-   homeRoster=rows;renderTeamHome();renderRoster();
+   if(request!==store.homeRequest||account!==store.user?.id||$('team-view').hidden)return;
+   store.homeRoster=rows;renderTeamHome();renderRoster();
   }).catch(()=>{
-   if(request===homeRequest&&account===store.user?.id&&!$('team-view').hidden)renderTeamHome('Could not load the roster. Reopen Team to retry.');
+   if(request===store.homeRequest&&account===store.user?.id&&!$('team-view').hidden)renderTeamHome('Could not load the roster. Reopen Team to retry.');
   });
  }
 }
@@ -1850,13 +1683,13 @@ document.addEventListener('keydown',e=>{
  if(e.target===$('hero-search')&&['ArrowDown','ArrowUp'].includes(e.key)){
   e.preventDefault();
   const count=heroChoices().length;
-  searchIndex=count?(searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;
+  store.searchIndex=count?(store.searchIndex+(e.key==='ArrowDown'?1:-1)+count)%count:0;
   highlightSearch();
   return;
  }
  if(e.key==='Escape'){store.selected=null;$('hero-search').value='';render();return;}
  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editing){e.preventDefault();if(canWrite()&&store.state.actions.length)void safe(()=>mutate('undo'))();return;}
- if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[searchIndex];first?.click();return;}
+ if(e.key==='Enter'&&e.target===$('hero-search')){e.preventDefault();const first=heroChoices()[store.searchIndex];first?.click();return;}
  if(!editing&&!e.target.closest('button,a')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key.length===1){
   e.preventDefault();
   $('hero-search').focus();
@@ -1867,7 +1700,7 @@ document.addEventListener('keydown',e=>{
 
 for(const control of document.querySelectorAll('[data-hero-filter]'))control.onclick=()=>{
  heroFilter=control.dataset.heroFilter;
- searchIndex=0;
+ store.searchIndex=0;
  for(const other of document.querySelectorAll('[data-hero-filter]'))other.setAttribute('aria-pressed',String(other===control));
  renderHeroes();
 };

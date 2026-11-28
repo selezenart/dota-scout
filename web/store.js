@@ -23,9 +23,17 @@ export const store={
  healthy:true,
  lastRoster:0,
  matchups:{},
+ reviewVisible:true,
  // Optional seat data: kept apart from `matchups`, which recommend() reads.
  allyCounterMatchups:{},
  focusedPlayer:null,
+ searchIndex:0,
+ teamRoster:[],
+ selectedTeamIds:[],
+ teamLoad:0,
+ homeTeamId:'',
+ homeRoster:[],
+ homeRequest:0,
 };
 
 if(!demo)store.teamInvitation=readInvitation({restore:true});
