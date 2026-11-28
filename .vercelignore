@@ -13,6 +13,7 @@
 !web/ui.js
 !web/draft-data.js
 !web/practice-store.js
+!web/scouting.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
