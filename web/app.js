@@ -1,16 +1,14 @@
 // Board entry: fills the late-bound actions, wires page-wide listeners and starts up
 // (config, sign-in state, hero data).
 import {showIdentityDownload,demoIdentityBackend} from './team-identity.js';
-import {CM_ORDER,nextTurn} from './draft-engine.js';
 import {publicData,loadHeroes} from './data.js';
-import {demoState,reduceDraft} from './demo.js';
 import {createBackend} from './backend.js';
 import {DAY_MS,GOOGLE_ATTEMPT_KEY,OAUTH_PROVIDER_KEY} from './constants.js';
-import {urlParams,demo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,imageId} from './url-state.js';
+import {urlParams,demo,UUID,validDraftId,inlinedConfig,pendingDraft,imageId} from './url-state.js';
 import {store} from './store.js';
-import {$,el,notice,safe,button,focusDraftView} from './dom.js';
+import {$,notice,safe,focusDraftView} from './dom.js';
 import {ui,render} from './ui.js';
-import {touch,canWrite,heroName} from './draft-data.js';
+import {touch,canWrite} from './draft-data.js';
 import './practice-store.js';
 import {refreshScouting} from './scouting.js';
 import {refreshSightings} from './enemy-intel.js';
@@ -27,46 +25,13 @@ import {teamIdentity,renderTeamHome} from './team-home.js';
 import {cup,showWorkspace,leaveCup,openCup,navigateTeam,navigateCup} from './router.js';
 import {showTeamInvitation,openLinkInvitation} from './invitation-view.js';
 import {welcome,enterGated,resumeRoute,authChanged,signOut} from './session.js';
+import './player-demo.js';
 Object.assign(ui,{stopLiveWatch,welcome,enterGated,authChanged,resumeRoute,renderView,lobby,profileDialog,teamIdentity,renderTeamHome,navigateTeam,navigateCup,signOut});
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
 // Clears the account loading message after this long. index.html's head script
 // lifts its signed-out guard after its own literal 20000 ms (it runs before modules load).
 const LOADING_FALLBACK_MS=15000;
-const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
-
-if(playerDemo){
- const replay=el('section',null,'player-demo-controls');
- replay.setAttribute('aria-label','Player demo replay');
- replay.append(el('strong','Watching as Alex · Carry'),el('p','Follow a sample Captain’s Mode draft. Replay controls advance the captain’s actions.'));
- const advance=button('Show next captain action',()=>{
-  const turn=nextTurn(store.state.actions,store.state.firstPick);
-  if(!turn)return;
-  const heroId=playerDemoHeroes[store.state.actions.length];
-  const action={mode:turn.mode,heroId};
-  if(turn.mode==='ourPick'){
-   const playerIndex=store.state.actions.filter(item=>item.mode==='ourPick').length;
-   action.playerId=store.state.roster[playerIndex].id;
-   action.position=playerIndex+1;
-  }
-  store.state=reduceDraft(store.state,'append',action,{canWrite:true,heroes:store.heroes});
-  store.selected=null;
-  render();
-  result.textContent=(turn.side==='our'?'Our team':'Enemy team')+' '+(turn.action==='pick'?'picked ':'banned ')+heroName(heroId)+'.';
-  advance.disabled=store.state.actions.length===CM_ORDER.length;
- },replay,'primary');
- button('Restart replay',()=>{
-  store.state=demoState();
-  store.selected=null;
-  advance.disabled=false;
-  result.textContent='Replay restarted.';
-  render();
- },replay);
- const result=el('p',null,'player-demo-result');
- result.setAttribute('role','status');
- replay.append(result);
- document.querySelector('#draft-view .seat-strip').before(replay);
-}
 
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.dataset.close).close();
 

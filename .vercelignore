@@ -28,6 +28,7 @@
 !web/router.js
 !web/invitation-view.js
 !web/session.js
+!web/player-demo.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
