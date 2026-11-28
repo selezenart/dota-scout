@@ -1,123 +1,95 @@
+// Board entry: fills the late-bound actions, wires page-wide listeners and starts up
+// (config, sign-in state, hero data).
 import {signupProgress} from './signup-progress.js';
-import {mountTeamIdentity, showIdentityDownload, demoIdentityBackend} from './team-identity.js';
+import {mountTeamIdentity,showIdentityDownload,demoIdentityBackend} from './team-identity.js';
 import {liveLineup} from './live-roster.js';
 import {mountBattleCup} from './bcup.js';
 import {createWelcome} from './welcome.js';
-
 import snapshot from './heroes.json';
-
 import {CM_ORDER,CM_PHASE_STARTS,nextTurn,recommend,parseAccountIds,normalizeProfile,enemySummary,enemyMatchReport,relevantEnemyMatches,enemySightings,diverseTop,reviewLineup} from './draft-engine.js';
 import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES,WARN_RATE} from './draft-stats.js';
 import {renderPlayerRail,resetAllyEntry,SEAT_STATUS} from './war-room.js';
-
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 // Namespace import keeps optional scouting helpers off the strict named-import list.
 import * as matchData from './data.js';
-
 import {initialState,demoState,reduceDraft} from './demo.js';
-
 import {createBackend} from './backend.js';
 import {createTeamScopedStore} from './team-store.js';
-
 import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
+import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,storageKey,codeFromInvitation,imageId} from './url-state.js';
 
 // Timings (ms) and local storage caps of the board.
-const SCOUT_RETRY_RATE_LIMITED_MS=20000,SCOUT_RETRY_MS=8000; // re-fetch a failed enemy profile
-const STRATZ_RETRY_BASE_MS=60000,STRATZ_RETRY_MAX_MS=900000; // doubles per failure, capped
-const ROSTER_REFRESH_MS=30000,SIGHTING_REFRESH_MS=15000;
-const LIVE_WATCH_RETRY_MS=5000,LIVE_WATCH_TIMEOUT_MS=14000; // local live-roster helper
+const SCOUT_RETRY_RATE_LIMITED_MS=20000;
+const SCOUT_RETRY_MS=8000; // re-fetch a failed enemy profile
+const STRATZ_RETRY_BASE_MS=60000;
+const STRATZ_RETRY_MAX_MS=900000; // doubles per failure, capped
+const ROSTER_REFRESH_MS=30000;
+const SIGHTING_REFRESH_MS=15000;
+const LIVE_WATCH_RETRY_MS=5000;
+const LIVE_WATCH_TIMEOUT_MS=14000; // local live-roster helper
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
 // Clears the account loading message after this long. index.html's head script
 // lifts its signed-out guard after its own literal 20000 ms (it runs before modules load).
 const LOADING_FALLBACK_MS=15000;
-const INVITE_KEEP_MS=30*DAY_MS; // a saved team invitation link is kept this long
-const LOCAL_MATCH_CAP=200,LOCAL_SIGHTING_CAP=2000;
+const LOCAL_MATCH_CAP=200;
+const LOCAL_SIGHTING_CAP=2000;
 
 
 
 const $=id=>document.getElementById(id);
-// The current page's query; read fresh on every call because history navigation changes it.
-function urlParams(){return new URLSearchParams(location.search);}
-
-const demo=urlParams().has('demo')||urlParams().has('mock');
-
-const captainDemo=demo&&urlParams().has('captain');
-const playerDemo=demo&&urlParams().has('player');
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
-const draftIntentKey='captain-pending-draft';
-// Any 8-4-4-4-12 hex UUID (drafts use gen_random_uuid; the version digit is not checked).
-const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const validDraftId=value=>UUID.test(value||'');
-// Public Supabase config baked in at build time (vite.config.js), or null when the build had none.
-function inlinedConfig(){return typeof __BOARD_CONFIG__==='object'&&__BOARD_CONFIG__?.url&&__BOARD_CONFIG__?.anonKey?__BOARD_CONFIG__:null;}
 // A player's public account ID, under either field name a roster entry may use.
 const accountOf=p=>p.steamAccountId||p.accountId;
 // A roster player's user ID, under either field name a roster entry may use.
 const memberId=p=>p.id||p.userId;
 // Name an auth provider gave the account (email sign-up, Google, Steam), if any.
 const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
-function pendingDraft(){try{const value=sessionStorage.getItem(draftIntentKey);return validDraftId(value)?value:null;}catch{return null;}}
-function forgetDraft(){try{sessionStorage.removeItem(draftIntentKey);}catch{}}
-const entryDraft=urlParams().get('draft');
-if(validDraftId(entryDraft)&&!demo){try{sessionStorage.setItem(draftIntentKey,entryDraft);}catch{}}
-
-const teamInviteKey='captain-team-invite-v1',teamInviteCode=/^[a-f0-9]{64}$/;
-let teamInvitation=null,invitationView=null,accountReady=Promise.resolve(),accountGen=0,observedAuthUser,authEvent=0;
-
-function saveInvitation(code){
- // Storage is shared by same-origin tabs so the confirmation email can open a new tab.
- // Never attach the invitation credential to an auth redirect or request URL.
- const record=JSON.stringify({code,until:Date.now()+INVITE_KEEP_MS});
- try{localStorage.setItem(teamInviteKey,record);}catch{try{sessionStorage.setItem(teamInviteKey,record);}catch{}}
-}
-
-function forgetInvitation(code){
- if(!code)return;
- for(const store of ['localStorage','sessionStorage'])try{
-  const storage=window[store];
-  if(JSON.parse(storage.getItem(teamInviteKey)||'null')?.code===code)storage.removeItem(teamInviteKey);
- }catch{}
-}
-
-function readInvitation({restore=false}={}){
- const url=new URL(location.href),fragment=new URLSearchParams(url.hash.slice(1));
- const codes=[...fragment.getAll('invite'),...url.searchParams.getAll('invite')];
- if(codes.length){
-  const code=codes.length===1&&teamInviteCode.test(codes[0])?codes[0]:null;
-  if(fragment.has('invite')){fragment.delete('invite');url.hash=fragment.toString();}
-  url.searchParams.delete('invite');history.replaceState(history.state,'',url);
-  if(code)saveInvitation(code);
-  return {code};
- }
- if(!restore||url.searchParams.has('draft')||url.searchParams.has('practice'))return null;
- let raw;
- try{raw=localStorage.getItem(teamInviteKey);}catch{try{raw=sessionStorage.getItem(teamInviteKey);}catch{}}
- try{
-  const saved=JSON.parse(raw||'null');
-  if(saved&&saved.until>Date.now()&&teamInviteCode.test(saved.code))return {code:saved.code};
-  if(saved)forgetInvitation(saved.code);
- }catch{}
- return null;
-}
+let teamInvitation=null;
+let invitationView=null;
+let accountReady=Promise.resolve();
+let accountGen=0;
+let observedAuthUser;
+let authEvent=0;
 
 if(!demo)teamInvitation=readInvitation({restore:true});
 
-const storageKey=demo?'captain-demo-v1':'captain-practice-v1';
-
-let heroes=snapshot,state=demo?demoState():initialState(),profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {},backend,user,shared,teams=[],team,selected=null,pending=false,localControl=true,generation=0,polling=false,healthy=true,lastRoster=0;
+let heroes=snapshot;
+let state=demo?demoState():initialState();
+let profile=captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {};
+let backend;
+let user;
+let shared;
+let teams=[];
+let team;
+let selected=null;
+let pending=false;
+let localControl=true;
+let generation=0;
+let polling=false;
+let healthy=true;
+let lastRoster=0;
 
 // STRATZ Divine+ counters/synergy per picked hero; hero-level, so kept across drafts.
-let stratz={},stratzRequested=new Set();
+let stratz={};
+let stratzRequested=new Set();
 // Ranking inputs that change in place bump dataVersion; `state` and `heroes` are
 // replaced or touched on change, so (state, heroes, dataVersion) keys every cache below.
 let dataVersion=0;
 function touch(){dataVersion++;}
 class VersionedMap extends Map{set(k,v){touch();return super.set(k,v);}delete(k){touch();return super.delete(k);}clear(){touch();super.clear();}}
-let observations=new VersionedMap(),matchups={},requestedMatchups=new Set(),draftOpen=0,reviewVisible=true;
+let observations=new VersionedMap();
+let matchups={};
+let requestedMatchups=new Set();
+let draftOpen=0;
+let reviewVisible=true;
 // Optional seat data: kept apart from `matchups`, which recommend() reads.
-let allyCounterMatchups={},focusedPlayer=null,suggestionCache={};
-const matchupErrors=new Set(),allyCounterRequests=new Set(),allyCounterFailures=new Set();
+let allyCounterMatchups={};
+let focusedPlayer=null;
+let suggestionCache={};
+const matchupErrors=new Set();
+const allyCounterRequests=new Set();
+const allyCounterFailures=new Set();
 
 try {
  const saved=JSON.parse(localStorage.getItem(storageKey)||'null');
@@ -324,9 +296,13 @@ function refreshScouting(){
  for(const action of state.actions.filter(a=>a.mode.endsWith('Pick'))){requestMatchup(action.heroId);requestStratz(action.heroId);}
 }
 
-let searchIndex=0,rankedIds=new Set();
+let searchIndex=0;
+let rankedIds=new Set();
 
-let steamEnabled=false,googleEnabled=false,profileSaved=false,profileSetupRequired=false;
+let steamEnabled=false;
+let googleEnabled=false;
+let profileSaved=false;
+let profileSetupRequired=false;
 const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>shared?welcome.board():enterGated(resumeRoute)),onPractice:()=>{
  forgetDraft();
  if(demo){location.assign('?practice');return false;}
@@ -339,7 +315,8 @@ const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnable
  openingTeam=true;
  try{await enterGated(()=>navigateTeam());}finally{openingTeam=false;}
 })});
-let openingTeam=false,resumingAccount=null;
+let openingTeam=false;
+let resumingAccount=null;
 
 // Every shortcut into the board passes the same gates as sign-in (authChanged), in order:
 // pending team invitation, password recovery, account load, then required profile setup.
@@ -419,15 +396,6 @@ function showTeamInvitation(force=false){
   }).catch(()=>{}); // Older databases can still accept the invite.
  }
  return true;
-}
-
-function codeFromInvitation(input){
- const value=input.trim();
- let url;try{url=new URL(value);}catch{return value;}
- const fragment=new URLSearchParams(url.hash.slice(1));
- const codes=[...fragment.getAll('invite'),...url.searchParams.getAll('invite')];
- if(url.origin!==location.origin||codes.length!==1||!teamInviteCode.test(codes[0]))throw Error('Enter a team invite link from this site or paste the invitation code.');
- return codes[0];
 }
 
 function stage(id,rec){
@@ -1241,7 +1209,9 @@ async function leaveVanishedDraft(gen){
  if(homeTeamId===teamId){teamIdentity.clear();homeRequest++;homeTeamId='';homeRoster=[];renderTeamHome();}
  enterPractice();notice(message);
 }
-let teamRoster=[],selectedTeamIds=[],teamLoad=0;
+let teamRoster=[];
+let selectedTeamIds=[];
+let teamLoad=0;
 
 function draftRoster(){
  const rows=teamRoster.filter(p=>selectedTeamIds.includes(p.userId));
@@ -2161,7 +2131,6 @@ const teamIdentity=mountTeamIdentity($('team-identity'),()=>demo?{user:{id:capta
  teams=teams.map(item=>item.id===id?{...item,name,identity_image_id:imageId}:item);
  if(homeTeamId===id)renderTeamHome();
 });
-const imageId=urlParams().get('team-image');
 const cup=mountBattleCup({
  root:$('cup-view'),
  getContext:()=>({user,teams,teamId:team?.id,backend,demo,profileReady:demo||profileSaved,profileHasDraftDetails:demo||!!(profile.preferredRoles?.length&&(profile.signatureHeroes?.length||profile.desiredHeroes?.length)),version:cupAccountVersion}),
@@ -2547,8 +2516,3 @@ else if(!demo)void (async()=>{
  }).catch(()=>{});
  }catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}
 })();
-
-
-
-
-

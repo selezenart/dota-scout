@@ -7,6 +7,7 @@
 !web/styles.css
 !web/war-room.css
 !web/app.js
+!web/url-state.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
