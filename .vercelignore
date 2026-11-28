@@ -22,6 +22,7 @@
 !web/board-heroes.js
 !web/board-recommendations.js
 !web/board-view.js
+!web/profile-dialog.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js

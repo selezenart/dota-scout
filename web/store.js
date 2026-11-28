@@ -29,6 +29,8 @@ export const store={
  focusedPlayer:null,
  searchIndex:0,
  rankedIds:new Set(),
+ profileSaved:false,
+ profileSetupRequired:false,
  freshActionIndex:-1,
  heroFilter:'all',
  teamRoster:[],
