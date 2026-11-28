@@ -28,6 +28,7 @@ export const store={
  allyCounterMatchups:{},
  focusedPlayer:null,
  searchIndex:0,
+ freshActionIndex:-1,
  teamRoster:[],
  selectedTeamIds:[],
  teamLoad:0,
