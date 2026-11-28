@@ -27,6 +27,7 @@
 !web/team-home.js
 !web/router.js
 !web/invitation-view.js
+!web/session.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js

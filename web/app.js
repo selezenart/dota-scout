@@ -1,19 +1,17 @@
 // Board entry: fills the late-bound actions, wires page-wide listeners and starts up
 // (config, sign-in state, hero data).
 import {showIdentityDownload,demoIdentityBackend} from './team-identity.js';
-import {createWelcome} from './welcome.js';
 import {CM_ORDER,nextTurn} from './draft-engine.js';
-import {resetAllyEntry} from './war-room.js';
 import {publicData,loadHeroes} from './data.js';
-import {initialState,demoState,reduceDraft} from './demo.js';
+import {demoState,reduceDraft} from './demo.js';
 import {createBackend} from './backend.js';
 import {DAY_MS,GOOGLE_ATTEMPT_KEY,OAUTH_PROVIDER_KEY} from './constants.js';
-import {urlParams,demo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,imageId} from './url-state.js';
+import {urlParams,demo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,imageId} from './url-state.js';
 import {store} from './store.js';
 import {$,el,notice,safe,button,focusDraftView} from './dom.js';
 import {ui,render} from './ui.js';
-import {providerName,touch,resetDraftData,canWrite,heroName} from './draft-data.js';
-import {restorePractice} from './practice-store.js';
+import {touch,canWrite,heroName} from './draft-data.js';
+import './practice-store.js';
 import {refreshScouting} from './scouting.js';
 import {refreshSightings} from './enemy-intel.js';
 import {detachWorkspace,enterPractice,mutate,openDraft,poll,draftRoster,loadTeam} from './draft-sync.js';
@@ -23,153 +21,19 @@ import './board-tree.js';
 import {renderHeroes,searchHeroes,heroChoices,highlightSearch} from './board-heroes.js';
 import './board-recommendations.js';
 import {renderView} from './board-view.js';
-import {startProfileSetup,profileDialog} from './profile-dialog.js';
+import {profileDialog} from './profile-dialog.js';
 import {lobby} from './setup-dialog.js';
 import {teamIdentity,renderTeamHome} from './team-home.js';
 import {cup,showWorkspace,leaveCup,openCup,navigateTeam,navigateCup} from './router.js';
 import {showTeamInvitation,openLinkInvitation} from './invitation-view.js';
-Object.assign(ui,{stopLiveWatch,enterGated,authChanged,resumeRoute,renderView,lobby,profileDialog,teamIdentity,renderTeamHome,navigateTeam,navigateCup,signOut});
+import {welcome,enterGated,resumeRoute,authChanged,signOut} from './session.js';
+Object.assign(ui,{stopLiveWatch,welcome,enterGated,authChanged,resumeRoute,renderView,lobby,profileDialog,teamIdentity,renderTeamHome,navigateTeam,navigateCup,signOut});
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
 // Clears the account loading message after this long. index.html's head script
 // lifts its signed-out guard after its own literal 20000 ms (it runs before modules load).
 const LOADING_FALLBACK_MS=15000;
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
-let accountGen=0;
-
-let steamEnabled=false;
-let googleEnabled=false;
-const welcome=createWelcome({getBackend:()=>store.backend,steamEnabled:()=>steamEnabled,googleEnabled:()=>googleEnabled,onSession:authChanged,onRegistered:safe(()=>store.shared?welcome.board():enterGated(resumeRoute)),onPractice:()=>{
- forgetDraft();
- if(demo){location.assign('?practice');return false;}
- enterPractice();
-},onHome:()=>{
- forgetDraft();
- detachWorkspace();
-},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!store.teamInvitation?.code,onOpenTeam:safe(async()=>{
- if(openingTeam)return;
- openingTeam=true;
- try{await enterGated(()=>navigateTeam());}finally{openingTeam=false;}
-})});
-ui.welcome=welcome;
-let openingTeam=false;
-let resumingAccount=null;
-
-// Every shortcut into the board passes the same gates as sign-in (authChanged), in order:
-// pending team invitation, password recovery, account load, then required profile setup.
-// While sign-in is still resuming, authChanged routes from the current URL itself, so
-// a shortcut must not race it.
-async function enterGated(go){
- if(resumingAccount===store.generation||welcome.recovery||showTeamInvitation())return;
- const gen=store.generation,account=store.user?.id,ready=store.accountReady;if(!account)return;
- await ready;
- if(gen!==store.generation||store.user?.id!==account||welcome.recovery||showTeamInvitation())return;
- if(store.profileSetupRequired)startProfileSetup(go);else await go();
-}
-// Opens what the address asks for: a shared draft, Battle Cup, the practice board, or Team.
-async function resumeRoute(){
- const params=urlParams();
- const draft=params.get('draft')||pendingDraft();
- if(validDraftId(draft)){
-  try{await openDraft(draft);}catch(error){navigateTeam();notice(error.message);}finally{forgetDraft();}
- }else if(params.has('cup'))openCup();
- else if(params.has('practice'))welcome.board();
- else navigateTeam();
-}
-async function authChanged(session,event){
-
- const recovery=event==='PASSWORD_RECOVERY';
- if(recovery)welcome.recover();
-
- // Only a sign-in may open the board here: USER_UPDATED (password saved) and TOKEN_REFRESHED
- // must not replace "Continue to board" or skip its gates.
- const id=session?.user?.id||null;
- if(id===(store.user?.id||null)){if(store.user&&!recovery&&!store.teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
-
- stopLiveWatch();
- resetAllyEntry();
- teamIdentity.clear();
- store.homeRequest++;
- store.homeTeamId='';
- store.homeRoster=[];
- $('team-home').replaceChildren();
- store.profileSaved=false;
- store.profileSetupRequired=false;
- delete $('app-shell').dataset.profileSetup;
- const gen=++store.generation,acct=++accountGen;
- store.user=session?.user||null;
- welcome.setAccount(!!store.user,recovery);
- store.shared=null;
- store.team=null;
- store.teams=[];
- store.teamRoster=[];
- store.selectedTeamIds=[];
- store.profile={};
- store.state=initialState();
- ++store.cupAccountVersion;
- cup.sync();
- const inviteOnEntry=!!store.teamInvitation;
-
- if(!store.user)restorePractice();
-
- resetDraftData();
- store.selected=null;
- store.pending=false;
- store.polling=false;
- store.healthy=true;
- store.localControl=true;
- store.lastRoster=0;
-
- $('profile-content').replaceChildren();
- $('notice').textContent='';
- $('session-input').value='';
- document.querySelector('[data-manual-entry]')?.replaceChildren();
- for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
-
- if(!store.user){
-  store.accountReady=Promise.resolve();
-  const url=new URL(location.href);
-  url.searchParams.delete('draft');
-  history.replaceState(null,'',url);
-  if(!showTeamInvitation())welcome.home(pendingDraft()?'signin':undefined);
- }else{
-  const activeUser=store.user;
-  store.accountReady=Promise.allSettled([store.backend.loadProfile(),store.backend.listTeams()]).then(([p,t])=>{
-   // Account data belongs to the account, not the workspace: Home or Practice mid-load
-   // must not leave profile setup and teams unloaded.
-   if(acct!==accountGen)return;
-   store.profileSaved=p.status==='fulfilled'&&!!p.value;
-   store.profile=(p.status==='fulfilled'&&p.value)||{displayName:providerName(activeUser)||'',steamAccountId:activeUser.user_metadata?.steam_account_id||''};
-   store.profileSetupRequired=p.status==='fulfilled'&&(!p.value||!!activeUser.user_metadata?.steam_account_id&&!p.value.preferredRoles?.length);
-   if(t.status==='fulfilled')store.teams=t.value;
-   if(gen===store.generation){restorePractice();refreshScouting();}
-   if(p.status==='rejected'||t.status==='rejected')notice('Some team account information could not be loaded. Reload the page to try again.');
-  });
-  if(!recovery&&!showTeamInvitation()){
-   $('app-shell').dataset.profileSetup='pending';
-   welcome.signedIn();
-  }
- }
- render();
- if(store.user){
-  // Recovery and a pending invitation never resume here: "Continue to board" and
-  // declining the invitation do, through enterGated.
-  if(!recovery&&!inviteOnEntry)resumingAccount=gen;
-  try{
-  await store.accountReady;
-  // Clear the loading marker even if Home/Practice changed the workspace meanwhile;
-  // left set, it hides the whole board.
-  if(acct===accountGen&&$('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
-  if(gen!==store.generation)return;
-  if(!inviteOnEntry&&!store.teamInvitation&&!recovery&&!welcome.recovery){
-   if(store.profileSetupRequired)startProfileSetup(resumeRoute);
-   else await resumeRoute();
-  }
-  }finally{if(resumingAccount===gen)resumingAccount=null;}
- }
- render();
-
-}
 
 if(playerDemo){
  const replay=el('section',null,'player-demo-controls');
@@ -208,14 +72,6 @@ for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.datas
 
 for(const id of ['setup-button','connection-status'])$(id).onclick=safe(lobby);
 $('profile-button').onclick=safe(()=>profileDialog());
-let signingOut=false;
-async function signOut(){
- if(signingOut||!store.user||!store.backend)return;
- const control=$('signout-button'),account=store.user.id;
- signingOut=true;control.disabled=true;control.textContent='Signing out…';control.setAttribute('aria-busy','true');
- try{await store.backend.signOut();forgetDraft();if(store.user?.id===account)await authChanged(null,'SIGNED_OUT');}
- finally{signingOut=false;control.disabled=false;control.textContent='Sign out';control.removeAttribute('aria-busy');}
-}
 $('signout-button').onclick=safe(signOut);
 $('draft-button').onclick=()=>{
  leaveCup();
@@ -407,8 +263,8 @@ else if(!demo)void (async()=>{
   config=await response.json();
   if(!config.url||!config.anonKey){welcome.setConnection('unavailable');return;}
  }
-  steamEnabled=config.steamAuth===true;
-  googleEnabled=config.googleAuth===true;
+  store.steamEnabled=config.steamAuth===true;
+  store.googleEnabled=config.googleAuth===true;
   store.backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
  if(store.teamInvitation&&!store.user&&$('team-invite-heading'))showTeamInvitation(true);
  if(urlParams().has('steam-error')){
@@ -434,8 +290,8 @@ else if(!demo)void (async()=>{
  // Sign-in provider flags can change without a rebuild; refresh them in the background.
  if(inlined)void fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(fresh=>{
   if(!fresh?.url)return;
-  steamEnabled=fresh.steamAuth===true;
-  googleEnabled=fresh.googleAuth===true;
+  store.steamEnabled=fresh.steamAuth===true;
+  store.googleEnabled=fresh.googleAuth===true;
   welcome.setConnection('available');
  }).catch(()=>{});
  }catch{welcome.setConnection('unavailable');notice('Sign-in service unavailable. Local practice remains available.');}

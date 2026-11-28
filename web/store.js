@@ -32,6 +32,8 @@ export const store={
  focusedPlayer:null,
  searchIndex:0,
  rankedIds:new Set(),
+ steamEnabled:false,
+ googleEnabled:false,
  profileSaved:false,
  profileSetupRequired:false,
  freshActionIndex:-1,
