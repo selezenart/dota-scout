@@ -14,6 +14,7 @@
 !web/draft-data.js
 !web/practice-store.js
 !web/scouting.js
+!web/enemy-intel.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
