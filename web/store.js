@@ -7,6 +7,9 @@ import {initialState,demoState} from './demo.js';
 import {demo,captainDemo,readInvitation} from './url-state.js';
 export const store={
  teamInvitation:null,
+ accountReady:Promise.resolve(),
+ observedAuthUser:undefined,
+ authEvent:0,
  heroes:snapshot,
  state:demo?demoState():initialState(),
  profile:captainDemo?{displayName:'Lee',preferredRoles:[3],signatureHeroes:[2,29],desiredHeroes:[29]}:demo?{displayName:'Alex',preferredRoles:[1,2],roleComfort:{1:4,2:3},signatureHeroes:[1,8,44],desiredHeroes:[8],avoidHeroes:[]}: {},

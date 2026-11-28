@@ -8,7 +8,7 @@ import {publicData,loadHeroes} from './data.js';
 import {initialState,demoState,reduceDraft} from './demo.js';
 import {createBackend} from './backend.js';
 import {DAY_MS,GOOGLE_ATTEMPT_KEY,OAUTH_PROVIDER_KEY} from './constants.js';
-import {urlParams,demo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,forgetInvitation,readInvitation,imageId} from './url-state.js';
+import {urlParams,demo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,imageId} from './url-state.js';
 import {store} from './store.js';
 import {$,el,notice,safe,button,focusDraftView} from './dom.js';
 import {ui,render} from './ui.js';
@@ -27,18 +27,15 @@ import {startProfileSetup,profileDialog} from './profile-dialog.js';
 import {lobby} from './setup-dialog.js';
 import {teamIdentity,renderTeamHome} from './team-home.js';
 import {cup,showWorkspace,leaveCup,openCup,navigateTeam,navigateCup} from './router.js';
-Object.assign(ui,{stopLiveWatch,renderView,lobby,profileDialog,teamIdentity,renderTeamHome,navigateTeam,navigateCup,signOut});
+import {showTeamInvitation,openLinkInvitation} from './invitation-view.js';
+Object.assign(ui,{stopLiveWatch,enterGated,authChanged,resumeRoute,renderView,lobby,profileDialog,teamIdentity,renderTeamHome,navigateTeam,navigateCup,signOut});
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
 // Clears the account loading message after this long. index.html's head script
 // lifts its signed-out guard after its own literal 20000 ms (it runs before modules load).
 const LOADING_FALLBACK_MS=15000;
 const playerDemoHeroes=[1,13,2,26,5,44,29,8,74,11,12,14,23,86,30,25,34,28,36,37,38,39,55,60];
-let invitationView=null;
-let accountReady=Promise.resolve();
 let accountGen=0;
-let observedAuthUser;
-let authEvent=0;
 
 let steamEnabled=false;
 let googleEnabled=false;
@@ -64,7 +61,7 @@ let resumingAccount=null;
 // a shortcut must not race it.
 async function enterGated(go){
  if(resumingAccount===store.generation||welcome.recovery||showTeamInvitation())return;
- const gen=store.generation,account=store.user?.id,ready=accountReady;if(!account)return;
+ const gen=store.generation,account=store.user?.id,ready=store.accountReady;if(!account)return;
  await ready;
  if(gen!==store.generation||store.user?.id!==account||welcome.recovery||showTeamInvitation())return;
  if(store.profileSetupRequired)startProfileSetup(go);else await go();
@@ -78,64 +75,6 @@ async function resumeRoute(){
  }else if(params.has('cup'))openCup();
  else if(params.has('practice'))welcome.board();
  else navigateTeam();
-}
-
-function showTeamInvitation(force=false){
- const invitation=store.teamInvitation;if(!invitation||welcome.recovery)return false;
- const account=store.user?.id||null;
- if(force!==true&&invitationView?.invitation===invitation&&invitationView.account===account&&$('team-invite-heading'))return true;
- invitationView={invitation,account};
- for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
- welcome.invitation({
-  teamName:invitation.teamName,
-  account:store.user&&(store.profile?.displayName||providerName(store.user)||(store.user.email&&!store.user.email.endsWith('.invalid')?store.user.email:'Steam player')),invalid:!invitation.code,
-  onAccept:async()=>{
-   const gen=store.generation,ready=accountReady,eventAtClick=authEvent;
-   const isCurrent=()=>gen===store.generation&&store.user?.id===account&&invitation===store.teamInvitation
-    &&(authEvent===eventAtClick||observedAuthUser===account);
-   if(!account||!isCurrent())throw Error('The active account changed. Open the invitation again.');
-   let joined;
-   try{joined=await store.backend.joinTeam(invitation.code,account);}catch(error){
-    if(!isCurrent())return;
-    if(error.code==='22023'){
-     forgetInvitation(invitation.code);
-     store.teamInvitation=null;
-     welcome.invitation({invalid:true,expired:true,onDismiss:()=>store.user?enterGated(()=>navigateCup()):navigateCup()});
-     return;
-    }
-    throw error;
-   }
-   if(!joined?.id)throw Error('The team could not be confirmed. Try joining again.');
-   await ready;
-   if(!isCurrent())return;
-   if(!store.teams.some(t=>t.id===joined.id))store.teams=[...store.teams,joined];
-   forgetInvitation(invitation.code);store.teamInvitation=null;
-   if(store.shared){detachWorkspace();restorePractice();}
-   const url=new URL(location.href);url.searchParams.delete('draft');url.searchParams.delete('practice');history.replaceState(history.state,'',url);
-   const roster=loadTeam(joined.id);
-   if(store.profileSetupRequired)startProfileSetup(()=>navigateTeam(joined.id),joined);
-   else{navigateTeam(joined.id);profileDialog(false,joined);}
-   void roster.catch(()=>{}); // Setup can retry loading the selected roster independently.
-  },
-  onSwitch:async()=>{await store.backend.signOut();if(store.user?.id===account)await authChanged(null);},
-  onDismiss:()=>{
-   if(store.teamInvitation!==invitation)return;
-   forgetInvitation(invitation.code);
-   store.teamInvitation=null;
-   if(store.user)return enterGated(resumeRoute);
-   welcome.home();
-  },
- });
- if(invitation.code&&store.backend?.previewTeamInvitation&&!invitation.previewRequested){
-  invitation.previewRequested=true;
-  void store.backend.previewTeamInvitation(invitation.code).then(name=>{
-   if(store.teamInvitation!==invitation||!name)return;
-   invitation.teamName=name;
-   const heading=$('team-invite-heading');
-   if(heading)heading.textContent='Join '+name;
-  }).catch(()=>{}); // Older databases can still accept the invite.
- }
- return true;
 }
 async function authChanged(session,event){
 
@@ -188,14 +127,14 @@ async function authChanged(session,event){
  for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
 
  if(!store.user){
-  accountReady=Promise.resolve();
+  store.accountReady=Promise.resolve();
   const url=new URL(location.href);
   url.searchParams.delete('draft');
   history.replaceState(null,'',url);
   if(!showTeamInvitation())welcome.home(pendingDraft()?'signin':undefined);
  }else{
   const activeUser=store.user;
-  accountReady=Promise.allSettled([store.backend.loadProfile(),store.backend.listTeams()]).then(([p,t])=>{
+  store.accountReady=Promise.allSettled([store.backend.loadProfile(),store.backend.listTeams()]).then(([p,t])=>{
    // Account data belongs to the account, not the workspace: Home or Practice mid-load
    // must not leave profile setup and teams unloaded.
    if(acct!==accountGen)return;
@@ -217,7 +156,7 @@ async function authChanged(session,event){
   // declining the invitation do, through enterGated.
   if(!recovery&&!inviteOnEntry)resumingAccount=gen;
   try{
-  await accountReady;
+  await store.accountReady;
   // Clear the loading marker even if Home/Practice changed the workspace meanwhile;
   // left set, it hides the whole board.
   if(acct===accountGen&&$('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
@@ -367,11 +306,6 @@ if(skip)skip.onclick=e=>{
  e.preventDefault();
  if(!$('cup-view').hidden)$('cup-view').focus();else if(!$('team-view').hidden)$('team-title')?.focus();else focusDraftView();
 };
-function openLinkInvitation(){
- if(demo)return false;
- const invite=readInvitation();if(!invite)return false;
- store.teamInvitation=invite;return showTeamInvitation();
-}
 window.addEventListener('hashchange',openLinkInvitation);
 window.addEventListener('popstate',()=>void safe(async()=>{
  if(openLinkInvitation())return;
@@ -488,7 +422,7 @@ else if(!demo)void (async()=>{
  }
  if(googleAttempt){try{await store.backend.finishGoogle(googleToken,googleAttempt.nonce);}catch{welcome.linkError('google');}}
  store.backend.onAuthChange((session,event)=>{
-  observedAuthUser=session?.user?.id||null;++authEvent;
+  store.observedAuthUser=session?.user?.id||null;++store.authEvent;
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });
   const initialSession=await store.backend.getSession();
