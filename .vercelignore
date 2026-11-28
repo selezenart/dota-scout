@@ -20,6 +20,7 @@
 !web/board-seats.js
 !web/board-tree.js
 !web/board-heroes.js
+!web/board-recommendations.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
