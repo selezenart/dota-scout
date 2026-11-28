@@ -17,6 +17,7 @@ import {createBackend} from './backend.js';
 import {createTeamScopedStore} from './team-store.js';
 import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,HERO_PORTRAIT_BASE,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROLE_NAMES,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
 import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,storageKey,codeFromInvitation,imageId} from './url-state.js';
+import {store} from './store.js';
 
 // Timings (ms) and local storage caps of the board.
 const SCOUT_RETRY_RATE_LIMITED_MS=20000;
@@ -45,14 +46,11 @@ const accountOf=p=>p.steamAccountId||p.accountId;
 const memberId=p=>p.id||p.userId;
 // Name an auth provider gave the account (email sign-up, Google, Steam), if any.
 const providerName=u=>u.user_metadata?.display_name||u.user_metadata?.full_name||u.user_metadata?.name;
-let teamInvitation=null;
 let invitationView=null;
 let accountReady=Promise.resolve();
 let accountGen=0;
 let observedAuthUser;
 let authEvent=0;
-
-if(!demo)teamInvitation=readInvitation({restore:true});
 
 let heroes=snapshot;
 let state=demo?demoState():initialState();
@@ -310,7 +308,7 @@ const welcome=createWelcome({getBackend:()=>backend,steamEnabled:()=>steamEnable
 },onHome:()=>{
  forgetDraft();
  detachWorkspace();
-},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!teamInvitation?.code,onOpenTeam:safe(async()=>{
+},hasDraftInvitation:()=>!!pendingDraft(),onInvitation:showTeamInvitation,hasInvitation:()=>!!store.teamInvitation?.code,onOpenTeam:safe(async()=>{
  if(openingTeam)return;
  openingTeam=true;
  try{await enterGated(()=>navigateTeam());}finally{openingTeam=false;}
@@ -341,7 +339,7 @@ async function resumeRoute(){
 }
 
 function showTeamInvitation(force=false){
- const invitation=teamInvitation;if(!invitation||welcome.recovery)return false;
+ const invitation=store.teamInvitation;if(!invitation||welcome.recovery)return false;
  const account=user?.id||null;
  if(force!==true&&invitationView?.invitation===invitation&&invitationView.account===account&&$('team-invite-heading'))return true;
  invitationView={invitation,account};
@@ -351,7 +349,7 @@ function showTeamInvitation(force=false){
   account:user&&(profile?.displayName||providerName(user)||(user.email&&!user.email.endsWith('.invalid')?user.email:'Steam player')),invalid:!invitation.code,
   onAccept:async()=>{
    const gen=generation,ready=accountReady,eventAtClick=authEvent;
-   const isCurrent=()=>gen===generation&&user?.id===account&&invitation===teamInvitation
+   const isCurrent=()=>gen===generation&&user?.id===account&&invitation===store.teamInvitation
     &&(authEvent===eventAtClick||observedAuthUser===account);
    if(!account||!isCurrent())throw Error('The active account changed. Open the invitation again.');
    let joined;
@@ -359,7 +357,7 @@ function showTeamInvitation(force=false){
     if(!isCurrent())return;
     if(error.code==='22023'){
      forgetInvitation(invitation.code);
-     teamInvitation=null;
+     store.teamInvitation=null;
      welcome.invitation({invalid:true,expired:true,onDismiss:()=>user?enterGated(()=>navigateCup()):navigateCup()});
      return;
     }
@@ -369,7 +367,7 @@ function showTeamInvitation(force=false){
    await ready;
    if(!isCurrent())return;
    if(!teams.some(t=>t.id===joined.id))teams=[...teams,joined];
-   forgetInvitation(invitation.code);teamInvitation=null;
+   forgetInvitation(invitation.code);store.teamInvitation=null;
    if(shared){detachWorkspace();restorePractice();}
    const url=new URL(location.href);url.searchParams.delete('draft');url.searchParams.delete('practice');history.replaceState(history.state,'',url);
    const roster=loadTeam(joined.id);
@@ -379,9 +377,9 @@ function showTeamInvitation(force=false){
   },
   onSwitch:async()=>{await backend.signOut();if(user?.id===account)await authChanged(null);},
   onDismiss:()=>{
-   if(teamInvitation!==invitation)return;
+   if(store.teamInvitation!==invitation)return;
    forgetInvitation(invitation.code);
-   teamInvitation=null;
+   store.teamInvitation=null;
    if(user)return enterGated(resumeRoute);
    welcome.home();
   },
@@ -389,7 +387,7 @@ function showTeamInvitation(force=false){
  if(invitation.code&&backend?.previewTeamInvitation&&!invitation.previewRequested){
   invitation.previewRequested=true;
   void backend.previewTeamInvitation(invitation.code).then(name=>{
-   if(teamInvitation!==invitation||!name)return;
+   if(store.teamInvitation!==invitation||!name)return;
    invitation.teamName=name;
    const heading=$('team-invite-heading');
    if(heading)heading.textContent='Join '+name;
@@ -1992,7 +1990,7 @@ async function authChanged(session,event){
  // Only a sign-in may open the board here: USER_UPDATED (password saved) and TOKEN_REFRESHED
  // must not replace "Continue to board" or skip its gates.
  const id=session?.user?.id||null;
- if(id===(user?.id||null)){if(user&&!recovery&&!teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
+ if(id===(user?.id||null)){if(user&&!recovery&&!store.teamInvitation&&(!event||event==='SIGNED_IN'||event==='INITIAL_SESSION'))welcome.signedIn();return;}
 
  stopLiveWatch();
  resetAllyEntry();
@@ -2016,7 +2014,7 @@ async function authChanged(session,event){
  state=initialState();
  ++cupAccountVersion;
  cup.sync();
- const inviteOnEntry=!!teamInvitation;
+ const inviteOnEntry=!!store.teamInvitation;
 
  if(!user)restorePractice();
 
@@ -2069,7 +2067,7 @@ async function authChanged(session,event){
   // left set, it hides the whole board.
   if(acct===accountGen&&$('app-shell').dataset.profileSetup==='pending')delete $('app-shell').dataset.profileSetup;
   if(gen!==generation)return;
-  if(!inviteOnEntry&&!teamInvitation&&!recovery&&!welcome.recovery){
+  if(!inviteOnEntry&&!store.teamInvitation&&!recovery&&!welcome.recovery){
    if(profileSetupRequired)startProfileSetup(resumeRoute);
    else await resumeRoute();
   }
@@ -2305,7 +2303,7 @@ $('session-dialog').addEventListener('close',()=>{if(!$('cup-view').hidden)void 
 for(const event of ['focus','online'])window.addEventListener(event,()=>{
  if(!$('cup-view').hidden&&document.body.dataset.view==='board')void cup.refresh();
 });
-if(!teamInvitation&&urlParams().has('cup'))openCup();
+if(!store.teamInvitation&&urlParams().has('cup'))openCup();
 if(demo&&urlParams().has('team'))navigateTeam();
 
 
@@ -2380,7 +2378,7 @@ if(skip)skip.onclick=e=>{
 function openLinkInvitation(){
  if(demo)return false;
  const invite=readInvitation();if(!invite)return false;
- teamInvitation=invite;return showTeamInvitation();
+ store.teamInvitation=invite;return showTeamInvitation();
 }
 window.addEventListener('hashchange',openLinkInvitation);
 window.addEventListener('popstate',()=>void safe(async()=>{
@@ -2486,7 +2484,7 @@ else if(!demo)void (async()=>{
   steamEnabled=config.steamAuth===true;
   googleEnabled=config.googleAuth===true;
   backend=createBackend({supabaseUrl:config.url,supabaseAnonKey:config.anonKey,googleClientId:config.googleClientId||''});
- if(teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
+ if(store.teamInvitation&&!user&&$('team-invite-heading'))showTeamInvitation(true);
  if(urlParams().has('steam-error')){
   welcome.home('signin');
   const message=$('welcome-auth').querySelector('.auth-message[role=status]');
@@ -2502,7 +2500,7 @@ else if(!demo)void (async()=>{
   setTimeout(()=>void safe(()=>authChanged(session,event))(),0);
  });
   const initialSession=await backend.getSession();
- if(!initialSession&&pendingDraft()&&!teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!urlParams().has('steam-error'))welcome.home('signin');
+ if(!initialSession&&pendingDraft()&&!store.teamInvitation&&!authFragment.has('error')&&!authFragment.has('error_code')&&!urlParams().has('steam-error'))welcome.home('signin');
  await authChanged(initialSession);
   welcome.loading();
   welcome.setConnection('available');
