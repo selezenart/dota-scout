@@ -1,18 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
+import {boardCode} from './build-board.js';
+import {markup,BACKEND_STUB,flush,openBoard} from './board-harness.js';
 import {JSDOM} from 'jsdom';
 
 // Compile the real entrypoint once; replace only network boundaries.
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async(id,progress)=>{const p={id:String(id),name:'Public '+id,sources:{profile:{status:'private'},recent:{status:'error',message:'Unavailable'},heroes:{status:'ok'}},heroes:[{hero_id:1,games:12}]};progress(p);return p;};`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
+const code=await boardCode({
+ '/web/backend.js':BACKEND_STUB,
+ // Count recommend() calls so render-cost tests can see repeated ranking work.
+ '/web/draft-engine.js':path=>`import {recommend as rank} from ${JSON.stringify(path+'?engine')};export * from ${JSON.stringify(path+'?engine')};export function recommend(...args){globalThis.__recommendCalls=(globalThis.__recommendCalls||0)+1;return rank(...args);}`,
+ '/web/data.js':`export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async(id,progress)=>{const p={id:String(id),name:'Public '+id,sources:{profile:{status:'private'},recent:{status:'error',message:'Unavailable'},heroes:{status:'ok'}},heroes:[{hero_id:1,games:12}]};progress(p);return p;};`,
+});
 const draftId='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 // Auth notifications deliberately cross a timer boundary in the app. Observe the
 // actual DOM transition instead of assuming one event-loop flush finishes it.
@@ -24,21 +23,14 @@ function waitForText(window,node,expected){
   observer.observe(node,{childList:true,subtree:true,characterData:true});
  });
 }
-async function harness({query='?practice',backend,saved,local={},session={},clipboard,beforeRun}={}){
- const dom=new JSDOM(markup,{url:'https://board.example/'+query,runScripts:'outside-only'}),w=dom.window;
- w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>backend?{url:'https://example.supabase.co',anonKey:'public'}:{}});
- w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- for(const [key,value] of Object.entries(local))w.localStorage.setItem(key,value);
- for(const [key,value] of Object.entries(session))w.sessionStorage.setItem(key,value);
- if(clipboard)Object.defineProperty(w.navigator,'clipboard',{value:{writeText:clipboard}});
- if(saved)w.localStorage.setItem('captain-practice-v1',saved);
- beforeRun?.(w);
- w.eval(code);await flush();
- const q=id=>w.document.getElementById(id);
- const click=async node=>{assert.ok(node,'control exists');node.click();await flush();};
- const button=(text,root=w.document)=>[...root.querySelectorAll('button')].find(b=>b.textContent===text);
- return {dom,w,q,click,button};
+function harness({query='?practice',backend,saved,local={},session={},clipboard,beforeRun}={}){
+ return openBoard(code,{query,session,local:saved?{...local,'captain-practice-v1':saved}:local,
+  fetch:async()=>({ok:true,json:async()=>backend?{url:'https://example.supabase.co',anonKey:'public'}:{}}),
+  beforeRun:w=>{
+   w.__backend=backend;
+   if(clipboard)Object.defineProperty(w.navigator,'clipboard',{value:{writeText:clipboard}});
+   beforeRun?.(w);
+  }});
 }
 function accountBackend(extra={}){return {getSession:async()=>({user:{id:'owner'}}),onAuthChange(){},loadProfile:async()=>({displayName:'Captain'}),listTeams:async()=>[],...extra};}
 
@@ -344,6 +336,18 @@ test('shared claim release reclaim and polling disconnect enforce confirmed auth
  }finally{h.dom.window.close();}
 });
 
+test('a rejected owner reclaim reloads the draft and shows the server error',async()=>{
+ let row={id:draftId,team_id:'team',revision:4,drafter_user_id:'mate',state:{actions:[],firstPick:true,roster:[]}};const asked=[];
+ const backend=accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>{asked.push('get');return structuredClone(row);},
+  mutateDraft:async(id,revision,op,payload)=>{asked.push(op+':'+payload?.userId);row={...row,revision:6,drafter_user_id:'other'};throw Error('Revision conflict');}});
+ const h=await harness({query:'?draft='+draftId,backend});try{
+  await h.click(h.q('setup-button'));asked.length=0;await h.click(h.button('Owner reclaim drafter'));await flush();
+  assert.deepEqual(asked,['assign:owner','get']);
+  assert.match(h.q('notice').textContent+h.q('session-dialog').textContent,/Revision conflict/);
+  assert.doesNotMatch(h.q('notice').textContent+h.q('session-dialog').textContent,/Current state reloaded/);
+  assert.match(h.q('draft-owner').textContent,/controls/);
+ }finally{h.dom.window.close();}
+});
 
 test('a follower whose team was deleted is told why and moved to local practice',async()=>{
  let gone=false,teams=[{id:'team',name:'Night Shift',owner_user_id:'captain'}];
@@ -437,6 +441,66 @@ test('leaving Battle Cup during a shared draft restores the draft link',async()=
   await h.click(h.q('draft-button'));
   assert.equal(new URLSearchParams(h.w.location.search).get('draft'),draftId);
   assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+ }finally{h.w.close();}
+});
+
+test('hero search keystrokes reuse the existing hero tiles',async()=>{
+ const h=await harness();
+ try{
+  const search=h.q('hero-search'),tile=()=>h.q('hero-groups').querySelector('[data-hero-id="1"]');
+  const before=tile(),count=h.q('hero-groups').querySelectorAll('.hero-tile').length;
+  for(const text of ['a','an','anti','axe']){search.value=text;search.dispatchEvent(new h.w.Event('input'));}
+  assert.equal(tile(),before,'same Anti-Mage tile node after typing');
+  assert.equal(tile().classList.contains('is-search-miss'),true);
+  assert.equal(h.q('hero-groups').querySelectorAll('.hero-tile').length,count);
+  search.value='anti';search.dispatchEvent(new h.w.Event('input'));
+  assert.equal(tile(),before);assert.equal(tile().classList.contains('is-search-miss'),false);
+  assert.equal(h.q('hero-groups').querySelector('.is-highlighted'),before,'first visible hero is highlighted');
+  search.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await flush();
+  assert.match(h.q('suggestions').querySelector('.decision-dock h3').textContent,/Anti-Mage/);
+  search.value='zzzz';search.dispatchEvent(new h.w.Event('input'));assert.match(h.q('hero-groups').textContent,/No heroes match/);
+  search.value='anti';search.dispatchEvent(new h.w.Event('input'));assert.equal(h.q('hero-groups').querySelector('[data-hero-id="1"]').classList.contains('is-search-miss'),false);
+ }finally{h.w.close();}
+});
+
+test('recommendations are ranked once per draft change, not on every render or keystroke',async()=>{
+ const h=await harness();
+ try{
+  const calls=()=>h.w.__recommendCalls||0,search=h.q('hero-search');
+  let start=calls();
+  for(const text of ['a','ax','axe','']){search.value=text;search.dispatchEvent(new h.w.Event('input'));}
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="2"]'));
+  await h.click(h.q('suggestions').querySelector('.clear-staged'));
+  assert.equal(calls()-start,0,'no draft change: no new ranking');
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="2"]'));
+  start=calls();
+  await h.click(h.q('suggestions').querySelector('button.primary'));
+  assert.match(h.q('turn-progress').textContent,/1 \/ 24/);
+  const afterChange=calls()-start;
+  assert.ok(afterChange>=1&&afterChange<=3,'one ranking per mode in use after a draft change, saw '+afterChange);
+  start=calls();
+  await h.click(h.q('hero-groups').querySelector('[data-hero-id="3"]'));
+  for(const text of ['b','ba','']){search.value=text;search.dispatchEvent(new h.w.Event('input'));}
+  assert.equal(calls()-start,0,'renders without a draft change reuse the ranking');
+ }finally{h.w.close();}
+});
+
+test('shared draft polling pauses while the tab is hidden and resumes once when it shows',async()=>{
+ let reads=0,hidden=false;const ticks=[];
+ const row={id:draftId,team_id:'team',revision:1,drafter_user_id:null,state:{actions:[],firstPick:true,roster:[]}};
+ const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>{reads++;return structuredClone(row);}}),beforeRun:w=>{
+  w.setInterval=fn=>{ticks.push(fn);return ticks.length;};
+  Object.defineProperty(w.document,'hidden',{configurable:true,get:()=>hidden});
+  Object.defineProperty(w.document,'visibilityState',{configurable:true,get:()=>hidden?'hidden':'visible'});
+ }});
+ try{
+  assert.equal(h.q('session-code').textContent,'aaaaaaaa');
+  const tick=ticks.find(fn=>/poll\(/.test(String(fn)));assert.ok(tick,'poll interval registered');
+  let start=reads;tick();await flush();assert.equal(reads-start,1,'visible tick polls');
+  hidden=true;h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await flush();
+  start=reads;tick();tick();await flush();assert.equal(reads-start,0,'hidden ticks skip polling');
+  hidden=false;h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await flush();
+  assert.equal(reads-start,1,'polls once when the tab shows again');
  }finally{h.w.close();}
 });
 
@@ -570,6 +634,69 @@ test('team member leaves a team from Setup and cannot delete it',async()=>{
   await h.click(h.button('Leave team',section()));
   assert.deepEqual(left,['team','owner']);
   assert.doesNotMatch(section().textContent,/Night Shift/);
+ }finally{h.w.close();}
+});
+
+test('captain renews an expired team invite link and copies the new one',async()=>{
+ const oldCode='a'.repeat(64),newCode='d'.repeat(64),past=new Date(Date.now()-864e5).toISOString(),future=new Date(Date.now()+30*864e5).toISOString();
+ let renewed,copied;
+ const h=await harness({clipboard:async text=>{copied=text;},backend:accountBackend({
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:oldCode,invite_expires_at:past}],
+  loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],
+  renewTeamInvite:async(...args)=>{renewed=args;return {invite_code:newCode,invite_expires_at:future};},
+ })});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  assert.match(section().textContent,/invite link has expired/);
+  assert.equal(h.button('Copy team invite link',section()),undefined);
+  await h.click(h.button('Renew link',section()));
+  assert.deepEqual(renewed,['team','owner']);
+  assert.match(h.w.document.querySelector('dialog[open] [data-dialog-notice]')?.textContent||'',/New invite link ready\. The old link no longer works\./);
+  assert.doesNotMatch(section().textContent,/invite link has expired/);
+  assert.match(section().textContent,/Team invite link expires/);
+  await h.click(h.button('Copy team invite link',section()));
+  assert.ok(copied?.includes(newCode),'copied link uses the renewed code: '+copied);
+ }finally{h.w.close();}
+});
+
+test('only the captain sees Renew link and a renewal finishing after an account switch is ignored',async()=>{
+ const code='a'.repeat(64),future=new Date(Date.now()+864e5).toISOString();
+ let callback,finish,renewCalls=0,confirms=0;
+ const member=await harness({backend:accountBackend({
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'captain'}],
+  loadRoster:async()=>[{userId:'captain',displayName:'Captain'},{userId:'owner',displayName:'Me'}],
+ })});
+ try{
+  await member.click(member.q('setup-button'));
+  const select=member.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new member.w.Event('change'));await flush();}
+  assert.equal(member.button('Renew link',member.w.document.querySelector('[data-manual-entry] .team-management')),undefined);
+ }finally{member.w.close();}
+ const h=await harness({backend:accountBackend({
+  onAuthChange:fn=>{callback=fn;},
+  listTeams:async()=>[{id:'team',name:'Night Shift',owner_user_id:'owner',invite_code:code,invite_expires_at:future}],
+  loadRoster:async()=>[{userId:'owner',displayName:'Captain',availability:'available'}],
+  renewTeamInvite:()=>{renewCalls++;return new Promise(resolve=>{finish=resolve;});},
+ })});
+ try{
+  await h.click(h.q('setup-button'));
+  const select=h.w.document.querySelector('[data-manual-entry] select[aria-label=Team]');
+  if(select.value!=='team'){select.value='team';select.dispatchEvent(new h.w.Event('change'));await flush();}
+  const section=()=>h.w.document.querySelector('[data-manual-entry] .team-management');
+  h.w.confirm=()=>{confirms++;return false;};
+  await h.click(h.button('Renew link',section()));
+  assert.equal(confirms,1,'a still-valid link asks before renewing');
+  assert.equal(renewCalls,0,'cancel keeps the current link');
+  h.w.confirm=()=>true;
+  await h.click(h.button('Renew link',section()));
+  assert.equal(renewCalls,1);
+  callback(guestSession,'SIGNED_IN');await flush();
+  finish({invite_code:'e'.repeat(64),invite_expires_at:future});await flush();
+  assert.doesNotMatch(h.w.document.body.textContent,/New invite link ready/);
+  assert.equal(h.w.document.body.innerHTML.includes('e'.repeat(64)),false,'late code never reaches the next account');
  }finally{h.w.close();}
 });
 
@@ -762,6 +889,51 @@ test('a direct Google return with a wrong or stale state is rejected without con
  }
 });
 
+test('clicking an open seat in local practice adds a teammate by ID without Setup or a team',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  const rail=h.q('player-rail');
+  const seat=[...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat'));
+  assert.ok(seat,'open seat is clickable');
+  await h.click(seat);
+  const input=rail.querySelector('input[aria-label="Player ID or link"]');
+  assert.ok(input,'inline ID field opens in the seat');
+  input.value='not-an-id';await h.click(h.button('Add',rail));
+  assert.match(rail.textContent,/valid player ID/i,'invalid input explained');
+  assert.equal(JSON.parse(h.w.localStorage.getItem('captain-practice-v1')||'{"state":{"roster":[]}}').state.roster.length,0);
+  rail.querySelector('input[aria-label="Player ID or link"]').value='https://www.dotabuff.com/players/86745912';
+  await h.click(h.button('Add',rail));
+  const roster=JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster;
+  assert.deepEqual(roster.map(p=>p.steamAccountId),['86745912']);
+  assert.equal(h.q('session-dialog').open,false,'Setup did not open');
+  assert.ok(rail.querySelector('[data-seat-id="86745912"]'),'seat now shows the player');
+  const next=[...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat'));await h.click(next);
+  rail.querySelector('input[aria-label="Player ID or link"]').value='86745912';await h.click(h.button('Add',rail));
+  assert.match(rail.textContent,/already/i,'duplicate refused');
+  assert.equal(JSON.parse(h.w.localStorage.getItem('captain-practice-v1')).state.roster.length,1);
+ }finally{h.w.close();}
+});
+
+test('Escape closes the open-seat ID field and returns focus to the seat',async()=>{
+ const h=await harness({query:'?practice'});
+ try{
+  const rail=h.q('player-rail');
+  await h.click([...rail.querySelectorAll('button')].find(b=>b.textContent.includes('Open seat')));
+  const input=rail.querySelector('input[aria-label="Player ID or link"]');assert.ok(input);
+  input.dispatchEvent(new h.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+  assert.equal(rail.querySelector('input[aria-label="Player ID or link"]'),null,'form closed');
+  assert.equal(h.w.document.activeElement?.dataset.allySeat,'0','focus back on the seat');
+ }finally{h.w.close();}
+});
+
+test('open seats in a shared team draft stay non-interactive',async()=>{
+ const row={id:draftId,team_id:'team',revision:0,drafter_user_id:'owner',state:{actions:[],firstPick:true,roster:[]}};
+ const h=await harness({query:'?draft='+draftId,backend:accountBackend({listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],getDraft:async()=>structuredClone(row)})});
+ try{
+  assert.equal([...h.q('player-rail').querySelectorAll('button')].filter(b=>b.textContent.includes('Open seat')).length,0);
+ }finally{h.w.close();}
+});
+
 test('without a stored session the sign-in button shows immediately',async()=>{
  const h=await harness({query:'',backend:accountBackend({getSession:()=>new Promise(()=>{})})});
  try{
@@ -897,6 +1069,138 @@ test('Open my team cannot replace the password recovery form or open the board',
   assert.equal(rosters,0);
  }finally{h.w.close();}
 });
+
+function recoveryBackend(extra={}){
+ const hooks={};
+ const backend=accountBackend({getSession:async()=>null,onAuthChange:fn=>{hooks.callback=fn;},updatePassword:async()=>({}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[],...extra});
+ return {backend,hooks};
+}
+async function finishRecovery(h,afterSave){
+ const form=h.q('welcome-auth').querySelector('form');
+ form.querySelector('[type=password]').value='new-password';form.requestSubmit();await flush();
+ await afterSave?.();
+ await h.click(h.button('Continue to board',h.q('welcome-auth')));
+}
+function goBackTo(h,query){h.w.history.pushState(null,'',query);h.w.dispatchEvent(new h.w.PopStateEvent('popstate'));return flush();}
+
+test('continuing after password recovery waits for the account and then requires profile setup',async()=>{
+ let finishProfile;
+ const {backend,hooks}=recoveryBackend({loadProfile:()=>new Promise(r=>{finishProfile=r;})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h);
+  assert.equal(h.q('team-view').hidden,true,'Team waits for the account');
+  finishProfile(null);await flush();
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+  assert.equal(h.q('team-view').hidden,true);
+ }finally{h.w.close();}
+});
+
+test('continuing after password recovery with a finished profile opens Team',async()=>{
+ const {backend,hooks}=recoveryBackend({loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h);
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('team-view').hidden,false);
+ }finally{h.w.close();}
+});
+
+test('the password-saved auth event keeps Continue to board and its gates',async()=>{
+ let finishProfile;
+ const {backend,hooks}=recoveryBackend({loadProfile:()=>new Promise(r=>{finishProfile=r;})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await finishRecovery(h,async()=>{
+   // Supabase announces the saved password; it must not open the board on its own.
+   hooks.callback(guestSession,'USER_UPDATED');await flush();
+   assert.equal(h.w.document.body.dataset.view,'welcome');
+  });
+  finishProfile(null);await flush();
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('declining a team invitation still requires profile setup',async()=>{
+ const h=await harness({query:'#invite='+inviteCode,backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  await h.click(h.button('Decline invitation',h.q('welcome-auth')));
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('declining a team invitation opened during practice returns to the practice board',async()=>{
+ const h=await harness({query:'?practice',backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  h.w.location.hash='invite='+inviteCode;h.w.dispatchEvent(new h.w.HashChangeEvent('hashchange'));await flush();
+  assert.ok(h.q('team-invite-heading'),'invitation shown');
+  await h.click(h.button('Decline invitation',h.q('welcome-auth')));
+  assert.equal(h.w.document.body.dataset.view,'board');
+  assert.equal(h.q('draft-view').hidden,false);
+ }finally{h.w.close();}
+});
+
+test('email sign-in from Battle Cup returns to Battle Cup instead of Team',async()=>{
+ const h=await harness({query:'?cup',backend:accountBackend({getSession:async()=>null,signIn:async()=>({session:guestSession}),loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),listTeams:async()=>[invitedTeam],loadRoster:async()=>[]})});
+ try{
+  await h.click(h.q('welcome-signin'));
+  const form=h.q('welcome-auth').querySelector('form');
+  form.querySelector('[type=email]').value='captain@example.com';form.querySelector('[type=password]').value='example-password';
+  form.requestSubmit();await flush();
+  assert.equal(h.q('cup-view').hidden,false,'Battle Cup is shown');
+  assert.equal(h.q('team-view').hidden,true);
+  assert.ok(new URLSearchParams(h.w.location.search).has('cup'));
+ }finally{h.w.close();}
+});
+
+for(const query of ['?team','?cup','?draft='+draftId])test('Back or Forward to '+query.split('=')[0]+' keeps the password recovery form',async()=>{
+ const {backend,hooks}=recoveryBackend({loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),getDraft:async id=>({id,team_id:'team',revision:0,state:{actions:[],roster:[]}})});
+ const h=await harness({query:'',backend});
+ try{
+  hooks.callback(guestSession,'PASSWORD_RECOVERY');await flush();
+  await goBackTo(h,query);
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('welcome-auth').querySelector('h2')?.textContent,'Choose a new password');
+ }finally{h.w.close();}
+});
+
+for(const query of ['?team','?cup'])test('Back or Forward to '+query+' keeps a pending team invitation in front',async()=>{
+ const h=await harness({query:'#invite='+inviteCode,backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),previewTeamInvitation:async()=>invitedTeam,loadRoster:async()=>[]})});
+ try{
+  assert.ok(h.q('team-invite-heading'),'invitation shown');
+  await goBackTo(h,query);
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.ok(h.q('team-invite-heading'),'invitation still shown');
+ }finally{h.w.close();}
+});
+
+test('Back or Forward to Team resumes required profile setup',async()=>{
+ const h=await harness({query:'',backend:accountBackend({getSession:async()=>guestSession,loadProfile:async()=>null,loadRoster:async()=>[]})});
+ try{
+  h.q('profile-dialog').close();
+  await h.click(h.q('home-button'));
+  await goBackTo(h,'?team');
+  assert.equal(h.q('profile-dialog').open,true);
+  assert.equal(h.q('app-shell').dataset.profileSetup,'true');
+ }finally{h.w.close();}
+});
+
+test('signed-out profile button asks to sign in instead of opening a local profile',async()=>{
+ const h=await harness({query:'?practice',backend:accountBackend({getSession:async()=>null})});
+ try{
+  await h.click(h.q('profile-button'));
+  assert.equal(h.q('profile-dialog').open,false);
+  assert.equal(h.w.document.body.dataset.view,'welcome');
+  assert.equal(h.q('welcome-auth').querySelector('h2')?.textContent,'Sign in');
+ }finally{h.w.close();}
+});
+
 
 test('Home during sign-in still loads the account so Open my team requires profile setup',async()=>{
  let callback,finishProfile;

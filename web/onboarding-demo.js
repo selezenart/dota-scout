@@ -1,17 +1,18 @@
 import {parseAccountIds} from './draft-engine.js';
 import {loadPlayer} from './data.js';
+import {HERO_PORTRAIT_BASE, HISTORY_WINDOW_DAYS, ROLE_NAMES} from './constants.js';
 import heroes from './heroes.json';
 import './onboarding-demo.css';
 
 const storageKey = 'captain-onboarding-demo-v2';
-const roles = ['Carry', 'Mid', 'Offlane', 'Soft support', 'Hard support'];
+const roles = ROLE_NAMES;
 const steps = ['Invitation', 'Dota account', 'Account', 'Confirm email', 'Join team', 'Your profile', 'Captain’s view'];
 const defaults = () => ({step: 0, name: 'Maks', email: 'maks@example.com', role: '', signature: [8, 54], desired: [], accountId: '', accountLink: '', importNote: '', inbox: false});
 const heroName = id => heroes[id]?.localized_name || 'Unknown hero';
-const art = id => 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/' + heroes[id].name.replace('npc_dota_hero_', '') + '.png';
+const art = id => HERO_PORTRAIT_BASE + heroes[id].name.replace('npc_dota_hero_', '') + '.png';
 const node = (tag, text, cls) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; };
 
-export function mountOnboardingDemo() {
+function mountOnboardingDemo() {
   let state = defaults();
   try {
     const saved = JSON.parse(sessionStorage.getItem(storageKey));
@@ -83,7 +84,7 @@ export function mountOnboardingDemo() {
           state.signature = [...new Set(played.map(row => row.hero_id))].slice(0,5);
           state.desired = [];
           const failures = Object.values(player.sources).some(source => source.status === 'error');
-          state.importNote = 'OpenDota import · ' + played.length + ' heroes with games in the last 180 days. ' + (failures ? 'Some data could not be loaded. ' : '') + (!played.length ? 'No public hero history found. Fill in your heroes manually. ' : '') + 'Most-played heroes are suggested signatures. Review them and choose your role and today’s heroes yourself.';
+          state.importNote = 'OpenDota import · ' + played.length + ' heroes with games in the last ' + HISTORY_WINDOW_DAYS + ' days. ' + (failures ? 'Some data could not be loaded. ' : '') + (!played.length ? 'No public hero history found. Fill in your heroes manually. ' : '') + 'Most-played heroes are suggested signatures. Review them and choose your role and today’s heroes yourself.';
           go(2);
         } catch {if (state === current) message.textContent = 'Could not load public data. Try again or continue manually.';}
         finally {submit.disabled = false; submit.textContent = 'Import public profile'; form.removeAttribute('aria-busy');}
@@ -163,4 +164,5 @@ export function mountOnboardingDemo() {
   return {root};
 }
 
-if (new URLSearchParams(location.search).has('onboarding-demo')) mountOnboardingDemo();
+// main.js loads this module only for ?onboarding-demo.
+mountOnboardingDemo();

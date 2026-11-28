@@ -1,5 +1,5 @@
 export const MIN_GAMES=10,WARN_RATE=55,HOT_RATE=60,MIN_MATCHUP_GAMES=20;
-const CUP_LOBBY=9,DAY=86400,WINDOW_DAYS=180;
+import {BATTLE_CUP_LOBBY as CUP_LOBBY,DAY_SECONDS as DAY,HISTORY_WINDOW_DAYS as WINDOW_DAYS} from './constants.js';
 
 export function winTier(winRate,games){
  if(!(Number(games)>=MIN_GAMES))return 'low';
@@ -7,6 +7,10 @@ export function winTier(winRate,games){
  return winRate>=HOT_RATE?'hot':winRate>=WARN_RATE?'warm':'normal';
 }
 
+// Whether the player won an OpenDota match row (player_slot below 128 is Radiant).
+export const playerWon=match=>Boolean(match.radiant_win)===(+match.player_slot<128);
+
+// Played heroes, most games first, with a rounded win rate (null when OpenDota gave no win count).
 export function heroStatRows(heroes){
  return (Array.isArray(heroes)?heroes:[]).filter(h=>+h.games>0)
   .map(h=>({heroId:+h.hero_id,games:+h.games,wins:h.win==null?null:Math.max(0,+h.win||0)}))
@@ -54,7 +58,7 @@ export function recentCupGames(player={},now=Date.now()/1000){
   if(match.match_id==null||match.hero_id==null||+match.lobby_type!==CUP_LOBBY||!(age>=0&&age<=WINDOW_DAYS)||seen.has(key))continue;
   seen.add(key);
   games.push({matchId:match.match_id,heroId:+match.hero_id,startTime:+match.start_time,
-   won:match.radiant_win==null?null:Boolean(match.radiant_win)===(+match.player_slot<128)});
+   won:match.radiant_win==null?null:playerWon(match)});
  }
  return games.sort((a,b)=>b.startTime-a.startTime).slice(0,3).map(({startTime,...game})=>game);
 }

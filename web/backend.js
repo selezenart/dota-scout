@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { DISPLAY_NAME_MAX, GOOGLE_ATTEMPT_KEY } from './constants.js';
 
 const own = (o, key) => Object.prototype.hasOwnProperty.call(o, key);
-const normalizeProfile = row => row ? ({
+const profileFromRow = row => row ? ({
   avatarHeroId: row.avatar_hero_id, userId: row.user_id, displayName: row.display_name || 'Teammate',
   steamAccountId: row.steam_account_id || '',
   preferredRoles: row.preferred_roles || [], roleComfort: row.role_comfort || {},
@@ -16,7 +17,7 @@ async function sha256Hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
-export const googleAttemptKey = 'captain-google-oauth';
+export const googleAttemptKey = GOOGLE_ATTEMPT_KEY;
 
 export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '' } = {}) {
   if (!supabaseUrl || !supabaseAnonKey) throw new Error('Team workspace is not configured. Set the public Supabase URL and publishable key.');
@@ -34,9 +35,13 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     return user;
   }
   const rpc = (name, args = {}) => checked(client.rpc(name, args));
-  async function accountRpc(name, args, expectedUserId) {
+  // Pins the request to the account the user explicitly chose, even if another tab
+  // changes the active Supabase session while it is being sent. `changed` is the
+  // message shown when the active account is no longer that one.
+  const CUP_ACCOUNT_CHANGED = 'The active account changed. Open Battle Cup again.';
+  async function accountRpc(name, args, expectedUserId, changed = 'The active account changed. Try again from the current account.') {
     const { session } = await checked(client.auth.getSession());
-    if (session?.user.id !== expectedUserId || !session.access_token) throw Error('The active account changed. Open Battle Cup again.');
+    if (session?.user.id !== expectedUserId || !session.access_token) throw Error(changed);
     const scoped = createClient(supabaseUrl, supabaseAnonKey, { accessToken: async () => session.access_token });
     return checked(scoped.rpc(name, args));
   }
@@ -44,10 +49,10 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     previewTeamInvitation(code) { return rpc('preview_scout_team_invite', {invite_token:code}); },
     listBattleCup(teamId) { return teamId?rpc('get_battle_cup', {target_team:teamId}):rpc('get_open_battle_cup',{}); },
     saveBattleCup(teamId,eventAt,slot,positions,userId) {
-      return accountRpc(teamId?'save_battle_cup':'save_open_battle_cup',{...(teamId?{target_team:teamId}:{}),event_time:eventAt,target_slot:slot,chosen_positions:positions},userId);
+      return accountRpc(teamId?'save_battle_cup':'save_open_battle_cup',{...(teamId?{target_team:teamId}:{}),event_time:eventAt,target_slot:slot,chosen_positions:positions},userId,CUP_ACCOUNT_CHANGED);
     },
     cancelBattleCup(teamId,eventAt,userId) {
-      return accountRpc(teamId?'cancel_battle_cup':'cancel_open_battle_cup',{...(teamId?{target_team:teamId}:{}),event_time:eventAt},userId);
+      return accountRpc(teamId?'cancel_battle_cup':'cancel_open_battle_cup',{...(teamId?{target_team:teamId}:{}),event_time:eventAt},userId,CUP_ACCOUNT_CHANGED);
     },
     verifySteam(token) { return checked(client.auth.verifyOtp({token_hash:token,type:'email'})); },
     async getSession() { return (await checked(client.auth.getSession())).session; },
@@ -67,7 +72,7 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     signUp(email, password, name = '', redirect = '/') {
       return checked(client.auth.signUp({ email: email.trim(), password, options: {
         emailRedirectTo: new URL(redirect, location.origin).href,
-        data: { display_name: name.trim().slice(0, 80) },
+        data: { display_name: name.trim().slice(0, DISPLAY_NAME_MAX) },
       } }));
     },
     async signOut() { await checked(client.auth.signOut()); },
@@ -81,7 +86,7 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     },
     async loadProfile() {
       const user = await currentUser();
-      return normalizeProfile(await checked(client.from('player_profiles').select('*').eq('user_id', user.id).maybeSingle()));
+      return profileFromRow(await checked(client.from('player_profiles').select('*').eq('user_id', user.id).maybeSingle()));
     },
     async saveProfile(profile, expectedUserId) {
       const user = await currentUser();
@@ -95,7 +100,7 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
       for (const [key, field] of Object.entries(fields)) {
         if (own(profile, key)) row[field] = key === 'steamAccountId' ? (String(profile[key] || '').trim() || null) : profile[key];
       }
-      return normalizeProfile(await checked(client.from('player_profiles').upsert(row, { onConflict: 'user_id' }).select('*').single()));
+      return profileFromRow(await checked(client.from('player_profiles').upsert(row, { onConflict: 'user_id' }).select('*').single()));
     },
     setTeamIdentity(teamId,name,imageId,userId) {
       return accountRpc('set_scout_team_identity',{target_team:teamId,new_name:name,image_id:imageId},userId);
@@ -119,20 +124,15 @@ export function createBackend({ supabaseUrl, supabaseAnonKey, googleClientId = '
     async joinTeam(inviteCode, expectedUserId) {
       const args = { invite_token: inviteCode.trim() };
       if (!expectedUserId) return rpc('join_scout_team', args);
-      const { session } = await checked(client.auth.getSession());
-      if (session?.user.id !== expectedUserId || !session.access_token) throw new Error('The active account changed. Open the invitation again.');
-      // Pin this request to the account the user explicitly chose, even if another
-      // tab changes the active Supabase session while the request is being sent.
-      const accessToken = session.access_token;
-      const inviteClient = createClient(supabaseUrl, supabaseAnonKey, { accessToken: async () => accessToken });
-      return checked(inviteClient.rpc('join_scout_team', args));
+      return accountRpc('join_scout_team', args, expectedUserId, 'The active account changed. Open the invitation again.');
     },
     removeTeamMember(teamId, memberId, userId) {
       return accountRpc('remove_scout_team_member',{target_team:teamId,target_user:memberId},userId);
     },
+    renewTeamInvite(teamId, userId) { return accountRpc('renew_scout_team_invite', {target_team: teamId}, userId); },
     deleteTeam(teamId, userId) { return accountRpc('delete_scout_team', {target_team: teamId}, userId); },
     leaveTeam(teamId, userId) { return accountRpc('leave_scout_team', {target_team: teamId}, userId); },
-    async loadRoster(teamId) { return (await rpc('load_team_roster', { target_team: teamId }) || []).map(normalizeProfile); },
+    async loadRoster(teamId) { return (await rpc('load_team_roster', { target_team: teamId }) || []).map(profileFromRow); },
     createDraft(teamId, state = { actions: [], firstPick: true, enemyIds: [] }) {
       return rpc('create_team_draft', { target_team: teamId, initial_state: state });
     },

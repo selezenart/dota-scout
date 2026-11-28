@@ -1,3 +1,5 @@
+import { TEAM_NAME_MAX } from './constants.js';
+
 const demoKey = 'captain-demo-team-proposals';
 const sampleEmblem = {
   id: 'demo-night-shift',
@@ -97,7 +99,7 @@ export function mountTeamIdentity(root, context, onIdentityChanged) {
     panel.append(element('summary', 'Team name and emblem proposals'));
     const form = element('form');
     const name = element('input');
-    name.maxLength = 80;
+    name.maxLength = TEAM_NAME_MAX;
     const nameLabel = element('label', 'Proposed name');
     nameLabel.append(name);
     const file = element('input');
@@ -134,7 +136,7 @@ export function mountTeamIdentity(root, context, onIdentityChanged) {
       const nameField = element('input');
       nameField.value = activeTeam.name;
       nameField.required = true;
-      nameField.maxLength = 80;
+      nameField.maxLength = TEAM_NAME_MAX;
       const nameCaption = element('label','Team name');
       nameCaption.append(nameField);
       imageChoice = element('select');

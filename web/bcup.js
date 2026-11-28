@@ -1,15 +1,17 @@
 import {signupProgress} from './signup-progress.js';
-const zone = 'Europe/Kyiv';
-const roles = ['Carry', 'Mid', 'Offlane', 'Soft support', 'Hard support'];
+import {BATTLE_CUP_DAY_NAME, BATTLE_CUP_HOUR, BATTLE_CUP_TIME_LABEL, BATTLE_CUP_TIME_ZONE, BATTLE_CUP_WEEKDAY, ROLE_NAMES} from './constants.js';
+// Schedule constants must match supabase/migrations/003_battle_cup_signups.sql.
+const zone = BATTLE_CUP_TIME_ZONE;
+const roles = ROLE_NAMES;
 const parts = date => Object.fromEntries(new Intl.DateTimeFormat('en-GB', {timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
 
 export function nextBattleCup(now = new Date()) {
   const local=parts(now);
   const day=new Date(Date.UTC(local.year,local.month-1,local.day));
-  let ahead=(6-day.getUTCDay()+7)%7;
-  if(ahead===0&&local.hour>=20)ahead=7;
+  let ahead=(BATTLE_CUP_WEEKDAY-day.getUTCDay()+7)%7;
+  if(ahead===0&&local.hour>=BATTLE_CUP_HOUR)ahead=7;
   day.setUTCDate(day.getUTCDate()+ahead);
-  const wall=Date.UTC(day.getUTCFullYear(),day.getUTCMonth(),day.getUTCDate(),20);
+  const wall=Date.UTC(day.getUTCFullYear(),day.getUTCMonth(),day.getUTCDate(),BATTLE_CUP_HOUR);
   let instant=wall;
   for(let i=0;i<2;i++){
     const shown=parts(new Date(instant));
@@ -92,7 +94,7 @@ export function mountBattleCup({root,getContext,onSignIn=()=>{},onSetup=()=>{},o
     const heading=element('header',null,'cup-heading');const title=element('h1','Next Battle Cup');title.id='cup-title';title.tabIndex=-1;heading.append(title);
     if(c.demo)heading.append(element('span','Demo','cup-demo-label'));
     const eventAt=snapshot?.eventAt||nextBattleCup();
-    heading.append(element('p',new Intl.DateTimeFormat('en-GB',{timeZone:zone,weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(eventAt))+' · 20:00 Kyiv','cup-date'));
+    heading.append(element('p',new Intl.DateTimeFormat('en-GB',{timeZone:zone,weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(eventAt))+' · '+BATTLE_CUP_TIME_LABEL,'cup-date'));
     heading.append(element('p','Pick a main or replacement spot and choose one or two positions.','cup-intro'));root.append(heading);
     if(!c.demo&&!c.user){root.append(element('p','Sign in to see available spots and reserve your place.','cup-intro'),signupProgress(0,false,{},true));button(root,'Sign in or create an account',onSignIn,true).classList.add('cup-guest-signin');return;}
     if(!c.demo){const label=element('label','Lineup · team is optional','cup-team'),select=element('select');select.disabled=busy;select.dataset.cupFocus='team';select.setAttribute('aria-label','Battle Cup team');const open=element('option','Open lineup · no team needed');open.value='';select.append(open);for(const team of c.teams||[]){const option=element('option',team.name);option.value=team.id;select.append(option);}select.value=selectedTeam;select.onchange=()=>{selectedTeam=select.value;reset();void refresh();};label.append(select);root.append(label);}
@@ -131,7 +133,7 @@ export function mountBattleCup({root,getContext,onSignIn=()=>{},onSetup=()=>{},o
         }
         status.after(ready);
       }
-      const next=element('section',null,'cup-next');next.append(element('h2','Get ready for Saturday.'),element('p','Your spot is saved. Here are a few things to do before Saturday.'));
+      const next=element('section',null,'cup-next');next.append(element('h2','Get ready for '+BATTLE_CUP_DAY_NAME+'.'),element('p','Your spot is saved. Here are a few things to do before '+BATTLE_CUP_DAY_NAME+'.'));
       const cards=element('div',null,'cup-next-actions');
       for(const [title,description,action] of [['Choose tonight’s heroes','Tell your captain what you feel like playing.',onToday],selectedTeam||c.demo?['Meet your lineup','Review teammates’ roles and hero pools.',onTeam]:['Find your team','Create or join a team whenever you’re ready.',onSetup],selectedTeam||c.demo?['Shape your team','Suggest a team name and an image to download.',onTeam]:['Polish your player card','Review your roles and signature heroes.',onProfile]]){
         const card=button(cards,'',()=>action===onTeam?onTeam(selectedTeam):action());card.className='cup-next-card';card.append(element('strong',title),element('span',description),element('span','Open →','cup-next-link'));

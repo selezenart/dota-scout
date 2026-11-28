@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,dataStub,boardWindow,prepareWindow} from './board-harness.js';
 import * as engine from '../web/draft-engine.js';
 import {PublicQueue,loadPlayer} from '../web/data.js';
 
@@ -72,18 +71,11 @@ test('enemySummary reports waiting for waiting or rate-limited sources without d
 });
 
 // C and D. UI
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=async()=>({});export const loadPlayer=(id,progress)=>globalThis.__load(id,progress);`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
+const code=await boardCode({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({loadHeroes:'async()=>({})',loadPlayer:'(id,progress)=>globalThis.__load(id,progress)'})});
 const boot=async(load,{timers=false}={})=>{
- const w=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}).window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
+ const w=boardWindow().window;
+ prepareWindow(w);
  if(timers)w.setTimeout=(fn,ms,...args)=>setTimeout(fn,0,...args);
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  w.__load=load;w.eval(code);await tick(5);
  w.document.getElementById('setup-button').click();await tick(5);
  w.document.getElementById('enemy-account-input').value='333';

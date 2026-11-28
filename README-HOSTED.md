@@ -29,7 +29,7 @@ Select a team, create/list a draft or join with its UUID. Copy session links inc
 
 Click a hero or recommendation to stage it, then use the explicit Ban/Pick confirmation. Allied picks allow player/position overrides. Typing outside controls searches heroes; Enter stages the first visible hero, Escape clears, Ctrl+Z undoes while you control the draft. Reset requires confirmation. Enemy actions are entered manually. OpenDota evidence and per-source timestamps/status are shown in Team; missing/private data is not treated as observed evidence. Recommendations are heuristics, not win probabilities. Notes remain plain text.
 
-Public OpenDota requests are coalesced, capped at two concurrent requests and 45 starts/minute, with rate-limit retries and bounded public-only caching. Bundled `web/heroes.json` is the offline OpenDota constants snapshot. Hero portraits need network access. Shared mutations use the adapter's atomic expected revision; errors refetch current state and require a fresh deliberate action. Failed mutations are never replayed automatically.
+Public OpenDota requests are coalesced, capped at two concurrent requests and 45 starts/minute, with rate-limit retries and bounded public-only caching. Bundled `web/heroes.json` is the offline OpenDota hero snapshot, trimmed to the fields the app reads; refresh it with `node scripts/trim-heroes.mjs <saved /heroStats response>`. Hero portraits need network access. Shared mutations use the adapter's atomic expected revision; errors refetch current state and require a fresh deliberate action. Failed mutations are never replayed automatically.
 
 Legacy live/replay remains at the explicit http://localhost:8765 link after launching the existing local helper. Hosted mode makes no automatic helper/console requests. Hosted demo remains manual; legacy fast/mock/replay controls belong to the legacy page.
 
@@ -76,7 +76,7 @@ Without `GOOGLE_CLIENT_ID` the button falls back to Supabase's own Google redire
 
 Profile import now seeds an empty Today list from signatures as an editable starting point. Existing Today selections remain unchanged. Selected heroes stay first in the picker grid when not searching, even if they do not match the preferred-role suggestion filter. Search still filters by name.
 
-Google logo source: https://developers.google.com/static/identity/images/g-logo.png (official Google Identity branding asset).
+Google logo: the standard four-colour "G" (#4285F4, #34A853, #FBBC05, #EA4335) as inline SVG paths in `web/welcome.js`. Branding rules: https://developers.google.com/identity/branding-guidelines.
 
 ### STRATZ counters
 

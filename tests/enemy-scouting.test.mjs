@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,dataStub,flush,boardWindow,prepareWindow} from './board-harness.js';
 import * as engine from '../web/draft-engine.js';
 import {loadPlayer} from '../web/data.js';
 import {recentCupGames} from '../web/draft-stats.js';
@@ -100,19 +99,11 @@ test('positions follow lane logic, dedupe by match, respect 180 days and order b
 });
 
 // UI flow
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async(id,progress)=>{const p=globalThis.__players[id];progress(p);return p;};`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
+const code=await boardCode({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub()});
 
 test('enemy scouting cards show public stats, loading and closed states',async()=>{
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow(),w=dom.window;
+ prepareWindow(w);
  w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));
  const open={id:'111',name:'Open Foe',sources:sources(),
   heroes:[{hero_id:1,games:14,win:10,last_played:now},{hero_id:53,games:3,win:1,last_played:now}],
@@ -147,9 +138,8 @@ test('enemy scouting cards show public stats, loading and closed states',async()
 });
 
 const boot=async(players,ids)=>{
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow(),w=dom.window;
+ prepareWindow(w);
  w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__players=players;
  w.eval(code);await flush();w.eval(`Date.now=()=>${now*1000}`);
  if(ids){w.document.getElementById('setup-button').click();await flush();w.document.getElementById('enemy-account-input').value=ids;
@@ -202,9 +192,8 @@ test('draft enemy scouting shows Loading… while a source is fetching',async()=
 });
 
 test('enemy card shows loading text while sources are fetching',async()=>{
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow(),w=dom.window;
+ prepareWindow(w,{confirm:false});
  w.__heroes={};w.__players={333:{id:'333',name:'Slow Foe',sources:sources({matches:{status:'fetching'}})}};
  w.eval(code);await flush();
  w.document.getElementById('setup-button').click();await flush();

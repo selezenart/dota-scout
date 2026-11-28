@@ -1,22 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
-import {buildBoard} from './build-board.js';
+import {boardCode} from './build-board.js';
+import {markup,dataStub,flush as flushRounds,openBoard} from './board-harness.js';
 
-const built=await buildBoard({logLevel:'silent',plugins:[{name:'war-room-boundaries',enforce:'pre',load(id){
- if(id.replaceAll('\\','/').endsWith('/web/data.js'))return `export const publicData={request:path=>globalThis.__request(path)};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async(id,progress)=>{const p=globalThis.__player(String(id));progress(p);return p;};`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code,markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
+const code=await boardCode({'/web/data.js':dataStub({publicData:'{request:path=>globalThis.__request(path)}',loadHeroes:'()=>new Promise(()=>{})',loadPlayer:'async(id,progress)=>{const p=globalThis.__player(String(id));progress(p);return p;}'})});
+const flush=()=>flushRounds(8);
 const profile=(id,topHeroes)=>({id,name:'Player '+id,sources:{profile:{status:'updated'},heroes:{status:'updated'}},profile:{profile:{personaname:'Player '+id}},heroes:topHeroes.map(([hero_id,games,win])=>({hero_id,games,win})),recent:[],matches:[]});
 
 async function board({state={},players={},request=async()=>[],savedProfile}={}){
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.__request=request;w.__player=id=>players[id]||profile(id,[]);w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- w.localStorage.setItem('captain-practice-v1',JSON.stringify({profile:savedProfile,state:{actions:[],firstPick:true,roster:[],opponents:[],assignments:{},...state}}));
- w.eval(code);await flush();
+ const {w}=await openBoard(code,{settle:flush,beforeRun:w=>{w.__request=request;w.__player=id=>players[id]||profile(id,[]);},
+  local:{'captain-practice-v1':JSON.stringify({profile:savedProfile,state:{actions:[],firstPick:true,roster:[],opponents:[],assignments:{},...state}})}});
  return {w,q:id=>w.document.getElementById(id),click:async node=>{assert.ok(node);node.click();await flush();}};
 }
 
@@ -264,7 +259,9 @@ test('late hero meta stats refresh suggestion badges',async()=>{
  try{assert.notEqual(marked(h),expected);release(rows);await flush();h.q('hero-search').dispatchEvent(new h.w.Event('input'));assert.equal(marked(h),expected);}finally{h.w.close();}
 });
 test('workspace resets clear ally counters, the suggestion cache, and focus',async()=>{
- const source=await readFile('web/app.js','utf8'),reset=source.match(/function resetDraftData\(\)\{[^\n]*\n?[^\n]*\}/)?.[0]||'';
+ // The board's modules, read together: the reset lives in one of them, its callers in others.
+ const files=(await readdir('web')).filter(file=>file.endsWith('.js')).sort();
+ const source=(await Promise.all(files.map(file=>readFile('web/'+file,'utf8')))).join('\n'),reset=source.match(/function resetDraftData\(\)\{[\s\S]*?\n\}/)?.[0]||'';
  for(const part of ['allyCounterMatchups={}','allyCounterRequests.clear()','allyCounterFailures.clear()','suggestionCache=','focusedPlayer=null'])assert.ok(reset.includes(part),part);
  assert.equal(source.match(/resetDraftData\(\);/g)?.length,3);
 });

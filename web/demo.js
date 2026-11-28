@@ -12,8 +12,6 @@ export function reduceDraft(state,operation,payload={},context={}){
  if(operation==='undo')return {...state,actions:actions.slice(0,-1)};
  if(operation==='reset')return {...state,actions:[]};
  if(operation==='set_first_pick'){if(actions.length)throw Error('Reset the draft before changing first pick');return {...state,firstPick:!!payload.firstPick};}
- if(operation==='set_roster')return {...state,roster:payload.roster.slice(0,5)};
- if(operation==='set_opponents')return {...state,opponents:payload.opponents.slice(0,5)};
  throw Error('Unsupported operation');
 }
 export function demoState(){const s=initialState();s.roster=Array.from({length:5},(_,i)=>({id:'demo-'+i,name:['Alex','Sam','Lee','Jo','Max'][i],selfReport:{preferredRoles:[i+1],signatureHeroes:[[1,8],[13,74],[2,29],[26,86],[5,30]][i],desiredHeroes:[[8],[74],[29],[86],[30]][i],avoidHeroes:[],availability:'available'}}));s.opponents=Array.from({length:5},(_,i)=>({id:'invented-'+i,name:'Invented opponent '+(i+1),heroes:[{hero_id:[1,13,2,26,5][i],games:40}],recent:[{match_id:i,hero_id:[1,13,2,26,5][i],start_time:Math.floor(Date.now()/1000)-3600,lobby_type:9}]}));return s;}

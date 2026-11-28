@@ -1,10 +1,12 @@
 // Pure helpers for the Captain's Draft Board local helper.
 // Nothing here touches the network, the game process or game memory.
 
+// Same value as web/constants.js STEAM_ID64_BASE and api/steam.js (separate runtimes).
 const STEAM_ID64_BASE = 76561197960265728n;
 
-// Production domain of the captains-draft Vercel project. Note: captains-draft.vercel.app is someone else's site.
-export const DEFAULT_ALLOWED_ORIGINS = ['https://captains-draft-three.vercel.app', 'http://127.0.0.1:5173'];
+// The board's own sites: production (captains-board), develop (captains-draft-three) and local dev.
+// captains-draft.vercel.app is someone else's site and must never be allowed.
+export const DEFAULT_ALLOWED_ORIGINS = ['https://captains-board.vercel.app', 'https://captains-draft-three.vercel.app', 'http://127.0.0.1:5173'];
 
 // [A:1:account:instance] → SteamID64 (universe 1, account type 4 = anonymous game server).
 export function anonServerSteamId64(accountId, instance) {

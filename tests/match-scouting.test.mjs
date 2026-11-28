@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
-import {JSDOM} from 'jsdom';
+import {boardCode} from './build-board.js';
+import {BACKEND_STUB,dataStub,flush,boardWindow,prepareWindow} from './board-harness.js';
 import * as engine from '../web/draft-engine.js';
 import * as data from '../web/data.js';
 
@@ -18,6 +17,54 @@ test('PublicQueue accepts /matches/<id> and caches only the transformed value',a
  const saved=storage.m.get('od-public-v1:/matches/123');
  assert.ok(saved,'stored');assert.deepEqual(JSON.parse(saved).value,{id:123});assert.doesNotMatch(saved,/chat/);
  assert.deepEqual(await queue.request('/matches/123'),{id:123});assert.equal(log.length,1);
+});
+// Behaves like localStorage: entries are own enumerable properties, the API is not.
+const webStorage=()=>{
+ const s={};
+ Object.defineProperties(s,{
+  getItem:{value:k=>Object.hasOwn(s,k)?s[k]:null},
+  setItem:{value:(k,v)=>{s[k]=String(v);}},
+  removeItem:{value:k=>{delete s[k];}},
+  key:{value:i=>Object.keys(s)[i]??null},
+  length:{get:()=>Object.keys(s).length},
+ });
+ return s;
+};
+test('PublicQueue honours a TTL longer than a day, so match summaries are not refetched daily',async()=>{
+ let t=1e12;const log=[];
+ const queue=new data.PublicQueue({storage:store(),now:()=>t,sleep:async()=>{},fetcher:fakeFetch({match_id:9,players:[]},log)});
+ await data.loadMatch(9,queue);
+ t+=2*86400000;
+ assert.equal((await data.loadMatch(9,queue)).matchId,'9');
+ assert.equal(log.length,1,'a 30-day TTL must still serve the cached summary after 2 days');
+ t+=29*86400000;
+ await data.loadMatch(9,queue);
+ assert.equal(log.length,2,'refetched once the 30-day TTL has passed');
+});
+test('PublicQueue storage evicts the oldest entries by saved time, never the one just written',async()=>{
+ const storage=webStorage(),cap=80;
+ // Newest first in key order, so key order and age disagree.
+ storage.setItem('od-public-v1:/heroStats',JSON.stringify({at:5000,value:'stats'}));
+ for(let i=1;i<cap;i++)storage.setItem('od-public-v1:/players/'+i,JSON.stringify({at:1000+i,value:i}));
+ storage.setItem('other-key','kept');
+ const queue=new data.PublicQueue({storage,now:()=>6000,sleep:async()=>{},fetcher:fakeFetch({x:1})});
+ await queue.request('/players/999');
+ const keys=Object.keys(storage).filter(k=>k.startsWith('od-public-v1:'));
+ assert.equal(keys.length,cap);
+ assert.ok(storage.getItem('od-public-v1:/players/999'),'new entry kept');
+ assert.ok(storage.getItem('od-public-v1:/heroStats'),'newer entry kept');
+ assert.equal(storage.getItem('od-public-v1:/players/1'),null,'oldest entry evicted');
+ assert.equal(storage.getItem('other-key'),'kept');
+});
+test('PublicQueue storage keeps the entry just written even when its clock is behind other tabs',async()=>{
+ // Guards the `keep` exclusion: sorting by age alone would evict the new entry here.
+ const storage=webStorage();
+ for(let i=1;i<=80;i++)storage.setItem('od-public-v1:/players/'+i,JSON.stringify({at:9000+i,value:i}));
+ const queue=new data.PublicQueue({storage,now:()=>100,sleep:async()=>{},fetcher:fakeFetch({x:1})});
+ await queue.request('/players/999');
+ assert.ok(storage.getItem('od-public-v1:/players/999'),'just-written entry kept');
+ assert.equal(storage.getItem('od-public-v1:/players/1'),null,'oldest other entry evicted');
+ assert.equal(Object.keys(storage).filter(k=>k.startsWith('od-public-v1:')).length,80);
 });
 test('PublicQueue still rejects non-numeric match paths',async()=>{
  const queue=new data.PublicQueue({storage:null,fetcher:fakeFetch({})});
@@ -81,22 +128,14 @@ test('relevantEnemyMatches keeps overlapping or last-24h rows',()=>{
 
 // UI
 const heroes=[{id:1,localized_name:'Anti-Mage',roles:['Carry']},{id:2,localized_name:'Axe',roles:['Initiator']},{id:3,localized_name:'Crystal Maiden',roles:['Support']},{id:53,localized_name:"Nature's Prophet",roles:['Carry']}];
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=async()=>globalThis.__heroes;export const loadPlayer=async(id,progress)=>{const p=globalThis.__players[id];progress(p);return p;};export const loadMatch=async id=>globalThis.__matches[id];export const parseMatchIds=t=>[...new Set(String(t).split(/[\\s,]+/).filter(Boolean))];export const summarizeMatch=x=>x;`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
+const code=await boardCode({'/web/backend.js':BACKEND_STUB,'/web/data.js':dataStub({matches:true})});
 const now=1_700_000_000;
 const sources={profile:{status:'updated'},recent:{status:'updated'},heroes:{status:'updated'},matches:{status:'updated'}};
 const A={matchId:'8001',startTime:now-3600,lobbyType:9,radiantWin:true,players:[P(null,1,true),P(null,2,true),P('111',3,false,'Foe'),P(null,53,false)],picksBans:[{heroId:1,isPick:false,team:1,order:0}]};
 const B={matchId:'8002',startTime:now-3600,lobbyType:9,radiantWin:false,players:[P(null,1,true),P(null,53,true),P(null,2,false),P(null,3,false)],picksBans:[]};
 const boot=async(saved,setup)=>{
- const dom=new JSDOM(markup,{url:'https://board.example/?practice',runScripts:'outside-only'}),w=dom.window;
- w.fetch=async()=>({ok:true,json:async()=>({})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow(),w=dom.window;
+ prepareWindow(w);
  for(const [k,v] of Object.entries(saved||{}))w.localStorage.setItem(k,v);
  w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__matches={8001:A,8002:B};
  w.__players={111:{id:'111',name:'Foe',sources,heroes:[{hero_id:1,games:3,win:1,last_played:now}],recent:[],matches:[]}};
@@ -180,9 +219,8 @@ test('a team match list arriving after sign-out never reaches the device scope',
  const backend={getSession:async()=>({user:{id:'owner'}}),onAuthChange(fn){auth=fn;},loadProfile:async()=>({displayName:'Captain',preferredRoles:[1]}),listTeams:async()=>[{id:'team',name:'Team',owner_user_id:'owner'}],loadRoster:async()=>[],
   getDraft:async()=>({id:draft,team_id:'team',revision:0,drafter_user_id:null,state:{actions:[],firstPick:true,enemyIds:[],roster:[]}}),
   listEnemyMatches:()=>{asked++;return new Promise(r=>{finish=r;});},signOut:async()=>{}};
- const dom=new JSDOM(markup,{url:'https://board.example/?draft='+draft,runScripts:'outside-only'}),w=dom.window;
- w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})});w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const dom=boardWindow('?draft='+draft),w=dom.window;
+ w.__backend=backend;prepareWindow(w,{fetch:async()=>({ok:true,json:async()=>({url:'https://example.supabase.co',anonKey:'public'})})});
  w.__heroes=Object.fromEntries(heroes.map(h=>[h.id,h]));w.__matches={};w.__players={};
  try{
   w.eval(code);for(let i=0;i<6;i++)await flush();

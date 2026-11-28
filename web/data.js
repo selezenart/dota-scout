@@ -1,14 +1,32 @@
 import snapshot from './heroes.json' with {type:'json'};
+import {BATTLE_CUP_LOBBY,DAY_MS,HISTORY_WINDOW_DAYS} from './constants.js';
 const BASE='https://api.opendota.com/api';
-export const PRIORITY={constants:0,profile:1,recent:2,heroes:3,history:4,matchups:5};
+// Queue order, lowest first. app.js passes its own matchups (5) and heroStats (0) values.
+const PRIORITY={constants:0,profile:1,recent:2,heroes:3,history:4,matchups:5,match:6};
+const REQUEST_TIMEOUT_MS=12000;
+const DEFAULT_TTL_MS=300000;
+const PUBLIC_CACHE_PREFIX='od-public-v1:';
+const PUBLIC_CACHE_CAP=80;
+const STRATZ_CACHE_PREFIX='stratz-v1:';
+const STRATZ_CACHE_CAP=40;
+const STRATZ_TTL_MS=43200000;
+// Drops the oldest saved entries under `prefix` (by their `at`) until `cap` remain.
+// Keys are counted on every call, but entries are parsed only when over the cap.
+// `keep` (the entry just written) is never removed.
+function evictOldest(storage,prefix,cap,keep){
+ const keys=[];for(let i=0;i<(storage?.length||0);i++){const k=storage.key(i);if(k?.startsWith(prefix)&&k!==keep)keys.push(k);}
+ const excess=keys.length+1-cap;if(excess<=0)return;
+ const aged=keys.map(k=>{let at=0;try{at=Number(JSON.parse(storage.getItem(k))?.at)||0;}catch{}return [k,at];}).sort((a,b)=>a[1]-b[1]);
+ for(const [k] of aged.slice(0,excess))storage.removeItem(k);
+}
 export class PublicQueue {
- constructor({fetcher=(...args)=>globalThis.fetch(...args),now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),storage=globalThis.localStorage,limit=45,windowMs=60000,timeout=12000}={}){Object.assign(this,{fetcher,now,sleep,storage,limit,windowMs,timeout});this.jobs=[];this.running=0;this.starts=[];this.inflight=new Map();this.cache=new Map();this.sourceInfo=new Map();this.waking=false;this.pause=null;this.localOnly=false;this.sharedPauseSeen=0;}
+ constructor({fetcher=(...args)=>globalThis.fetch(...args),now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),storage=globalThis.localStorage,limit=45,windowMs=60000,timeout=REQUEST_TIMEOUT_MS}={}){Object.assign(this,{fetcher,now,sleep,storage,limit,windowMs,timeout});this.jobs=[];this.running=0;this.starts=[];this.inflight=new Map();this.cache=new Map();this.sourceInfo=new Map();this.waking=false;this.pause=null;this.localOnly=false;this.sharedPauseSeen=0;}
  getSourceInfo(path){return this.sourceInfo.get(path);}
- request(path,{priority=3,ttl=300000,transform,onWait}={}){
+ request(path,{priority=3,ttl=DEFAULT_TTL_MS,transform,onWait}={}){
   if(!/^\/(?:constants\/heroes|heroStats|matches\/\d+|players\/\d+(?:\/(?:heroes|recentMatches|matches))?|heroes\/\d+\/matchups)(?:\?|$)/.test(path)||/[#]/.test(path))return Promise.reject(new Error('Unsupported public endpoint'));
   if(this.inflight.has(path))return this.inflight.get(path);
-  let cached=this.cache.get(path);try{cached ||= JSON.parse(this.storage?.getItem('od-public-v1:'+path)||'null');}catch{}
-  if(cached&&Number.isFinite(cached.at)&&this.now()>=cached.at&&this.now()-cached.at<Math.min(ttl,86400000)){
+  let cached=this.cache.get(path);try{cached ||= JSON.parse(this.storage?.getItem(PUBLIC_CACHE_PREFIX+path)||'null');}catch{}
+  if(cached&&Number.isFinite(cached.at)&&this.now()>=cached.at&&this.now()-cached.at<ttl){
    this.sourceInfo.set(path,{at:cached.at,cached:true});
    return Promise.resolve(cached.value);
   }
@@ -36,8 +54,8 @@ export class PublicQueue {
    }
    if(!response.ok)throw new Error('OpenDota HTTP '+response.status);value=await response.json();if(job.transform)value=job.transform(value);break;
   }
-  const entry={at:this.now(),value};this.cache.set(job.path,entry);this.sourceInfo.set(job.path,{at:entry.at,cached:false});while(this.cache.size>80)this.cache.delete(this.cache.keys().next().value);
-  try{this.storage?.setItem('od-public-v1:'+job.path,JSON.stringify(entry));const keys=Object.keys(this.storage||{}).filter(k=>k.startsWith('od-public-v1:'));while(keys.length>80)this.storage.removeItem(keys.shift());}catch{}
+  const entry={at:this.now(),value};this.cache.set(job.path,entry);this.sourceInfo.set(job.path,{at:entry.at,cached:false});while(this.cache.size>PUBLIC_CACHE_CAP)this.cache.delete(this.cache.keys().next().value);
+  try{const key=PUBLIC_CACHE_PREFIX+job.path;this.storage?.setItem(key,JSON.stringify(entry));evictOldest(this.storage,PUBLIC_CACHE_PREFIX,PUBLIC_CACHE_CAP,key);}catch{}
   job.resolve(value);
   }catch(error){job.reject(error);}finally{this.inflight.delete(job.path);this.running--;this.pump();}
  }
@@ -67,7 +85,7 @@ export class PublicQueue {
 export const publicData=new PublicQueue();
 export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
  const player={id:String(id),name:String(id),sources:{},heroes:[],recent:[],matches:[],cupMatches:[]};
- const sources=[['profile','',1],['recent','/recentMatches',2],['heroes','/heroes?date=180',3],['matches','/matches?date=180&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id&project=start_time',4]];
+ const sources=[['profile','',PRIORITY.profile],['recent','/recentMatches',PRIORITY.recent],['heroes','/heroes?date='+HISTORY_WINDOW_DAYS,PRIORITY.heroes],['matches','/matches?date='+HISTORY_WINDOW_DAYS+'&significant=0&limit=100&project=lane_role&project=is_roaming&project=lobby_type&project=hero_id&project=start_time',PRIORITY.history]];
  await Promise.all(sources.map(async([key,suffix,priority])=>{
   player.sources[key]={status:'fetching'};
   onUpdate(player);
@@ -77,7 +95,7 @@ export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
    const source=queue.getSourceInfo?.(path);
    player[key]=value;
    // start_time stays out of `matches`: scoring and summaries must see the same rows as before.
-   if(key==='matches'&&Array.isArray(value)){player.matches=value.map(({start_time,...row})=>row);player.cupMatches=value.filter(row=>+row.lobby_type===9);}
+   if(key==='matches'&&Array.isArray(value)){player.matches=value.map(({start_time,...row})=>row);player.cupMatches=value.filter(row=>+row.lobby_type===BATTLE_CUP_LOBBY);}
    if(key==='profile')player.name=value.profile?.personaname||String(id);
    player.sources[key]={
     status:key==='profile'&&!value.profile?'private':Array.isArray(value)&&!value.length?'empty':'updated',
@@ -91,7 +109,7 @@ export async function loadPlayer(id,onUpdate=()=>{},queue=publicData){
  }));
  return player;
 }
-export async function loadHeroes(queue=publicData){try{return await queue.request('/constants/heroes',{priority:0,ttl:86400000});}catch{return snapshot;}}
+export async function loadHeroes(queue=publicData){try{return await queue.request('/constants/heroes',{priority:PRIORITY.constants,ttl:DAY_MS});}catch{return snapshot;}}
 // Battle Cup scouting by match ID. Only a compact summary is cached: full match
 // responses are hundreds of KB. Closed players stay anonymous (accountId null).
 export function parseMatchIds(text){
@@ -112,20 +130,20 @@ export function summarizeMatch(raw={}){
  return {matchId:String(raw.match_id),startTime:+raw.start_time||0,lobbyType:raw.lobby_type==null?null:+raw.lobby_type,
   radiantWin:typeof raw.radiant_win==='boolean'?raw.radiant_win:null,players,picksBans};
 }
-export function loadMatch(id,queue=publicData){return queue.request('/matches/'+id,{priority:6,ttl:30*86400000,transform:summarizeMatch});}
+export function loadMatch(id,queue=publicData){return queue.request('/matches/'+id,{priority:PRIORITY.match,ttl:30*DAY_MS,transform:summarizeMatch});}
 // Divine+ counters and synergy for one hero from our STRATZ proxy, cached for 12 h.
-export async function loadStratz(heroId,{fetcher=(...args)=>globalThis.fetch(...args),storage=globalThis.localStorage,now=Date.now}={}){
- const key='stratz-v1:'+heroId;
- try{const saved=JSON.parse(storage?.getItem(key)||'null');if(saved?.value&&Number.isFinite(saved.at)&&now()-saved.at<43200000)return saved.value;}catch{}
- const response=await fetcher('/api/stratz?hero='+encodeURIComponent(heroId),{credentials:'same-origin',headers:{Accept:'application/json'}});
+export async function loadStratz(heroId,{fetcher=(...args)=>globalThis.fetch(...args),storage=globalThis.localStorage,now=Date.now,timeout=REQUEST_TIMEOUT_MS}={}){
+ const key=STRATZ_CACHE_PREFIX+heroId;
+ try{const saved=JSON.parse(storage?.getItem(key)||'null');if(saved?.value&&Number.isFinite(saved.at)&&now()-saved.at<STRATZ_TTL_MS)return saved.value;}catch{}
+ // A hung request must reject, so the board's retry backoff frees the hero again.
+ const response=await fetcher('/api/stratz?hero='+encodeURIComponent(heroId),{signal:AbortSignal.timeout(timeout),credentials:'same-origin',headers:{Accept:'application/json'}});
  if(!response.ok)throw new Error('STRATZ HTTP '+response.status);
  const value=await response.json();
  if(!Array.isArray(value?.vs)||!Array.isArray(value?.with))throw new Error('Invalid STRATZ response');
  try{
   storage?.setItem(key,JSON.stringify({at:now(),value}));
-  // Keep at most 40 heroes so the board's own storage never fills up.
-  const keys=[];for(let i=0;i<(storage?.length||0);i++){const k=storage.key(i);if(k?.startsWith('stratz-v1:'))keys.push(k);}
-  if(keys.length>40){const aged=keys.map(k=>{try{return [k,JSON.parse(storage.getItem(k))?.at||0];}catch{return [k,0];}}).sort((a,b)=>a[1]-b[1]);for(const [k] of aged.slice(0,keys.length-40))storage.removeItem(k);}
+  // Keep a bounded number of heroes so the board's own storage never fills up.
+  evictOldest(storage,STRATZ_CACHE_PREFIX,STRATZ_CACHE_CAP,key);
  }catch{}
  return value;
 }

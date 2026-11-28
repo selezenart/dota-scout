@@ -75,7 +75,7 @@ The helper then starts in the background whenever you log in to your computer (n
    ```
    Connected to the Dota game coordinator. The lineup appears when picks start.
    ```
-2. **Open the board** at <https://captains-draft-three.vercel.app> in the same computer's browser, open your draft and take the **drafter seat**.
+2. **Open the board** at <https://captains-board.vercel.app> in the same computer's browser, open your draft and take the **drafter seat**.
 3. Go to **Setup → Enemy scouting → Detect live lineup**. If the browser asks to allow access to devices on your local network, allow it.
 4. **Queue in Dota.** When the match is accepted and picks start, the board imports both teams (usually within 10 seconds) and starts scouting the enemy players. The button changes back once the lineup is imported.
 

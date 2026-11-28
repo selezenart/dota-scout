@@ -50,7 +50,7 @@ The helper only reads files, talks to Steam as the bot account, and calls the St
 | `DOTA_CONSOLE_LOG` | Full path to `console.log` when Dota is not in a Steam library the helper can find. |
 | `STEAM_PATH` | Steam install folder when it is not in the default place. |
 | `DOTA_ACCOUNT_ID` | Your Dota friend ID for the Steam Web API fallback when several Steam accounts use the PC. The bot source reads your account from the console log. |
-| `HELPER_ALLOWED_ORIGINS` | Comma-separated site origins allowed to read the roster. Default: `https://captains-draft-three.vercel.app,http://127.0.0.1:5173`. |
+| `HELPER_ALLOWED_ORIGINS` | Comma-separated site origins allowed to read the roster. Default: `https://captains-board.vercel.app,https://captains-draft-three.vercel.app,http://127.0.0.1:5173` (production, develop, local dev). Setting it replaces the whole list. |
 
 ## Security
 
