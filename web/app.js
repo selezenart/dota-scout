@@ -5,8 +5,8 @@ import {mountTeamIdentity,showIdentityDownload,demoIdentityBackend} from './team
 import {mountBattleCup} from './bcup.js';
 import {createWelcome} from './welcome.js';
 import {CM_ORDER,CM_PHASE_STARTS,nextTurn,parseAccountIds,normalizeProfile,diverseTop,reviewLineup} from './draft-engine.js';
-import {comfortRows,enemyBanTarget,allyCounterBans,recentCupGames,tileMark,heroStatRows,sourceStatus,MIN_GAMES,WARN_RATE} from './draft-stats.js';
-import {renderPlayerRail,resetAllyEntry,SEAT_STATUS} from './war-room.js';
+import {tileMark,heroStatRows,MIN_GAMES,WARN_RATE} from './draft-stats.js';
+import {resetAllyEntry} from './war-room.js';
 import {publicData,loadPlayer,loadHeroes} from './data.js';
 import {initialState,demoState,reduceDraft} from './demo.js';
 import {createBackend} from './backend.js';
@@ -15,13 +15,14 @@ import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pe
 import {store} from './store.js';
 import {$,el,notice,safe,button,field,focusDraftView,show,showIfClosed} from './dom.js';
 import {ui,render} from './ui.js';
-import {accountOf,memberId,providerName,stratz,touch,observations,requestedMatchups,matchupErrors,allyCounterFailures,resetDraftData,matchupCoverage,canWrite,roleNames,heroName,portrait,derived,roster,opponents,playerSummary,ranking} from './draft-data.js';
+import {accountOf,memberId,providerName,stratz,touch,observations,requestedMatchups,matchupErrors,allyCounterFailures,resetDraftData,matchupCoverage,canWrite,roleNames,heroName,portrait,derived,roster,opponents,ranking} from './draft-data.js';
 import {saveLocal,restorePractice} from './practice-store.js';
-import {stratzCredit,appendStratzCredit,requestAllyCounters,refreshScouting} from './scouting.js';
+import {stratzCredit,appendStratzCredit,refreshScouting} from './scouting.js';
 import {enemyDetails,addEnemyMatches,refreshSightings,renderEnemyAssignment,renderDraftEnemies} from './enemy-intel.js';
 import {detachWorkspace,enterPractice,mutate,openDraft,poll,draftRoster,loadTeam,mutateOwner} from './draft-sync.js';
 import {stopLiveWatch,checkLiveWatch} from './live-watch.js';
-Object.assign(ui,{stopLiveWatch,renderView,renderTeamHome});
+import {seatData,renderSeats} from './board-seats.js';
+Object.assign(ui,{stopLiveWatch,renderView,lobby,renderTeamHome});
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
 // Clears the account loading message after this long. index.html's head script
@@ -221,59 +222,6 @@ function renderView(){
  }
  if(!turn&&!$('analysis').hidden)renderEnemyAssignment($('analysis'));
 
-}
-function seatData(player,side,taken,now){
- const hasAccount=side==='enemy'||accountOf(player);
- const summary=playerSummary(player,now),state=hasAccount?summary.state:'ready';
- const usable=state==='ready'||(side==='ally'&&!hasAccount);
- const stats={topHeroes:heroStatRows(player.heroes)};
- // An absence label is only true once the sources behind it have answered.
- const absence=(keys,empty)=>{
-  if(!hasAccount)return empty;
-  if(state!=='ready')return SEAT_STATUS[state];
-  const status=sourceStatus(player,keys);
-  return status==='ok'?empty:SEAT_STATUS[status];
- };
- const heroesKnown=!hasAccount||sourceStatus(player,['heroes'])==='ok';
- const comfort=usable?comfortRows({player,summary:stats,side}).map(row=>heroesKnown||row.games?row:{...row,unavailable:true}):[];
- let banLabel='Ban suggestions',bans='No counter data',banIds=[];
- if(side==='enemy'){
-  banLabel='Ban first';
-  const target=usable?enemyBanTarget(stats,taken):null;
-  bans=target?`${heroName(target.heroId)} · ${target.winRate}%`:absence(['heroes'],'No clear ban');
-  if(target)banIds=[+target.heroId];
- }else if(comfort[0]){
-  requestAllyCounters(comfort[0].heroId);
-  const counters=allyCounterBans(comfort[0].heroId,store.allyCounterMatchups[comfort[0].heroId],taken);
-  if(counters.length){bans=counters.map(row=>heroName(row.heroId)).join(', ');banIds=counters.map(row=>+row.heroId);}
- }
- const cup=usable?recentCupGames(player,now):[];
- const position=side==='enemy'?summary.positions?.[0]?.position:player.selfReport.preferredRoles?.[0];
- return {id:String(player.id),name:player.name,side,position,state,comfort,banLabel,bans,cup,cupEmpty:absence(['recent','matches'],'No recent cups'),heroIds:[...new Set([...comfort.map(row=>+row.heroId),...cup.map(game=>+game.heroId),...banIds])]};
-}
-function renderSeats(){
- const taken=new Set(store.state.actions.map(action=>+action.heroId)),now=Math.floor(Date.now()/1000);
- renderPlayerRail($('player-rail'),{
-  allies:roster().slice(0,ROSTER_SIZE).map(player=>seatData(player,'ally',taken,now)),
-  enemies:opponents().slice(0,ROSTER_SIZE).map(player=>seatData(player,'enemy',taken,now)),
-  focusId:store.focusedPlayer,portrait,heroName,
-  onToggle:id=>{store.focusedPlayer=store.focusedPlayer===id?null:id;render();},
-  onAddEnemy:safe(lobby),
-  // Local practice only: add a teammate to an open seat by public ID, no Setup or team needed.
-  onAddAlly:!store.shared&&!demo&&canWrite()?addAllyById:null
- });
-}
-async function addAllyById(text){
- const tokens=String(text||'').trim().split(/[\s,;]+/).filter(Boolean),ids=parseAccountIds(text);
- if(tokens.length!==1||ids.length!==1)throw Error('Enter one valid player ID or profile link.');
- const current=(Array.isArray(store.state.roster)?store.state.roster:[]).filter(p=>p&&typeof p==='object');
- if(current.length>=ROSTER_SIZE)throw Error('Our team already has five players.');
- const id=String(ids[0]);
- if(current.some(p=>String(accountOf(p)||'')===id))throw Error('This player is already on our team.');
- await mutate('set_state',{roster:[...current,{id,name:id,steamAccountId:id}]});
- // mutate() returns quietly while another change is still saving; only confirm a real change.
- if(!(store.state.roster||[]).some(p=>String(p?.steamAccountId||'')===id))throw Error('Another change is still saving. Try again.');
- notice('Player '+id+' added to our team.');
 }
 let freshActionIndex=-1;
 function renderDraftTree(){
