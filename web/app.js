@@ -1,7 +1,6 @@
 // Board entry: fills the late-bound actions, wires page-wide listeners and starts up
 // (config, sign-in state, hero data).
 import {showIdentityDownload,demoIdentityBackend} from './team-identity.js';
-import {mountBattleCup} from './bcup.js';
 import {createWelcome} from './welcome.js';
 import {CM_ORDER,nextTurn} from './draft-engine.js';
 import {resetAllyEntry} from './war-room.js';
@@ -23,10 +22,11 @@ import './board-seats.js';
 import './board-tree.js';
 import {renderHeroes,searchHeroes,heroChoices,highlightSearch} from './board-heroes.js';
 import './board-recommendations.js';
-import {renderView,renderRoster} from './board-view.js';
+import {renderView} from './board-view.js';
 import {startProfileSetup,profileDialog} from './profile-dialog.js';
 import {lobby} from './setup-dialog.js';
-import {teamIdentity,sampleTeam,renderTeamHome} from './team-home.js';
+import {teamIdentity,renderTeamHome} from './team-home.js';
+import {cup,showWorkspace,leaveCup,openCup,navigateTeam,navigateCup} from './router.js';
 Object.assign(ui,{stopLiveWatch,renderView,lobby,profileDialog,teamIdentity,renderTeamHome,navigateTeam,navigateCup,signOut});
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
@@ -137,8 +137,6 @@ function showTeamInvitation(force=false){
  }
  return true;
 }
-
-let cupAccountVersion=0;
 async function authChanged(session,event){
 
  const recovery=event==='PASSWORD_RECOVERY';
@@ -169,7 +167,7 @@ async function authChanged(session,event){
  store.selectedTeamIds=[];
  store.profile={};
  store.state=initialState();
- ++cupAccountVersion;
+ ++store.cupAccountVersion;
  cup.sync();
  const inviteOnEntry=!!store.teamInvitation;
 
@@ -280,39 +278,6 @@ async function signOut(){
  finally{signingOut=false;control.disabled=false;control.textContent='Sign out';control.removeAttribute('aria-busy');}
 }
 $('signout-button').onclick=safe(signOut);
-const cup=mountBattleCup({
- root:$('cup-view'),
- getContext:()=>({user:store.user,teams:store.teams,teamId:store.team?.id,backend:store.backend,demo,profileReady:demo||store.profileSaved,profileHasDraftDetails:demo||!!(store.profile.preferredRoles?.length&&(store.profile.signatureHeroes?.length||store.profile.desiredHeroes?.length)),version:cupAccountVersion}),
- onSignIn:()=>welcome.home('signin'),
- onSetup:safe(lobby),
- onTeam:safe(async id=>{if(!demo&&id&&await loadTeam(id)===false)return;navigateTeam(id);}),
- onProfile:()=>profileDialog(false,null,true),
- onToday:()=>profileDialog(false,null,true,1),
- onDraft:()=>{focusDraftView();},
-});
-function showWorkspace(view){
- $('app-shell').dataset.workspace=view;
- if(view!=='team'){teamIdentity.clear();store.homeRequest++;}
- const skip=document.querySelector('.skip-link');
- skip.href=view==='team'?'#team-title':view==='cup'?'#cup-view':'#hero-search';
- skip.textContent=view==='team'?'Skip to team':view==='cup'?'Skip to Battle Cup signup':'Skip to hero search';
- for(const [key,panel] of [['draft','draft-view'],['team','team-view'],['cup','cup-view']]){
-  $(panel).hidden=key!==view;
-  if(key===view)$(key+'-button').setAttribute('aria-current','page');
-  else $(key+'-button').removeAttribute('aria-current');
- }
-}
-function leaveCup(){
- const url=new URL(location.href);
- if(url.searchParams.has('cup')){
-  url.searchParams.delete('cup');
-  // Back from Cup during a shared draft: keep its link so refresh/copy still opens the draft.
-  if(store.shared&&!demo&&!url.searchParams.has('draft'))url.searchParams.set('draft',store.shared.id);
-  else if(!url.searchParams.has('draft')&&!url.searchParams.has('demo')&&!url.searchParams.has('mock'))url.searchParams.set('practice','');
-  history.pushState(null,'',url);
- }
-}
-function openCup(){showWorkspace('cup');welcome.board();void cup.refresh();}
 $('draft-button').onclick=()=>{
  leaveCup();
  const url=new URL(location.href);
@@ -325,33 +290,6 @@ $('draft-button').onclick=()=>{
 };
 $('team-button').onclick=()=>navigateTeam();
 $('cup-button').onclick=()=>navigateCup();
-function navigateTeam(id){
- const chosen=demo?sampleTeam:store.teams.find(item=>item.id===(id||store.homeTeamId||store.team?.id))||store.teams[0];
- const request=++store.homeRequest, account=store.user?.id;
- store.homeTeamId=chosen?.id||'';
- store.homeRoster=[];
- const url=new URL(location.href);
- url.searchParams.delete('cup');url.searchParams.delete('practice');url.searchParams.delete('draft');
- url.searchParams.set('team','');
- if(url.href!==location.href)history.pushState(null,'',url);
- showWorkspace('team');welcome.board();renderRoster();
- renderTeamHome(chosen&&!demo?'Loading team roster…':'');
- teamIdentity.open(store.homeTeamId);
- if(chosen&&!demo&&store.backend?.loadRoster){
-  void store.backend.loadRoster(chosen.id).then(rows=>{
-   if(request!==store.homeRequest||account!==store.user?.id||$('team-view').hidden)return;
-   store.homeRoster=rows;renderTeamHome();renderRoster();
-  }).catch(()=>{
-   if(request===store.homeRequest&&account===store.user?.id&&!$('team-view').hidden)renderTeamHome('Could not load the roster. Reopen Team to retry.');
-  });
- }
-}
-
-function navigateCup(){
- const url=new URL(location.href);url.searchParams.delete('draft');url.searchParams.delete('team');url.searchParams.set('cup','');
- if(url.href!==location.href)history.pushState(null,'',url);
- openCup();
-}
 ;
 $('session-dialog').addEventListener('close',()=>{if(!$('cup-view').hidden)void cup.refresh();});
 for(const event of ['focus','online'])window.addEventListener(event,()=>{

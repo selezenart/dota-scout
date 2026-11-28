@@ -25,6 +25,7 @@
 !web/profile-dialog.js
 !web/setup-dialog.js
 !web/team-home.js
+!web/router.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js
