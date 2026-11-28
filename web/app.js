@@ -19,6 +19,8 @@ import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_
 import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,storageKey,codeFromInvitation,imageId} from './url-state.js';
 import {store} from './store.js';
 import {$,el,notice,safe,button,field,focusDraftView,show,showIfClosed} from './dom.js';
+import {ui,scheduleRender,render} from './ui.js';
+Object.assign(ui,{renderView});
 
 // Timings (ms) and local storage caps of the board.
 const SCOUT_RETRY_RATE_LIMITED_MS=20000;
@@ -167,13 +169,6 @@ function ranking(mode){
  const c=derived();
  if(!c.ranked.has(mode))c.ranked.set(mode,recommend({heroes,draft:state.actions,allies:roster(),opponents:opponents(),matchups,stratz,firstPick:state.firstPick,mode}));
  return c.ranked.get(mode);
-}
-// Renders asked for by background data arrivals run once per frame.
-let renderQueued=false;
-function scheduleRender(){
- if(renderQueued)return;renderQueued=true;
- const run=()=>{if(renderQueued)render();};
- if(typeof requestAnimationFrame==='function'&&!document.hidden)requestAnimationFrame(run);else queueMicrotask(run);
 }
 
 function buildRoster(){
@@ -377,21 +372,6 @@ function stage(id,rec){
  confirm.focus({preventScroll:true});
  const bounds=confirm.getBoundingClientRect();
  if(bounds.top<0||bounds.bottom>window.innerHeight)confirm.scrollIntoView?.({block:'center',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
-}
-
-function render(){
- renderQueued=false;
- const active=document.activeElement;
- let selector=active?.id?'#'+active.id:active?.dataset.heroId?'[data-hero-id="'+active.dataset.heroId+'"]':active?.name?'[name="'+active.name+'"][value="'+active.value+'"]':active?.classList.contains('primary')&&active.closest('#suggestions')?'#suggestions button.primary':null;
- const value=active?.value;
- renderView();
- if(selector&&!active.isConnected){
-  const replacement=document.querySelector(selector);
-  if(replacement){
-   if(replacement.tagName==='SELECT'&&[...replacement.options].some(o=>o.value===value))replacement.value=value;
-   replacement.focus({preventScroll:true});
-  }
- }
 }
 function renderView(){
  $('signout-button').hidden=!user||demo;
