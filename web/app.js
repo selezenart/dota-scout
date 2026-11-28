@@ -15,11 +15,12 @@ import {initialState,demoState,reduceDraft} from './demo.js';
 import {createBackend} from './backend.js';
 import {createTeamScopedStore} from './team-store.js';
 import {DAY_MS,DISPLAY_NAME_MAX,GOOGLE_ATTEMPT_KEY,HERO_LIST_MAX,HISTORY_WINDOW_DAYS,LOCAL_HELPER_ORIGIN,OAUTH_PROVIDER_KEY,ROSTER_SIZE,TOP_RECOMMENDATIONS} from './constants.js';
-import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,storageKey,codeFromInvitation,imageId} from './url-state.js';
+import {urlParams,demo,captainDemo,playerDemo,UUID,validDraftId,inlinedConfig,pendingDraft,forgetDraft,teamInviteCode,forgetInvitation,readInvitation,codeFromInvitation,imageId} from './url-state.js';
 import {store} from './store.js';
 import {$,el,notice,safe,button,field,focusDraftView,show,showIfClosed} from './dom.js';
 import {ui,scheduleRender,render} from './ui.js';
 import {accountOf,memberId,providerName,stratz,stratzRequested,touch,observations,requestedMatchups,matchupErrors,allyCounterRequests,allyCounterFailures,resetDraftData,matchupCoverage,canWrite,roleNames,heroName,portrait,derived,roster,opponents,playerSummary,ranking} from './draft-data.js';
+import {saveLocal,restorePractice} from './practice-store.js';
 Object.assign(ui,{renderView});
 
 // Timings (ms) and local storage caps of the board.
@@ -46,22 +47,6 @@ let observedAuthUser;
 let authEvent=0;
 let draftOpen=0;
 let reviewVisible=true;
-
-try {
- const saved=JSON.parse(localStorage.getItem(storageKey)||'null');
- if(saved&&!demo){store.state={...initialState(),...saved.state};store.profile=saved.profile||{};}
-}catch{}
-
-function practiceKey(){return store.user?'captain-practice-v1:'+store.user.id:storageKey;}
-function saveLocal(){if(!store.shared&&!demo)try{localStorage.setItem(practiceKey(),JSON.stringify({state:store.state,profile:store.profile}));}catch{}}
-function restorePractice(){
- store.state=initialState();
- try{
-  const saved=JSON.parse(localStorage.getItem(practiceKey())||'null');
-  if(saved){store.state={...initialState(),...saved.state};if(!store.user)store.profile=saved.profile||{};return;}
- }catch{}
- if(store.user){store.state.roster=[{...store.profile,id:store.user.id}];touch();}
-}
 function detachWorkspace(){
  stopLiveWatch();resetAllyEntry();
  ++store.generation;++draftOpen;++teamLoad;store.shared=null;store.pending=false;store.healthy=true;store.polling=false;store.selected=null;store.localControl=true;
