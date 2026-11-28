@@ -2,7 +2,6 @@
 // (config, sign-in state, hero data).
 import {signupProgress} from './signup-progress.js';
 import {mountTeamIdentity,showIdentityDownload,demoIdentityBackend} from './team-identity.js';
-import {liveLineup} from './live-roster.js';
 import {mountBattleCup} from './bcup.js';
 import {createWelcome} from './welcome.js';
 import {CM_ORDER,CM_PHASE_STARTS,nextTurn,parseAccountIds,normalizeProfile,diverseTop,reviewLineup} from './draft-engine.js';
@@ -21,9 +20,8 @@ import {saveLocal,restorePractice} from './practice-store.js';
 import {stratzCredit,appendStratzCredit,requestAllyCounters,refreshScouting} from './scouting.js';
 import {enemyDetails,addEnemyMatches,refreshSightings,renderEnemyAssignment,renderDraftEnemies} from './enemy-intel.js';
 import {detachWorkspace,enterPractice,mutate,openDraft,poll,draftRoster,loadTeam,mutateOwner} from './draft-sync.js';
+import {stopLiveWatch,checkLiveWatch} from './live-watch.js';
 Object.assign(ui,{stopLiveWatch,renderView,renderTeamHome});
-const LIVE_WATCH_RETRY_MS=5000;
-const LIVE_WATCH_TIMEOUT_MS=14000; // local live-roster helper
 const SYNC_POLL_MS=3000;
 const GOOGLE_ATTEMPT_MAX_AGE_MS=600000; // a Google sign-in started longer ago is ignored
 // Clears the account loading message after this long. index.html's head script
@@ -996,73 +994,6 @@ function profileDialog(local=false,joinedTeam=null,continueToCup=false,initialHe
 
 }
 
-let liveWatch;
-function stopLiveWatch() {
- if(!liveWatch)return;
- clearTimeout(liveWatch.timer);
- liveWatch.abort?.abort();
- liveWatch=null;
-}
-
-async function checkLiveWatch(watch) {
- if(liveWatch!==watch)return;
- if(watch.generation!==store.generation||document.body.dataset.view!=='board'){stopLiveWatch();return;}
- const retry=()=>{if(liveWatch===watch)watch.timer=setTimeout(()=>void checkLiveWatch(watch),LIVE_WATCH_RETRY_MS);};
- const controller=new AbortController();
- watch.abort=controller;
- const timeout=setTimeout(()=>controller.abort(),LIVE_WATCH_TIMEOUT_MS);
- try {
-  const response=await fetch(LOCAL_HELPER_ORIGIN+'/live-roster',{signal:controller.signal,credentials:'omit',cache:'no-store'});
-  if(!response.ok)throw Error('The helper did not accept the connection.');
-  const data=await response.json();
-  if(liveWatch!==watch||watch.generation!==store.generation)return;
-  const lineup=data.status==='ready'&&liveLineup(data);
-  if(!lineup){
-   watch.status.textContent=data.status==='ready'?'Waiting for both complete teams and your Dota account.':data.message||'Waiting for a live match.';
-   retry();return;
-  }
-  if(!canWrite()){
-   watch.status.textContent='Waiting for the drafter seat before importing the lineup.';
-   retry();return;
-  }
-  if(store.shared&&store.team?.id===store.shared.team_id&&store.teamRoster.length===0)await loadTeam(store.shared.team_id,{preserveSelection:true});
-  if(liveWatch!==watch||watch.generation!==store.generation)return;
-  const profiles=[...(store.state.roster||[]),...store.teamRoster];
-  const roster=lineup.ours.map(id=>{
-   const profile=profiles.find(player=>String(accountOf(player))===id);
-   return profile?{...profile,id:memberId(profile)}:{id,steamAccountId:id};
-  });
-  if(store.state.actions.some(action=>action.playerId&&!roster.some(player=>player.id===action.playerId))){
-   stopLiveWatch();
-   watch.control.textContent='Detect live lineup';
-   watch.status.textContent='Live lineup differs from the assigned players. Open a new draft to import it.';
-   return;
-  }
-  if(!canWrite()){retry();return;}
-  try {
-   await mutate('set_state',{roster,enemyIds:lineup.enemies});
-  }catch(error){
-   if(liveWatch===watch){
-    stopLiveWatch();
-    watch.control.textContent='Detect live lineup';
-    watch.status.textContent=error.message;
-   }
-   return;
-  }
-  if(liveWatch!==watch||watch.generation!==store.generation)return;
-  const input=$('enemy-account-input');
-  if(input)input.value=lineup.enemies.join(' ');
-  stopLiveWatch();
-  watch.control.textContent='Detect live lineup';
-  watch.status.textContent='Imported both teams from match '+data.matchId+'. Loading public match history.';
-  notice(watch.status.textContent);
- }catch{
-  if(liveWatch!==watch)return;
-  watch.status.textContent='Check that the updated local helper is running and allow local network access if your browser asks. Retrying…';
-  retry();
- }finally{clearTimeout(timeout);}
-}
-
 let lobbyEdited=false;
 function sessionButtons(){
  $('create-session').disabled=!store.user||!store.team||demo;
@@ -1101,21 +1032,21 @@ async function lobby(){
   const liveStatus=el('p',null,'secondary');
   liveStatus.setAttribute('role','status');
   const liveControl=button('Detect live lineup',()=>{
-   if(liveWatch){
+   if(store.liveWatch){
     stopLiveWatch();liveControl.textContent='Detect live lineup';liveStatus.textContent='Live detection stopped.';return;
    }
    liveControl.textContent='Stop live detection';
    liveStatus.textContent='Waiting for the local Dota helper…';
-   liveWatch={generation:store.generation,control:liveControl,status:liveStatus};
-   void checkLiveWatch(liveWatch);
+   store.liveWatch={generation:store.generation,control:liveControl,status:liveStatus};
+   void checkLiveWatch(store.liveWatch);
   },scouting);
   liveControl.disabled=!canWrite();
   scouting.append(liveStatus);
-  if(liveWatch?.generation===store.generation){
-   liveStatus.textContent=liveWatch.status.textContent;
+  if(store.liveWatch?.generation===store.generation){
+   liveStatus.textContent=store.liveWatch.status.textContent;
    liveControl.textContent='Stop live detection';
    liveControl.disabled=false;
-   Object.assign(liveWatch,{control:liveControl,status:liveStatus});
+   Object.assign(store.liveWatch,{control:liveControl,status:liveStatus});
   }
  }
  const enemies=field(scouting,'Enemy public player IDs or URLs (up to 5)',(store.state.enemyIds||[]).join(' '),'textarea');

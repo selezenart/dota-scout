@@ -16,6 +16,7 @@
 !web/scouting.js
 !web/enemy-intel.js
 !web/draft-sync.js
+!web/live-watch.js
 !web/constants.js
 !web/engine-weights.js
 !web/war-room.js

@@ -31,6 +31,7 @@ export const store={
  teamRoster:[],
  selectedTeamIds:[],
  teamLoad:0,
+ liveWatch:undefined,
  homeTeamId:'',
  homeRoster:[],
  homeRequest:0,
