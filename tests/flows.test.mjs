@@ -1,20 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {buildBoard as build} from './build-board.js';
+import {boardCode} from './build-board.js';
+import {markup,BACKEND_STUB,flush,openBoard} from './board-harness.js';
 import {JSDOM} from 'jsdom';
 
 // Compile the real entrypoint once; replace only network boundaries.
-const built=await build({logLevel:'silent',plugins:[{name:'flow-boundaries',enforce:'pre',load(id){
- const path=id.replaceAll('\\','/');
- if(path.endsWith('/web/backend.js'))return 'export const createBackend=()=>globalThis.__backend;';
+const code=await boardCode({
+ '/web/backend.js':BACKEND_STUB,
  // Count recommend() calls so render-cost tests can see repeated ranking work.
- if(path.endsWith('/web/draft-engine.js'))return `import {recommend as rank} from ${JSON.stringify(path+'?engine')};export * from ${JSON.stringify(path+'?engine')};export function recommend(...args){globalThis.__recommendCalls=(globalThis.__recommendCalls||0)+1;return rank(...args);}`;
- if(path.endsWith('/web/data.js'))return `export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async(id,progress)=>{const p={id:String(id),name:'Public '+id,sources:{profile:{status:'private'},recent:{status:'error',message:'Unavailable'},heroes:{status:'ok'}},heroes:[{hero_id:1,games:12}]};progress(p);return p;};`;
-}}],build:{write:false,minify:false}});
-const code=built.output.find(o=>o.type==='chunk'&&o.isEntry).code;
-const markup=await readFile('web/index.html','utf8');
-const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,0));for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
+ '/web/draft-engine.js':path=>`import {recommend as rank} from ${JSON.stringify(path+'?engine')};export * from ${JSON.stringify(path+'?engine')};export function recommend(...args){globalThis.__recommendCalls=(globalThis.__recommendCalls||0)+1;return rank(...args);}`,
+ '/web/data.js':`export const publicData={request:async()=>[]};export const loadHeroes=()=>new Promise(()=>{});export const loadPlayer=async(id,progress)=>{const p={id:String(id),name:'Public '+id,sources:{profile:{status:'private'},recent:{status:'error',message:'Unavailable'},heroes:{status:'ok'}},heroes:[{hero_id:1,games:12}]};progress(p);return p;};`,
+});
 const draftId='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 // Auth notifications deliberately cross a timer boundary in the app. Observe the
 // actual DOM transition instead of assuming one event-loop flush finishes it.
@@ -26,21 +23,14 @@ function waitForText(window,node,expected){
   observer.observe(node,{childList:true,subtree:true,characterData:true});
  });
 }
-async function harness({query='?practice',backend,saved,local={},session={},clipboard,beforeRun}={}){
- const dom=new JSDOM(markup,{url:'https://board.example/'+query,runScripts:'outside-only'}),w=dom.window;
- w.__backend=backend;w.fetch=async()=>({ok:true,json:async()=>backend?{url:'https://example.supabase.co',anonKey:'public'}:{}});
- w.setInterval=()=>0;w.confirm=()=>true;
- w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- for(const [key,value] of Object.entries(local))w.localStorage.setItem(key,value);
- for(const [key,value] of Object.entries(session))w.sessionStorage.setItem(key,value);
- if(clipboard)Object.defineProperty(w.navigator,'clipboard',{value:{writeText:clipboard}});
- if(saved)w.localStorage.setItem('captain-practice-v1',saved);
- beforeRun?.(w);
- w.eval(code);await flush();
- const q=id=>w.document.getElementById(id);
- const click=async node=>{assert.ok(node,'control exists');node.click();await flush();};
- const button=(text,root=w.document)=>[...root.querySelectorAll('button')].find(b=>b.textContent===text);
- return {dom,w,q,click,button};
+function harness({query='?practice',backend,saved,local={},session={},clipboard,beforeRun}={}){
+ return openBoard(code,{query,session,local:saved?{...local,'captain-practice-v1':saved}:local,
+  fetch:async()=>({ok:true,json:async()=>backend?{url:'https://example.supabase.co',anonKey:'public'}:{}}),
+  beforeRun:w=>{
+   w.__backend=backend;
+   if(clipboard)Object.defineProperty(w.navigator,'clipboard',{value:{writeText:clipboard}});
+   beforeRun?.(w);
+  }});
 }
 function accountBackend(extra={}){return {getSession:async()=>({user:{id:'owner'}}),onAuthChange(){},loadProfile:async()=>({displayName:'Captain'}),listTeams:async()=>[],...extra};}
 
